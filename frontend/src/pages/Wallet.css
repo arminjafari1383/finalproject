@@ -1,0 +1,372 @@
+/* =========================
+   Main Container
+========================= */
+
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  background: linear-gradient(135deg, #0a0f2c, #0f1d3b, #112b4a);
+  overflow-x: hidden; /* حیاتی */
+}
+
+.wallet-page-container {
+  min-height: 100vh;
+  min-width: 100vw; /* FIXED */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: linear-gradient(135deg, #0a0f2c, #0f1d3b, #112b4a);
+  padding: 3rem;
+}
+
+/* =========================
+   Wallet Box
+========================= */
+
+.wallet-box {
+  width: 100%;
+  max-width: 320px;
+  padding: 2rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(25px);
+  border-radius: 22px;
+  color: white;
+  text-align: center;
+  box-shadow: 0 0 30px rgba(0, 0, 50, 0.3);
+}
+
+.wallet-title {
+  font-size: 2rem;
+  font-weight: 800;
+  margin-bottom: 1.5rem;
+  color: #a3c5ff;
+  text-shadow: 0 0 10px rgba(0, 90, 255, 0.6);
+}
+
+.ref-info {
+  color: #7aff9c;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.wallet-connected {
+  margin-top: 1rem;
+  font-size: 0.9rem;
+  color: #c5daff;
+}
+
+.msg-box {
+  margin-top: 1rem;
+  font-size: 0.9rem;
+  color: #a8c6ff;
+}
+
+/* =========================
+   Referral Box
+========================= */
+
+.ref-box {
+  margin-top: 2rem;
+  padding: 1rem;
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.ref-label {
+  color: #b8d5ff;
+  font-size: 0.9rem;
+  margin-bottom: 0.3rem;
+  font-weight: 600;
+}
+
+.ref-inner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(255,255,255,0.1);
+  padding: 0.7rem;
+  border-radius: 10px;
+  gap: 6px;
+}
+
+.ref-code {
+  font-size: 0.75rem;
+  color: white;
+  word-break: break-all;
+}
+
+.ref-copy {
+  font-size: 0.8rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid rgba(120,160,255,0.4);
+  color: #dce5ff;
+  background: rgba(255,255,255,0.05);
+  transition: 0.2s;
+  cursor: pointer;
+}
+
+.ref-copy:hover {
+  background: rgba(120,160,255,0.2);
+}
+
+/* =========================
+   Withdraw Button
+========================= */
+
+.withdraw-btn {
+  margin-top: 30px;
+  width: 100%;
+  padding: 14px;
+  border-radius: 14px;
+  font-size: 18px;
+  background: #24ff6f;
+  color: black;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 0 20px rgba(36, 255, 111, 0.4);
+  transition: 0.25s;
+}
+
+.withdraw-btn:hover {
+  transform: scale(1.03);
+}
+
+/* =========================
+   Modal Background
+========================= */
+
+.withdraw-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.65);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 99;
+}
+
+/* =========================
+   Withdraw Box
+========================= */
+
+.withdraw-box {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 25px;
+  border-radius: 20px;
+  width: 90%;
+  max-width: 380px;
+  border: 1px solid rgba(255,255,255,0.2);
+  backdrop-filter: blur(20px);
+  text-align: center;
+}
+
+.withdraw-title {
+  font-size: 22px;
+  font-weight: bold;
+  color: #ffbebe;
+  margin-bottom: 20px;
+}
+
+.withdraw-input {
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.25);
+  background: rgba(255,255,255,0.1);
+  color: white;
+  text-align: center;
+  font-size: 16px;
+}
+
+.withdraw-submit {
+  width: 100%;
+  padding: 12px;
+  border-radius: 12px;
+  background: linear-gradient(90deg, #4dff91, #24ff6f);
+  color: black;
+  font-weight: bold;
+  font-size: 17px;
+  cursor: pointer;
+  margin-top: 8px;
+  border: none;
+}
+
+.withdraw-cancel {
+  margin-top: 10px;
+  background: none;
+  color: white;
+  cursor: pointer;
+}
+
+/* =========================
+   Arrow
+========================= */
+
+.arrow {
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid #7fffd4;
+  border-bottom: 2px solid #7fffd4;
+  transform: rotate(45deg);
+}
+
+/* =========================
+   Random Classes
+========================= */
+
+.go3349661836 {
+  margin-left: 70px;
+  width: 70px;
+  height: 46px;
+}
+
+.go526437840 {
+  width: 250px;
+  height: 180px;
+}
+
+.go884629673 {
+  width: 40px;
+  height: 40px;
+}
+
+.go3205121330 {
+  margin: 55px;
+}
+
+.go54158285,
+.go1423325091 {
+  margin-left: 75px;
+}
+
+/* =========================
+   Mobile Responsive
+========================= */
+
+@media (max-width: 480px) {
+
+  .wallet-box {
+    max-width: 100%;
+    padding: 1.5rem;
+    border-radius: 18px;
+  }
+
+  .wallet-title {
+    font-size: 1.6rem;
+  }
+
+  .ref-inner {
+    flex-direction: column;
+  }
+
+  .ref-copy {
+    width: 100%;
+  }
+
+  .withdraw-btn {
+    font-size: 16px;
+    padding: 12px;
+  }
+
+  .withdraw-box {
+    width: 95%;
+    padding: 20px;
+  }
+
+  .withdraw-title {
+    font-size: 18px;
+  }
+
+  .withdraw-input {
+    font-size: 14px;
+  }
+
+  .go3349661836,
+  .go526437840,
+  .go884629673 {
+    margin-left: 0;
+    width: auto;
+    height: auto;
+  }
+
+  .go3205121330,
+  .go54158285,
+  .go1423325091 {
+    margin: 20px;
+  }
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.modal {
+  width: min(420px, 92vw);
+  background: #fff;
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modal-close {
+  border: none;
+  background: transparent;
+  font-size: 22px;
+  cursor: pointer;
+}
+
+.modal-body {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.modal-body input {
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+}
+
+.error-text {
+  color: #c62828;
+  font-size: 13px;
+}
+
+.modal-footer {
+  margin-top: 14px;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.btn-primary, .btn-secondary {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-primary { background: #111; color: white; }
+.btn-secondary { background: #eee; color: #111; }

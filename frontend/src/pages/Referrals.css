@@ -1,0 +1,56 @@
+.ref-title {
+  font-size: 1.8rem;
+  text-align: center;
+  color: #bfdbfe;
+  font-weight: bold;
+  margin-bottom: 15px;
+}
+.referral-link{
+    color: white;
+}
+.linkreferral{
+  flex: 1;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-family: monospace;
+  font-size: 14px;
+  background: rgb(96, 207, 96);
+}
+.copy-button{
+  background: #4CAF50;
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.3s;
+  white-space: nowrap;
+}
+.copy-button1{
+  background: #4CAF50;
+  color: white;
+  border: none;
+  padding: 5px 5px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 300;
+  transition: background 0.3s;
+  white-space: nowrap;
+}
+
+.wallet-box1 {
+  margin-top: 20px;
+  margin-bottom: 350px;
+  width: 100%;
+  max-width: 320px;
+  padding: 2rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(25px);
+  border-radius: 22px;
+  color: white;
+  text-align: center;
+  box-shadow: 0 0 30px rgba(0, 0, 50, 0.3);
+}

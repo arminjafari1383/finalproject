@@ -1,0 +1,64 @@
+.navbar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background-color: #0a0f2b;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  padding: 10px 0 14px;
+  border-top: 1px solid rgba(47, 92, 255, 0.4);
+  box-shadow: 0 -4px 25px rgba(0, 225, 255, 0.08) inset;
+  z-index: 9999;
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  color: #9fb3ff;
+  text-decoration: none;
+  transition: all 0.25s ease;
+}
+
+.nav-item img {
+  width: 50px;
+  height: 50px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 6px rgba(0, 225, 255, 0.3));
+  transition: transform 0.25s ease, filter 0.25s ease;
+}
+
+.nav-item span {
+  font-size: 13px;
+  font-weight: 700;
+  color: #dbe3ff;
+  text-shadow: 0 0 8px rgba(0, 225, 255, 0.35);
+}
+
+/* حالت hover */
+.nav-item:hover img {
+  transform: translateY(-3px) scale(1.05);
+  filter: drop-shadow(0 0 12px rgba(0, 225, 255, 0.6));
+}
+
+.nav-item:hover span {
+  color: #00e1ff;
+  text-shadow: 0 0 12px rgba(0, 225, 255, 0.7);
+}
+
+/* حالت active برای لینک فعلی */
+.nav-item.active img,
+.nav-item.active span,
+.nav-item.active {
+  filter: drop-shadow(0 0 14px rgba(47, 92, 255, 0.9));
+  transform: scale(1.1);
+  color: #00e1ff;
+}
+
+/* مخصوص NavLink تا active به‌درستی کار کنه */
+.nav-item.active span {
+  color: #00e1ff;
+}
