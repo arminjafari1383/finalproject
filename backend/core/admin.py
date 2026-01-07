@@ -16,6 +16,7 @@ class WalletAdmin(admin.ModelAdmin):
         "downline_profit_instant",
         "self_profit_locked", "self_profit_unlocked",
         "principal_locked", "principal_unlocked",
+        "withdrawable_total",
         "updated_at",
     )
     search_fields = ("user__wallet_address",)

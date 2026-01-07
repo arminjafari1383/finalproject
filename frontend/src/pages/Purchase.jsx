@@ -11,13 +11,14 @@ export default function Purchase() {
   const [tonConnectUI] = useTonConnectUI();
 
   const [tonAmount, setTonAmount] = useState("1");
-  const [result, setResult] = useState(null);
+  const [invoices,setInvoices] = useState([]);
+  // const [result, setResult] = useState(null);
 
   const [tonPrice, setTonPrice] = useState(null);
   const [priceError, setPriceError] = useState("");
 
   // ⭐ 1 USDT = 200 ECG
-  const ECG_PER_USDT = 200;
+  const ECG_PER_USDT = 312;
 
   // گرفتن قیمت TON به USD
   useEffect(() => {
@@ -43,6 +44,19 @@ export default function Purchase() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!address) return;
+    async function loadInvoices() {
+      try{
+        const res = await api.get(`/purchase/list/?wallet=${address}`)
+        setInvoices(res.data);
+      }catch(e){
+        console.error("load invoices error",e);
+      }
+    }
+    loadInvoices();
+  },[address]);
 
   // محاسبه معادل ECG (نمایش لحظه‌ای)
   const equivalentECG = useMemo(() => {
@@ -73,8 +87,27 @@ export default function Purchase() {
       ton_amount: tonAmount,
       ton_tx_hash: txHash,
     });
+    const resList = await api.get(`/purchase/list/?wallet=${address}`);
+    setInvoices(resList.data)
+    // setResult(res.data);
+  }
 
-    setResult(res.data);
+  //test stake
+  async function testStake(){
+    if (!address) return alert("ولت وصل نیست")
+    try {
+      await api.post("/purchase/create/",{
+        wallet_address:address,
+        ton_amount:tonAmount,
+        ton_tx_hash:"TEST_TX_"+Date.now(),
+        is_test:true,
+      });
+      const resList = await api.get(`/purchase/list/?wallet=${address}`);
+      setInvoices(resList);
+      }catch(e){
+        console.error(e);
+        alert("خطا در ثبت تستی")
+      }
   }
 
   return (
@@ -114,19 +147,28 @@ export default function Purchase() {
             <button onClick={payAndRegister} className="convert-btn">
              Stake
             </button>
+            <button onClick={testStake} className="convert-btn"style={{background:"#888"}}>
+              Test Stake
+            </button>
 
             <br /><br /><br />
           </div>
-
-          {result && (
-            <div style={{ marginTop: 16, padding: 12, border: "1px solid #ddd" }}>
-              <h3>فاکتور: {result.invoice_no}</h3>
-              <div>مبلغ TON: {result.ton_amount}</div>
-              <div>نرخ TON/USD: {result.ton_usd_rate}</div>
-              <div>معادل ECG: {result.ecg_value}</div>
-              <div>سود 5%: {result.self_profit_5}</div>
-              <div>برداشت اصل بعد از: {result.principal_unlock_at}</div>
-              <div>واریز سود بعد از: {result.self_profit_unlock_at}</div>
+          {invoices.length > 0 && (
+            <div style={{marginTop:24}}>
+              <h3>فاکتور های من</h3>
+              {invoices.map((item) => (
+                <div
+                key={item.id}
+                style={{ marginTop: 16,padding: 12, border:"1px solid #ddd" }}
+                >
+                     <h4>فاکتور: {item.invoice_no}</h4>
+                     <div>TON: {item.ton_amount}</div>
+                     <div>ECG: {item.ecg_value}</div>
+                     <div>سود 5%: {item.self_profit_5}</div>
+                     <div>برداشت اصل: {item.principal_unlock_at}</div>
+                     <div>واریز سود: {item.self_profit_unlock_at}</div>
+                </div>
+              ))}
             </div>
           )}
         </>

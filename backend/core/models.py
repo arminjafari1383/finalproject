@@ -51,6 +51,7 @@ class Wallet(models.Model):
             + self.downline_profit_instant
             + self.self_profit_unlocked
             + self.principal_unlocked
+            + self.self_profit_locked
         )
 
 

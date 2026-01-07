@@ -5,6 +5,7 @@ from decimal import Decimal
 from datetime import timedelta
 from django.utils import timezone
 
+
 from .services import get_or_create_user, apply_referral, register_purchase
 from .models import WithdrawRequest, Ledger
 from .serializers import WalletSerializer, PurchaseSerializer, UserSerializer
@@ -36,30 +37,42 @@ def wallet_view(request, wallet_address):
 
 @api_view(["POST"])
 def create_purchase(request):
+    print("DATA:", request.data)
+
     wallet_address = request.data.get("wallet_address")
     ton_amount = request.data.get("ton_amount")
     ton_tx_hash = request.data.get("ton_tx_hash")
 
-    if not all([wallet_address, ton_amount, ton_tx_hash]):
-        return Response(
-            {"error": "wallet_address, ton_amount, ton_tx_hash required"},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+    if wallet_address is None or ton_amount is None or ton_tx_hash is None:
+        return Response({"error": "missing fields"}, status=400)
+
+    try:
+        ton_amount = Decimal(str(ton_amount))
+        if ton_amount <= 0:
+            raise ValueError()
+    except:
+        return Response({"error": "invalid ton_amount"}, status=400)
 
     user = get_or_create_user(wallet_address)
-    try:
-        p = register_purchase(user, Decimal(str(ton_amount)), str(ton_tx_hash))
-    except Exception as e:
-        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-    return Response(PurchaseSerializer(p).data, status=status.HTTP_201_CREATED)
+    try:
+        p = register_purchase(user, ton_amount, str(ton_tx_hash))
+    except Exception as e:
+        print("REGISTER ERROR:", e)
+        return Response({"error": str(e)}, status=400)
+
+    return Response(PurchaseSerializer(p).data, status=201)
 
 
 @api_view(["GET"])
-def list_purchases(request, wallet_address):
+def list_purchases(request):
+    wallet_address = request.query_params.get("wallet")
+    if not wallet_address:
+        return Response({"error": "wallet param required"}, status=400)
+
     user = get_or_create_user(wallet_address)
     qs = user.purchases.order_by("-created_at")
-    return Response(PurchaseSerializer(qs, many=True).data, status=status.HTTP_200_OK)
+    return Response(PurchaseSerializer(qs, many=True).data)
 
 
 @api_view(["POST"])
