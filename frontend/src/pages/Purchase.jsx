@@ -159,14 +159,14 @@ export default function Purchase() {
               {invoices.map((item) => (
                 <div
                 key={item.id}
-                style={{ marginTop: 16,padding: 12, border:"1px solid #ddd" }}
+                style={{ marginTop: 16,padding: 12, border:"1px solid #ddd",marginBottom: 90 }}
                 >
                      <h4>فاکتور: {item.invoice_no}</h4>
                      <div>TON: {item.ton_amount}</div>
                      <div>ECG: {item.ecg_value}</div>
                      <div>سود 5%: {item.self_profit_5}</div>
                      <div>برداشت اصل: {item.principal_unlock_at}</div>
-                     <div>واریز سود: {item.self_profit_unlock_at}</div>
+                     <div>واریز سود: {item.self_profit_unlock_at}</div><br /><br />
                 </div>
               ))}
             </div>
