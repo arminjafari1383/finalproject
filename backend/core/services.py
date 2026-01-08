@@ -5,23 +5,34 @@ from django.db.models import F
 import requests
 import uuid
 import logging
+
 logger = logging.getLogger(__name__)
 
 from .models import AppUser, Wallet, Ledger, Purchase
 
-
+# ثابت‌ها
 ECG_PER_USD = Decimal("312")  # مقدار هر 1 دلار به ECG
 SELF_BONUS_RATE = Decimal("0.05")
 UPLINE_RATE = Decimal("0.05")
 COINGECKO_URL = "https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd"
+REFERRAL_TOKEN_REWARD = Decimal("3")  # پاداش هر دعوت
+
 
 def get_or_create_user(wallet_address: str) -> AppUser:
+    """
+    دریافت یا ساخت کاربر جدید با ایجاد کیف پول
+    """
     user, created = AppUser.objects.get_or_create(wallet_address=wallet_address)
     if created:
         Wallet.objects.create(user=user)
     return user
 
-def apply_referral(inviter_code, user):
+
+def apply_referral(inviter_code: str, user: AppUser):
+    """
+    اعمال کد دعوت (referral) به کاربر
+    + دادن 3 توکن به inviter در referral_bonus
+    """
     logger.info("[REF] apply inviter_code=%s to user=%s (inviter_id=%s)",
                 inviter_code, user.wallet_address, user.inviter_id)
 
@@ -40,17 +51,46 @@ def apply_referral(inviter_code, user):
         logger.warning("[REF] self referral blocked user_id=%s", user.id)
         return
 
+    # ست کردن inviter
     user.inviter = inviter
     user.save(update_fields=["inviter"])
     logger.info("[REF] success user=%s inviter=%s", user.id, inviter.id)
 
+    # 👇 دادن پاداش 3 توکن به inviter
+    try:
+        with transaction.atomic():
+            # مطمئن شدن که wallet وجود دارد
+            w, created = Wallet.objects.get_or_create(user=inviter)
+            if created:
+                logger.info("[REF] inviter wallet created inviter_id=%s", inviter.id)
+
+            # اضافه کردن referral_bonus
+            Wallet.objects.filter(user=inviter).update(
+                referral_bonus=F("referral_bonus") + REFERRAL_TOKEN_REWARD
+            )
+
+            # ثبت Ledger برای ردگیری
+            Ledger.objects.create(
+                user=inviter,
+                typ="REF_BONUS",
+                amount=REFERRAL_TOKEN_REWARD,
+                meta={"invitee": user.wallet_address}
+            )
+            logger.info("[REF] inviter rewarded %s tokens for invitee=%s",
+                        REFERRAL_TOKEN_REWARD, user.wallet_address)
+    except Exception as e:
+        logger.exception("[REF] failed to reward inviter: %s", e)
+
+
 def fetch_ton_usd_rate() -> Decimal:
+    """
+    گرفتن نرخ TON به USD از CoinGecko
+    """
     r = requests.get(COINGECKO_URL, timeout=10)
     r.raise_for_status()
     data = r.json()
     rate = data["the-open-network"]["usd"]
     return Decimal(str(rate))
-
 
 
 @transaction.atomic
@@ -107,14 +147,16 @@ def register_purchase(user: AppUser, ton_amount: Decimal, ton_tx_hash: str, is_t
         self_profit_locked=F("self_profit_locked") + self_bonus
     )
 
-    Ledger.objects.create(user=user, typ="BUY_PRINCIPAL", amount=ecg_value, meta={"invoice": invoice_no, "tx": ton_tx_hash, "is_test": is_test})
-    Ledger.objects.create(user=user, typ="BUY_SELF_PROFIT", amount=self_bonus, meta={"invoice": invoice_no, "tx": ton_tx_hash, "is_test": is_test})
+    Ledger.objects.create(user=user, typ="BUY_PRINCIPAL", amount=ecg_value,
+                          meta={"invoice": invoice_no, "tx": ton_tx_hash, "is_test": is_test})
+    Ledger.objects.create(user=user, typ="BUY_SELF_PROFIT", amount=self_bonus,
+                          meta={"invoice": invoice_no, "tx": ton_tx_hash, "is_test": is_test})
 
-    logger.info("[BUY] user wallet updated: +principal_locked=%s +self_profit_locked=%s", ecg_value, self_bonus)
+    logger.info("[BUY] user wallet updated: +principal_locked=%s +self_profit_locked=%s",
+                ecg_value, self_bonus)
 
     # 3) پرداخت سود به بالاسری (downline_profit_instant)
     if user.inviter_id:
-        # مطمئن شو بالاسری Wallet داره
         inv_wallet, created = Wallet.objects.get_or_create(user=user.inviter)
         if created:
             logger.info("[BUY] inviter wallet created user_id=%s", user.inviter_id)
@@ -128,7 +170,8 @@ def register_purchase(user: AppUser, ton_amount: Decimal, ton_tx_hash: str, is_t
             amount=upline_bonus,
             meta={"from": user.wallet_address, "invoice": invoice_no, "tx": ton_tx_hash, "is_test": is_test}
         )
-        logger.info("[BUY] upline wallet updated inviter_id=%s +downline_profit_instant=%s", user.inviter_id, upline_bonus)
+        logger.info("[BUY] upline wallet updated inviter_id=%s +downline_profit_instant=%s",
+                    user.inviter_id, upline_bonus)
     else:
         logger.info("[BUY] no inviter -> skip downline profit")
 

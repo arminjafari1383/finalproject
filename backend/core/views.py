@@ -4,8 +4,6 @@ from rest_framework import status
 from decimal import Decimal
 from datetime import timedelta
 from django.utils import timezone
-
-
 from .services import get_or_create_user, apply_referral, register_purchase
 from .models import WithdrawRequest, Ledger
 from .serializers import WalletSerializer, PurchaseSerializer, UserSerializer
