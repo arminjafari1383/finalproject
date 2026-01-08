@@ -14,12 +14,51 @@ export default function Wallet() {
   const [withdrawError, setWithdrawError] = useState("");
   const [isWithdrawing, setIsWithdrawing] = useState(false);
 
+  // 1) ذخیره ref از لینک (اگر وجود داشت)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get("ref");
+    if (ref) localStorage.setItem("inviter_code", ref);
+  }, []);
+
+  // 2) وقتی address آمد: connect را بزن (با inviter_code اگر وجود داشت) + سپس wallet را بگیر
   useEffect(() => {
     if (!address) {
       setWallet(null);
       return;
     }
-    api.get(`/wallet/${address}/`).then((r) => setWallet(r.data));
+
+    let cancelled = false;
+
+    async function connectAndLoadWallet() {
+      try {
+        const inviter_code = localStorage.getItem("inviter_code"); // ممکن است null باشد
+
+        // ✅ اینجا زیرمجموعه ثبت می‌شود
+        await api.post("/connect/", {
+          wallet_address: address,
+          inviter_code: inviter_code || null,
+        });
+
+        // اگر می‌خواهی فقط یکبار اعمال شود:
+        // localStorage.removeItem("inviter_code");
+
+        const r = await api.get(`/wallet/${address}/`);
+        if (!cancelled) setWallet(r.data);
+      } catch (e) {
+        // اگر connect خطا بدهد هم بهتر است wallet را بگیریم
+        try {
+          const r = await api.get(`/wallet/${address}/`);
+          if (!cancelled) setWallet(r.data);
+        } catch {}
+      }
+    }
+
+    connectAndLoadWallet();
+
+    return () => {
+      cancelled = true;
+    };
   }, [address]);
 
   const openWithdraw = () => {
@@ -41,13 +80,10 @@ export default function Wallet() {
       setWithdrawError("مقدار نامعتبر است");
       return;
     }
-
-    // شرط شما: کمتر از 60 پیام بده
     if (n < 60) {
       setWithdrawError("زیر 60 عدد مجاز نیست");
       return;
     }
-
     if (!address) {
       setWithdrawError("ابتدا کیف پول را متصل کنید");
       return;
@@ -56,25 +92,23 @@ export default function Wallet() {
     try {
       setIsWithdrawing(true);
 
-      // این API باید در بک‌اند شما پیاده‌سازی شود
-      // بک‌اند با کیف پول شما (Sender) امضا می‌کند و به address کاربر می‌فرستد
-      const res = await api.post(`/withdraw/`, {
-        to_address: address,   // آدرس کاربر
-        amount: n,             // مقدار ECG
+      // ⚠️ مسیر درست شما: /withdraw/request/
+      // و پارامترهای درست: wallet_address, scope, destination_wallet, amount
+      const res = await api.post(`/withdraw/request/`, {
+        wallet_address: address,
+        scope: "ALL_WITHDRAWABLE",
+        destination_wallet: address, // یا یک input جدا برای مقصد بگذار
+        amount: n,
       });
 
-      // می‌توانید tx hash / boc / ... را از بک‌اند بگیرید
-      // مثلا:
-      // res.data = { ok: true, tx_hash: "..." }
-
-      // رفرش اطلاعات کیف پول کاربر
+      // refresh wallet
       const r = await api.get(`/wallet/${address}/`);
       setWallet(r.data);
 
       setIsWithdrawOpen(false);
     } catch (e) {
       setWithdrawError(
-        e?.response?.data?.detail || "خطا در برداشت. دوباره تلاش کنید."
+        e?.response?.data?.error || e?.response?.data?.detail || "خطا در برداشت"
       );
     } finally {
       setIsWithdrawing(false);
@@ -105,7 +139,6 @@ export default function Wallet() {
         )}
       </div>
 
-      {/* Modal */}
       {isWithdrawOpen && (
         <div className="modal-backdrop" onClick={closeWithdraw}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
