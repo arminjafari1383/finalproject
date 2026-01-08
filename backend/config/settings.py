@@ -79,3 +79,7 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [],
     "DEFAULT_PERMISSION_CLASSES": [],
 }
+CSRF_TRUSTED_ORIGINS = [
+    "https://cryptoocapitalhub.com",
+    "https://www.cryptoocapitalhub.com",
+]
