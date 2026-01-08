@@ -1,5 +1,5 @@
 import axios from "axios";
 
 export const api = axios.create({
-  baseURL: "https://cryptoocaptialhub.com/api",
+  baseURL: "https://cryptoocapitalhub.com/api",
 });
