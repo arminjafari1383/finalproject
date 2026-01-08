@@ -70,7 +70,7 @@ export default function Referrals() {
   }, [address]);
 
   const referralLink = myCode
-    ? `${window.location.origin}/referrals?ref=${myCode}`
+    ? `${window.location.origin}/?ref=${myCode}`
     : "";
 
   function shareReferralLink() {
