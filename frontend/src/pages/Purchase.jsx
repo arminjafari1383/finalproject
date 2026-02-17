@@ -170,10 +170,7 @@ export default function Purchase() {
               Stake
             </button>
 
-            {/* ✅ Test button back */}
-            <button onClick={testStake} className="test-btn">
-              Test Stake
-            </button>
+
           </div>
 
           {/* ✅ Invoices section (with frontend test invoice) */}
