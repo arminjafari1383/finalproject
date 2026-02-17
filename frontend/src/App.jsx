@@ -5,12 +5,15 @@ import Referrals from "./pages/Referrals";
 import Purchase from "./pages/Purchase";
 import AboutUs from "./pages/Aboutus";
 import Timer from "./pages/Timer";
+import useTgStartRedirect from "./hooks/useTgStartRedirect";
 
-export default function App() {
+function AppContent() {
+  useTgStartRedirect(); // ✅ دیپ‌لینک اینجا هندل میشه
+
   return (
-    <BrowserRouter>
+    <>
       <Navbar />
-      <div style={{padding: 16}}>
+      <div style={{ padding: 16 }}>
         <Routes>
           <Route path="/" element={<Wallet />} />
           <Route path="/referrals" element={<Referrals />} />
@@ -19,6 +22,14 @@ export default function App() {
           <Route path="/Timer" element={<Timer />} />
         </Routes>
       </div>
+    </>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppContent />
     </BrowserRouter>
   );
 }

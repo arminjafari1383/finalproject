@@ -3,8 +3,6 @@ import { useTonWallet } from "@tonconnect/ui-react";
 import { api } from "../api";
 import "./Referrals.css";
 
-import { useLocation, useNavigate } from "react-router-dom";
-
 export default function Referrals() {
   const tonWallet = useTonWallet();
   const address = useMemo(() => tonWallet?.account?.address, [tonWallet]);
@@ -16,9 +14,6 @@ export default function Referrals() {
 
   const BOT_USERNAME = "Aipolifybot";
 
-  const navigate = useNavigate();
-  const location = useLocation();
-
   // Telegram ready
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
@@ -28,24 +23,27 @@ export default function Referrals() {
     }
   }, []);
 
-  // ✅ وقتی از deep link میاد: برو /referrals و ref رو ذخیره کن
+  // ✅ اگر هنوز inviter_code تو localStorage نبود، از start_param بردار و ذخیره کن
+  // (حتی اگر ریدایرکت در App انجام شده باشد)
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
-    const startParam = tg?.initDataUnsafe?.start_param || "";
-    if (!startParam) return;
+    if (!tg) return;
 
-    // startParam format: "p=referrals&ref=CODE"
+    const already = localStorage.getItem("inviter_code");
+    if (already) return;
+
+    const raw = tg.initDataUnsafe?.start_param || "";
+    if (!raw) return;
+
+    let startParam = raw;
+    try {
+      startParam = decodeURIComponent(raw);
+    } catch (e) {}
+
     const params = new URLSearchParams(startParam);
-    const page = params.get("p");
     const ref = params.get("ref");
-
     if (ref) localStorage.setItem("inviter_code", ref);
-
-    // ✅ مقصد: /referrals
-    if (page === "referrals" && location.pathname !== "/referrals") {
-      navigate("/referrals", { replace: true });
-    }
-  }, [navigate, location.pathname]);
+  }, []);
 
   // Auto connect & fetch referral data
   useEffect(() => {
@@ -63,7 +61,6 @@ export default function Referrals() {
         setLoading(true);
         setError("");
 
-        // inviter_code from localStorage (saved from deep link)
         const inviterCode = localStorage.getItem("inviter_code") || null;
 
         const res = await api.post("/connect/", {
@@ -76,12 +73,15 @@ export default function Referrals() {
         const code = res.data?.user?.referral_code;
         setMyCode(code);
 
-        const countRes = await api.get(`/referrals/count/`, {
+        const countRes = await api.get("/referrals/count/", {
           params: { wallet_address: address },
         });
 
         if (cancelled) return;
-        setRefCount(countRes.data.count);
+        setRefCount(countRes.data?.count ?? 0);
+
+        // ✅ اگر فقط یک بار باید ثبت بشه، بعد از ثبت موفق پاکش کن:
+        // localStorage.removeItem("inviter_code");
       } catch (e) {
         if (cancelled) return;
         setError(
@@ -101,8 +101,7 @@ export default function Referrals() {
     };
   }, [address]);
 
-  // ✅ لینک رفرال: مستقیم MiniApp رو باز کنه و مقصدش /referrals باشه
-  // چون shortname نداری: https://t.me/BOT?startapp=...
+  // ✅ لینک رفرال
   const referralLink = myCode
     ? `https://t.me/${BOT_USERNAME}?startapp=${encodeURIComponent(
         `p=referrals&ref=${myCode}`
@@ -136,7 +135,9 @@ export default function Referrals() {
     }
 
     if (navigator.share) {
-      navigator.share({ title: "Referral Link", text, url: referralLink }).catch(() => {});
+      navigator
+        .share({ title: "Referral Link", text, url: referralLink })
+        .catch(() => {});
     } else {
       window.open(shareUrl, "_blank");
     }
