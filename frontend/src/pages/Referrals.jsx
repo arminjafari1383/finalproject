@@ -13,7 +13,7 @@ export default function Referrals() {
   const [error, setError] = useState("");
 
   const BOT_USERNAME = "Aipolifybot";
-  const MINIAPP_NAME = "Openapp";
+  const MINIAPP_NAME = "openapp";
 
   // Tell Telegram Mini App we are ready
   useEffect(() => {
