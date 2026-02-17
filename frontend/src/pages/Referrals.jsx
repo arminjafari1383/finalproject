@@ -3,6 +3,9 @@ import { useTonWallet } from "@tonconnect/ui-react";
 import { api } from "../api";
 import "./Referrals.css";
 
+// ✅ اگر React Router داری، این دو خط رو نگه دار
+import { useLocation, useNavigate } from "react-router-dom";
+
 export default function Referrals() {
   const tonWallet = useTonWallet();
   const address = useMemo(() => tonWallet?.account?.address, [tonWallet]);
@@ -15,6 +18,10 @@ export default function Referrals() {
   const BOT_USERNAME = "Aipolifybot";
   const MINIAPP_NAME = "openapp";
 
+  // ✅ اگر Router داری
+  const navigate = useNavigate();
+  const location = useLocation();
+
   // Tell Telegram Mini App we are ready
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
@@ -23,6 +30,23 @@ export default function Referrals() {
       tg.expand();
     }
   }, []);
+
+  // ✅ وقتی MiniApp با لینک referral باز شد -> مستقیم برو صفحه /ref
+  useEffect(() => {
+    const tg = window.Telegram?.WebApp;
+    const startParam = tg?.initDataUnsafe?.start_param || "";
+
+    // payload ما: ref_<code>
+    if (startParam.startsWith("ref_")) {
+      const code = startParam.slice(4);
+      localStorage.setItem("inviter_code", code);
+
+      // اگر الان توی /ref نیستیم، هدایت کنیم
+      if (location.pathname !== "/ref") {
+        navigate("/ref", { replace: true });
+      }
+    }
+  }, [navigate, location.pathname]);
 
   // Auto connect & fetch referral data
   useEffect(() => {
@@ -41,14 +65,21 @@ export default function Referrals() {
         setError("");
 
         const tg = window.Telegram?.WebApp;
+        const startParam = tg?.initDataUnsafe?.start_param || "";
 
-        // ✅ گرفتن رفرال از startapp
-        const inviterFromTelegram =
-          tg?.initDataUnsafe?.start_param || null;
+        // ✅ inviter_code فقط اگر payload referral بود
+        let inviterCode = null;
+
+        if (startParam.startsWith("ref_")) {
+          inviterCode = startParam.slice(4);
+        } else {
+          // fallback اگر از قبل ذخیره شده بود
+          inviterCode = localStorage.getItem("inviter_code") || null;
+        }
 
         const res = await api.post("/connect/", {
           wallet_address: address,
-          inviter_code: inviterFromTelegram,
+          inviter_code: inviterCode,
         });
 
         if (cancelled) return;
@@ -81,9 +112,12 @@ export default function Referrals() {
     };
   }, [address]);
 
-  // ✅ لینک درست Mini App با startapp
+  // ✅ لینک درست Mini App که مستقیم referral رو باز می‌کنه
+  // startapp=ref_<MYCODE>
   const referralLink = myCode
-    ? `https://t.me/${BOT_USERNAME}/${MINIAPP_NAME}?startapp=${myCode}`
+    ? `https://t.me/${BOT_USERNAME}/${MINIAPP_NAME}?startapp=${encodeURIComponent(
+        `ref_${myCode}`
+      )}`
     : "";
 
   function shareReferralLink() {
@@ -91,13 +125,16 @@ export default function Referrals() {
 
     const tg = window.Telegram?.WebApp;
 
-    const text = `Join with my referral link: ${referralLink}`;
+    // متن کوتاه (سازگارتر با کلاینت‌ها)
+    const text = `Join via my referral link`;
 
+    // صفحه share تلگرام
     const shareUrl =
       `https://t.me/share/url?` +
       `url=${encodeURIComponent(referralLink)}` +
       `&text=${encodeURIComponent(text)}`;
 
+    // داخل تلگرام
     if (tg) {
       try {
         tg.openTelegramLink?.(shareUrl);
@@ -113,6 +150,7 @@ export default function Referrals() {
       return;
     }
 
+    // خارج از تلگرام
     if (navigator.share) {
       navigator
         .share({ title: "Referral Link", text, url: referralLink })
