@@ -83,3 +83,4 @@ CSRF_TRUSTED_ORIGINS = [
     "https://cryptoocapitalhub.com",
     "https://www.cryptoocapitalhub.com",
 ]
+

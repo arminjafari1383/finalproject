@@ -15,10 +15,11 @@
   border-radius: 6px;
   font-family: monospace;
   font-size: 14px;
-  background: rgb(96, 207, 96);
+  background: #a9adbc;
+
 }
 .copy-button{
-  background: #4CAF50;
+  background: #a9adbc;
   color: white;
   border: none;
   padding: 10px 15px;
@@ -29,7 +30,7 @@
   white-space: nowrap;
 }
 .copy-button1{
-  background: #4CAF50;
+  background: #a9adbc;
   color: white;
   border: none;
   padding: 5px 5px;

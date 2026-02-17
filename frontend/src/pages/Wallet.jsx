@@ -14,14 +14,14 @@ export default function Wallet() {
   const [withdrawError, setWithdrawError] = useState("");
   const [isWithdrawing, setIsWithdrawing] = useState(false);
 
-  // 1) ذخیره ref از لینک (اگر وجود داشت)
+  // 1) Save ref from URL (if exists)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const ref = params.get("ref");
     if (ref) localStorage.setItem("inviter_code", ref);
   }, []);
 
-  // 2) وقتی address آمد: connect را بزن (با inviter_code اگر وجود داشت) + سپس wallet را بگیر
+  // 2) When address is available: call connect (with inviter_code if exists) then load wallet
   useEffect(() => {
     if (!address) {
       setWallet(null);
@@ -32,21 +32,21 @@ export default function Wallet() {
 
     async function connectAndLoadWallet() {
       try {
-        const inviter_code = localStorage.getItem("inviter_code"); // ممکن است null باشد
+        const inviter_code = localStorage.getItem("inviter_code"); // can be null
 
-        // ✅ اینجا زیرمجموعه ثبت می‌شود
+        // ✅ Register referral here
         await api.post("/connect/", {
           wallet_address: address,
           inviter_code: inviter_code || null,
         });
 
-        // اگر می‌خواهی فقط یکبار اعمال شود:
+        // If you want it to apply only once:
         // localStorage.removeItem("inviter_code");
 
         const r = await api.get(`/wallet/${address}/`);
         if (!cancelled) setWallet(r.data);
       } catch (e) {
-        // اگر connect خطا بدهد هم بهتر است wallet را بگیریم
+        // Even if connect fails, try to load wallet
         try {
           const r = await api.get(`/wallet/${address}/`);
           if (!cancelled) setWallet(r.data);
@@ -77,27 +77,24 @@ export default function Wallet() {
 
     const n = Number(amount);
     if (!Number.isFinite(n)) {
-      setWithdrawError("مقدار نامعتبر است");
+      setWithdrawError("Invalid amount.");
       return;
     }
     if (n < 60) {
-      setWithdrawError("زیر 60 عدد مجاز نیست");
+      setWithdrawError("Minimum withdrawal is 60.");
       return;
     }
     if (!address) {
-      setWithdrawError("ابتدا کیف پول را متصل کنید");
+      setWithdrawError("Please connect your wallet first.");
       return;
     }
 
     try {
       setIsWithdrawing(true);
 
-      // ⚠️ مسیر درست شما: /withdraw/request/
-      // و پارامترهای درست: wallet_address, scope, destination_wallet, amount
-      const res = await api.post(`/withdraw/request/`, {
+      await api.post(`/withdraw/request/`, {
         wallet_address: address,
         scope: "ALL_WITHDRAWABLE",
-        destination_wallet: address, // یا یک input جدا برای مقصد بگذار
         amount: n,
       });
 
@@ -108,7 +105,9 @@ export default function Wallet() {
       setIsWithdrawOpen(false);
     } catch (e) {
       setWithdrawError(
-        e?.response?.data?.error || e?.response?.data?.detail || "خطا در برداشت"
+        e?.response?.data?.error ||
+          e?.response?.data?.detail ||
+          "Withdrawal failed."
       );
     } finally {
       setIsWithdrawing(false);
@@ -118,16 +117,16 @@ export default function Wallet() {
   return (
     <div className="wallet-page-container">
       <div className="wallet-box">
-        <h2>connect wallet</h2>
+        <h2>Connect Wallet</h2>
         <TonConnectButton />
 
         {address && (
           <>
             {!wallet ? (
-              <div>در حال بارگذاری...</div>
+              <div>Loading...</div>
             ) : (
               <>
-                <h3>TotalBalance</h3>
+                <h3>Total Balance</h3>
                 <div>{wallet.withdrawable_total}</div>
 
                 <button className="withdraw-btn" onClick={openWithdraw}>
@@ -143,20 +142,20 @@ export default function Wallet() {
         <div className="modal-backdrop" onClick={closeWithdraw}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>برداشت ECG</h3>
+              <h3>Withdraw ECG</h3>
               <button className="modal-close" onClick={closeWithdraw}>
                 ×
               </button>
             </div>
 
             <div className="modal-body">
-              <label>مقدار برداشت (ECG)</label>
+              <label>Withdrawal Amount (ECG)</label>
               <input
                 type="number"
                 inputMode="decimal"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                placeholder="مثلا 60"
+                placeholder="e.g. 60"
                 min="0"
               />
 
@@ -171,14 +170,14 @@ export default function Wallet() {
                 onClick={closeWithdraw}
                 disabled={isWithdrawing}
               >
-                انصراف
+                Cancel
               </button>
               <button
                 className="btn-primary"
                 onClick={onWithdraw}
                 disabled={isWithdrawing}
               >
-                {isWithdrawing ? "در حال ارسال..." : "تایید برداشت"}
+                {isWithdrawing ? "Submitting..." : "Confirm Withdrawal"}
               </button>
             </div>
           </div>

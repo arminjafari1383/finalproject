@@ -128,7 +128,7 @@ html, body {
   padding: 14px;
   border-radius: 14px;
   font-size: 18px;
-  background: #24ff6f;
+  background: #a9adbc;
   color: black;
   border: none;
   cursor: pointer;
@@ -302,7 +302,7 @@ html, body {
   .go3205121330,
   .go54158285,
   .go1423325091 {
-    margin: 20px;
+    margin: 50px;
   }
 }
 
@@ -370,3 +370,7 @@ html, body {
 
 .btn-primary { background: #111; color: white; }
 .btn-secondary { background: #eee; color: #111; }
+
+.go3974562317 .go54158285{
+  margin : 200px;
+}

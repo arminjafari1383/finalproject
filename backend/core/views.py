@@ -4,10 +4,11 @@ from rest_framework import status
 from decimal import Decimal
 from datetime import timedelta
 from django.utils import timezone
-from .services import get_or_create_user, apply_referral, register_purchase
+from .services import get_or_create_user, apply_referral, register_purchase,ecg_to_ton
 from .models import WithdrawRequest, Ledger
 from .serializers import WalletSerializer, PurchaseSerializer, UserSerializer
-
+from django.conf import settings
+import os
 
 @api_view(["POST"])
 def connect_wallet(request):
@@ -76,33 +77,65 @@ def list_purchases(request):
 @api_view(["POST"])
 def request_withdraw(request):
     wallet_address = request.data.get("wallet_address")
-    scope = request.data.get("scope")  # DOWNLINE_ONLY or ALL_WITHDRAWABLE
+    scope = request.data.get("scope")
     amount = Decimal(str(request.data.get("amount", "0")))
-    dest = request.data.get("destination_wallet")
 
-    if not all([wallet_address, scope, dest]):
-        return Response(
-            {"error": "wallet_address, scope, destination_wallet required"},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
-    user = get_or_create_user(wallet_address)
-    w = user.wallet
+    if not all([wallet_address, scope]):
+        return Response({"error": "wallet_address, scope required"}, status=status.HTTP_400_BAD_REQUEST)
 
     if amount < Decimal("60"):
         return Response({"error": "min withdraw is 60 ECG"}, status=status.HTTP_400_BAD_REQUEST)
 
+    user = get_or_create_user(wallet_address)
+    w = user.wallet
+
+    # 1) فقط چک موجودی
     if scope == "DOWNLINE_ONLY":
         if amount > w.downline_profit_instant:
             return Response({"error": "insufficient downline instant balance"}, status=status.HTTP_400_BAD_REQUEST)
-
-        w.downline_profit_instant = w.downline_profit_instant - amount
-        w.save(update_fields=["downline_profit_instant"])
-
     elif scope == "ALL_WITHDRAWABLE":
         if amount > w.withdrawable_total():
             return Response({"error": "insufficient withdrawable total"}, status=status.HTTP_400_BAD_REQUEST)
+    else:
+        return Response({"error": "invalid scope"}, status=status.HTTP_400_BAD_REQUEST)
 
+    # 2) محاسبه TON معادل (معکوسِ خرید)
+    ton_amount = ecg_to_ton(amount)
+
+    dest = wallet_address  # ✅ مقصد همیشه ولت وصل‌شده
+
+    # 3) ثبت درخواست
+    req = WithdrawRequest.objects.create(
+        user=user,
+        scope=scope,
+        amount=amount,
+        ton_amount=ton_amount,
+        destination_wallet=dest,
+        status="PENDING",
+    )
+
+    # 4) ارسال TON از خزانه (ton-service)
+    ton_service_url = os.getenv("TON_SERVICE_URL", "http://tonservice:3001")
+    try:
+        r = requests.post(
+            f"{ton_service_url}/send-ton",
+            json={"destination": dest, "amountTon": str(ton_amount), "comment": "ECG withdraw"},
+            timeout=30
+        )
+        data = r.json()
+        if r.status_code != 200 or not data.get("ok"):
+            raise Exception(data.get("error") or "ton-service failed")
+    except Exception as e:
+        req.status = "FAILED"
+        req.fail_reason = str(e)[:500]
+        req.save(update_fields=["status", "fail_reason"])
+        return Response({"error": "ton transfer failed", "detail": req.fail_reason}, status=status.HTTP_502_BAD_GATEWAY)
+
+    # 5) فقط اگر انتقال TON موفق شد -> حالا ECG را کم کن
+    if scope == "DOWNLINE_ONLY":
+        w.downline_profit_instant -= amount
+        w.save(update_fields=["downline_profit_instant"])
+    else:
         remaining = amount
 
         def take(field):
@@ -123,18 +156,16 @@ def request_withdraw(request):
         take("principal_unlocked")
         w.save()
 
-    else:
-        return Response({"error": "invalid scope"}, status=status.HTTP_400_BAD_REQUEST)
+    # 6) نهایی‌سازی
+    req.status = "SUCCESS"
+    # فعلاً tx_hash نداریم (ton-service seqno برمی‌گردونه). می‌تونی همین رو ذخیره کنی:
+    req.tx_hash = f"seqno:{data.get('sent_seqno')}"
+    req.save(update_fields=["status", "tx_hash"])
 
-    req = WithdrawRequest.objects.create(
-        user=user,
-        scope=scope,
-        amount=amount,
-        destination_wallet=dest,
-        status="PENDING"
+    return Response(
+        {"id": req.id, "status": req.status, "ton_amount": str(ton_amount), "destination_wallet": dest},
+        status=status.HTTP_201_CREATED
     )
-    return Response({"id": req.id, "status": req.status}, status=status.HTTP_201_CREATED)
-
 
 @api_view(["GET"])
 def referral_count(request):

@@ -8,12 +8,11 @@ export default function Referrals() {
   const address = useMemo(() => tonWallet?.account?.address, [tonWallet]);
 
   const [myCode, setMyCode] = useState(null);
-
   const [refCount, setRefCount] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // وقتی ولت وصل شد: اتوماتیک کد رفرال و تعداد زیرمجموعه‌ها را بگیر
+  // When wallet connects: automatically get referral code + referral count
   useEffect(() => {
     if (!address) {
       setMyCode(null);
@@ -32,7 +31,7 @@ export default function Referrals() {
         const urlParams = new URLSearchParams(window.location.search);
         const inviterFromLink = urlParams.get("ref") || null;
 
-        // گرفتن/ساخت یوزر و کد رفرال (اتوماتیک)
+        // Create / fetch user and referral code automatically
         const res = await api.post("/connect/", {
           wallet_address: address,
           inviter_code: inviterFromLink,
@@ -43,7 +42,7 @@ export default function Referrals() {
         const code = res.data?.user?.referral_code;
         setMyCode(code);
 
-        // گرفتن تعداد زیرمجموعه‌ها
+        // Fetch referral count
         const countRes = await api.get(`/referrals/count/`, {
           params: { wallet_address: address },
         });
@@ -55,7 +54,7 @@ export default function Referrals() {
         setError(
           e?.response?.data?.error ||
             e?.response?.data?.detail ||
-            "خطا در دریافت اطلاعات رفرال"
+            "Failed to fetch referral information."
         );
       } finally {
         if (!cancelled) setLoading(false);
@@ -76,9 +75,9 @@ export default function Referrals() {
   function shareReferralLink() {
     if (!referralLink) return;
 
-    const text = `لینک دعوت من:\n${referralLink}`;
+    const text = `My referral link:\n${referralLink}`;
 
-    // داخل تلگرام (Telegram WebApp)
+    // Inside Telegram (Telegram WebApp)
     const tg = window.Telegram?.WebApp;
     if (tg?.openTelegramLink) {
       const url =
@@ -90,7 +89,7 @@ export default function Referrals() {
       return;
     }
 
-    // خارج تلگرام: Web Share (روی موبایل/برخی مرورگرها)
+    // Outside Telegram: Web Share API
     if (navigator.share) {
       navigator
         .share({ title: "Referral Link", text, url: referralLink })
@@ -98,10 +97,10 @@ export default function Referrals() {
       return;
     }
 
-    // fallback نهایی: کپی در کلیپ‌بورد
+    // Final fallback: copy to clipboard
     if (navigator.clipboard?.writeText) {
       navigator.clipboard.writeText(referralLink);
-      alert("لینک کپی شد");
+      alert("Link copied successfully.");
     }
   }
 
@@ -109,35 +108,46 @@ export default function Referrals() {
     if (!referralLink) return;
     if (navigator.clipboard?.writeText) {
       navigator.clipboard.writeText(referralLink);
-      alert("لینک کپی شد");
+      alert("Link copied successfully.");
     }
   }
 
-  if (!address) return <div>ابتدا ولت را وصل کنید.</div>;
+  if (!address) return <div>Please connect your wallet first.</div>;
 
   return (
     <div>
       <h2 className="ref-title">Referral Dashboard</h2>
 
-      {loading && <div>در حال بارگذاری...</div>}
+      {loading && <div>Loading...</div>}
       {error && <div style={{ color: "red" }}>{error}</div>}
 
       {myCode && (
         <>
-        <p className="referral-link"> 🔗 invite link</p>
+          <p className="referral-link">🔗 Invite Link</p>
+
           <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
             <input value={referralLink} readOnly className="linkreferral" />
-            <button onClick={shareReferralLink} disabled={!referralLink} className="copy-button">
-             Telegram
+
+            <button
+              onClick={shareReferralLink}
+              disabled={!referralLink}
+              className="copy-button"
+            >
+              Share
             </button>
-            <button onClick={copyReferralLink} disabled={!referralLink} className="copy-button1">
-             📋 copy
+
+            <button
+              onClick={copyReferralLink}
+              disabled={!referralLink}
+              className="copy-button1"
+            >
+              📋 Copy
             </button>
           </div>
 
           <div className="wallet-box1">
             {refCount === null ? (
-              <div>در حال دریافت تعداد زیرمجموعه‌ها...</div>
+              <div>Loading referral count...</div>
             ) : (
               <div>Number of people invited: {refCount}</div>
             )}

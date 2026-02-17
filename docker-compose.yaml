@@ -11,6 +11,10 @@ services:
       - 8000
     depends_on:
       - db
+      - tonservice
+    environment:
+      - TON_SERVICE_URL=http://tonservice:3001
+
 
   frontend:
     build: ./frontend
@@ -18,6 +22,15 @@ services:
     restart: always
     # هیچ volumes و هیچ command نذار
     # Dockerfile خودش خروجی را می‌سازد
+
+  tonservice:
+    build: ./ton-service
+    container_name: ton-service
+    environment:
+      - TON_NETWORK=mainnet
+      - TREASURY_MNEMONIC=${TREASURY_MNEMONIC}
+    expose:
+      - 3001
 
   nginx:
     build: ./frontend         # 🔥 نکته بسیار مهم

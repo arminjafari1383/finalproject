@@ -5,6 +5,7 @@ from django.db.models import F
 import requests
 import uuid
 import logging
+from decimal import Decimal, ROUND_DOWN
 
 logger = logging.getLogger(__name__)
 
@@ -188,3 +189,9 @@ def register_purchase(user: AppUser, ton_amount: Decimal, ton_tx_hash: str, is_t
                     user.inviter.wallet.downline_profit_instant)
 
     return p
+
+def ecg_to_ton(ecg_amount: Decimal) -> Decimal:
+    rate = fetch_ton_usd_rate()  # USD per TON
+    ecg_per_ton = rate * ECG_PER_USD
+    # 9 رقم اعشار TON (nanoTON)
+    return (ecg_amount / ecg_per_ton).quantize(Decimal("0.000000001"), rounding=ROUND_DOWN)

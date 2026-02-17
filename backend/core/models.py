@@ -94,14 +94,32 @@ class Purchase(models.Model):
 
 
 class WithdrawRequest(models.Model):
-    STATUS = [("PENDING", "Pending"), ("APPROVED", "Approved"), ("REJECTED", "Rejected")]
+    STATUS = [
+        ("PENDING", "Pending"),
+        ("SUCCESS", "Success"),
+        ("FAILED", "Failed"),
+    ]
     SCOPE = [
         ("DOWNLINE_ONLY", "Downline only"),
         ("ALL_WITHDRAWABLE", "All withdrawable"),
     ]
     user = models.ForeignKey(AppUser, on_delete=models.CASCADE, related_name="withdraws")
     scope = models.CharField(max_length=32, choices=SCOPE)
+
+    # مقدار درخواستی ECG
     amount = models.DecimalField(max_digits=24, decimal_places=6)
+
+    # ✅ معادل TON که پرداخت می‌کنی
+    ton_amount = models.DecimalField(max_digits=24, decimal_places=9, default=0)
+
+    # مقصد (ولت کاربر)
     destination_wallet = models.CharField(max_length=128)
+
+    # ✅ هش تراکنش TON
+    tx_hash = models.CharField(max_length=256, blank=True, default="")
+
+    # ✅ دلیل خطا
+    fail_reason = models.TextField(blank=True, default="")
+
     status = models.CharField(max_length=16, choices=STATUS, default="PENDING")
     created_at = models.DateTimeField(auto_now_add=True)
