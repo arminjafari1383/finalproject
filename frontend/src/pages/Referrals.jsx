@@ -13,9 +13,9 @@ export default function Referrals() {
   const [error, setError] = useState("");
 
   const BOT_USERNAME = "Aipolifybot";
-  const APP_NAME = "openapp"; // 👈 short name Mini App در BotFather
+  const APP_NAME = "openapp"; // ✅ short name Mini App
 
-  // Telegram ready
+  /* ---------------- Telegram Ready ---------------- */
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
     if (tg) {
@@ -24,7 +24,7 @@ export default function Referrals() {
     }
   }, []);
 
-  // گرفتن ref از start_param و ذخیره
+  /* ----------- Get ref from start_param ------------ */
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
     if (!tg) return;
@@ -47,7 +47,7 @@ export default function Referrals() {
     }
   }, []);
 
-  // ثبت کاربر و گرفتن اطلاعات رفرال
+  /* -------- Register user & fetch referrals -------- */
   useEffect(() => {
     if (!address) {
       setMyCode(null);
@@ -72,7 +72,7 @@ export default function Referrals() {
 
         if (cancelled) return;
 
-        setMyCode(res.data?.user?.referral_code);
+        setMyCode(res.data?.user?.referral_code || null);
 
         const countRes = await api.get("/referrals/count/", {
           params: { wallet_address: address },
@@ -81,7 +81,7 @@ export default function Referrals() {
         if (cancelled) return;
         setRefCount(countRes.data?.count ?? 0);
 
-        // اگر فقط یک بار باید استفاده شود:
+        // اگر فقط یک بار باید ثبت شود:
         // localStorage.removeItem("inviter_code");
       } catch (e) {
         if (cancelled) return;
@@ -102,28 +102,25 @@ export default function Referrals() {
     };
   }, [address]);
 
-  // لینک درست Mini App
+  /* ---------------- Correct Mini App Link ---------------- */
   const referralLink = myCode
     ? `https://t.me/${BOT_USERNAME}/${APP_NAME}?startapp=${encodeURIComponent(
         `p=referrals&ref=${myCode}`
       )}`
     : "";
 
+  /* ---------------- Share inside Telegram ---------------- */
   function shareReferralLink() {
     if (!referralLink) return;
 
-    const text = "Join via my referral link";
-    const shareUrl =
-      `https://t.me/share/url?` +
-      `url=${encodeURIComponent(referralLink)}` +
-      `&text=${encodeURIComponent(text)}`;
-
     const tg = window.Telegram?.WebApp;
+
+    // بهترین و پایدارترین روش Share
+    const text = `🚀 Join me on Aipolify\n\n${referralLink}`;
+    const shareUrl = `https://t.me/share/url?text=${encodeURIComponent(text)}`;
 
     if (tg?.openTelegramLink) {
       tg.openTelegramLink(shareUrl);
-    } else if (navigator.share) {
-      navigator.share({ title: "Referral Link", text, url: referralLink });
     } else {
       window.open(shareUrl, "_blank");
     }
@@ -153,11 +150,19 @@ export default function Referrals() {
           <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
             <input value={referralLink} readOnly className="linkreferral" />
 
-            <button onClick={shareReferralLink} className="copy-button">
+            <button
+              onClick={shareReferralLink}
+              disabled={!referralLink}
+              className="copy-button"
+            >
               Share
             </button>
 
-            <button onClick={copyReferralLink} className="copy-button1">
+            <button
+              onClick={copyReferralLink}
+              disabled={!referralLink}
+              className="copy-button1"
+            >
               📋 Copy
             </button>
           </div>
