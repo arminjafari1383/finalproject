@@ -12,12 +12,16 @@ export default function Referrals() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Tell Telegram WebApp we're ready (helps in some clients)
+  // Tell Telegram Mini App we are ready
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
-    if (tg?.ready) tg.ready();
+    if (tg) {
+      tg.ready();
+      tg.expand();
+    }
   }, []);
 
+  // Auto connect & fetch referral data
   useEffect(() => {
     if (!address) {
       setMyCode(null);
@@ -65,70 +69,58 @@ export default function Referrals() {
     }
 
     autoRegisterAndFetch();
+
     return () => {
       cancelled = true;
     };
   }, [address]);
 
-  // IMPORTANT: use https origin if possible
-  const referralLink = myCode ? `${window.location.origin}/?ref=${myCode}` : "";
+  // 👇 بهترین لینک برای تلگرام (مستقیم به ربات با start)
+  const referralLink = myCode
+    ? `https://t.me/@pooooooooooobot?start=${myCode}`
+    : "";
 
   function shareReferralLink() {
     if (!referralLink) return;
 
-    // Keep the text simple (some Telegram clients are picky with newlines/long text)
+    const tg = window.Telegram?.WebApp;
+
     const text = `Join with my referral link: ${referralLink}`;
 
-    // Telegram share URL
     const shareUrl =
       `https://t.me/share/url?` +
       `url=${encodeURIComponent(referralLink)}` +
       `&text=${encodeURIComponent(text)}`;
 
-    const tg = window.Telegram?.WebApp;
-
-    // ✅ Inside Telegram Mini App
+    // ✅ داخل تلگرام
     if (tg) {
-      // 1) Best option for Telegram internal links
-      if (typeof tg.openTelegramLink === "function") {
-        try {
-          tg.openTelegramLink(shareUrl);
-          return;
-        } catch (err) {
-          // continue to fallback
-        }
-      }
+      try {
+        tg.openTelegramLink?.(shareUrl);
+        return;
+      } catch (e) {}
 
-      // 2) Fallback: openLink works in more clients
-      if (typeof tg.openLink === "function") {
-        try {
-          tg.openLink(shareUrl);
-          return;
-        } catch (err) {
-          // continue to fallback
-        }
-      }
+      try {
+        tg.openLink?.(shareUrl);
+        return;
+      } catch (e) {}
 
-      // 3) Last fallback inside Telegram
       window.location.href = shareUrl;
       return;
     }
 
-    // ✅ Outside Telegram: Web Share API
+    // ✅ خارج از تلگرام
     if (navigator.share) {
-      navigator.share({ title: "Referral Link", text, url: referralLink }).catch(() => {});
-      return;
-    }
-
-    // ✅ Final fallback: copy to clipboard
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(referralLink);
-      alert("Link copied successfully.");
+      navigator
+        .share({ title: "Referral Link", text, url: referralLink })
+        .catch(() => {});
+    } else {
+      window.open(shareUrl, "_blank");
     }
   }
 
   function copyReferralLink() {
     if (!referralLink) return;
+
     if (navigator.clipboard?.writeText) {
       navigator.clipboard.writeText(referralLink);
       alert("Link copied successfully.");
