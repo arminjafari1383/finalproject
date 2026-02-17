@@ -12,6 +12,9 @@ export default function Referrals() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const BOT_USERNAME = "Aipolifybot";
+  const MINIAPP_NAME = "Openapp";
+
   // Tell Telegram Mini App we are ready
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
@@ -37,12 +40,15 @@ export default function Referrals() {
         setLoading(true);
         setError("");
 
-        const urlParams = new URLSearchParams(window.location.search);
-        const inviterFromLink = urlParams.get("ref") || null;
+        const tg = window.Telegram?.WebApp;
+
+        // ✅ گرفتن رفرال از startapp
+        const inviterFromTelegram =
+          tg?.initDataUnsafe?.start_param || null;
 
         const res = await api.post("/connect/", {
           wallet_address: address,
-          inviter_code: inviterFromLink,
+          inviter_code: inviterFromTelegram,
         });
 
         if (cancelled) return;
@@ -75,9 +81,9 @@ export default function Referrals() {
     };
   }, [address]);
 
-  // 👇 بهترین لینک برای تلگرام (مستقیم به ربات با start)
+  // ✅ لینک درست Mini App با startapp
   const referralLink = myCode
-    ? `https://t.me/Aipolifybot?start=${myCode}`
+    ? `https://t.me/${BOT_USERNAME}/${MINIAPP_NAME}?startapp=${myCode}`
     : "";
 
   function shareReferralLink() {
@@ -92,7 +98,6 @@ export default function Referrals() {
       `url=${encodeURIComponent(referralLink)}` +
       `&text=${encodeURIComponent(text)}`;
 
-    // ✅ داخل تلگرام
     if (tg) {
       try {
         tg.openTelegramLink?.(shareUrl);
@@ -108,7 +113,6 @@ export default function Referrals() {
       return;
     }
 
-    // ✅ خارج از تلگرام
     if (navigator.share) {
       navigator
         .share({ title: "Referral Link", text, url: referralLink })
