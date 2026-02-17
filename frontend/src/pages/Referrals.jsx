@@ -77,7 +77,7 @@ export default function Referrals() {
 
   // 👇 بهترین لینک برای تلگرام (مستقیم به ربات با start)
   const referralLink = myCode
-    ? `https://t.me/@Aipolifybot?start=${myCode}`
+    ? `https://t.me/Aipolifybot?start=${myCode}`
     : "";
 
   function shareReferralLink() {
