@@ -3,7 +3,6 @@ import { useTonWallet } from "@tonconnect/ui-react";
 import { api } from "../api";
 import "./Referrals.css";
 
-// ✅ اگر React Router داری، این دو خط رو نگه دار
 import { useLocation, useNavigate } from "react-router-dom";
 
 export default function Referrals() {
@@ -16,13 +15,11 @@ export default function Referrals() {
   const [error, setError] = useState("");
 
   const BOT_USERNAME = "Aipolifybot";
-  const MINIAPP_NAME = "openapp";
 
-  // ✅ اگر Router داری
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Tell Telegram Mini App we are ready
+  // Telegram ready
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
     if (tg) {
@@ -31,20 +28,22 @@ export default function Referrals() {
     }
   }, []);
 
-  // ✅ وقتی MiniApp با لینک referral باز شد -> مستقیم برو صفحه /ref
+  // ✅ وقتی از deep link میاد: برو /referrals و ref رو ذخیره کن
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
     const startParam = tg?.initDataUnsafe?.start_param || "";
+    if (!startParam) return;
 
-    // payload ما: ref_<code>
-    if (startParam.startsWith("ref_")) {
-      const code = startParam.slice(4);
-      localStorage.setItem("inviter_code", code);
+    // startParam format: "p=referrals&ref=CODE"
+    const params = new URLSearchParams(startParam);
+    const page = params.get("p");
+    const ref = params.get("ref");
 
-      // اگر الان توی /ref نیستیم، هدایت کنیم
-      if (location.pathname !== "/ref") {
-        navigate("/ref", { replace: true });
-      }
+    if (ref) localStorage.setItem("inviter_code", ref);
+
+    // ✅ مقصد: /referrals
+    if (page === "referrals" && location.pathname !== "/referrals") {
+      navigate("/referrals", { replace: true });
     }
   }, [navigate, location.pathname]);
 
@@ -64,18 +63,8 @@ export default function Referrals() {
         setLoading(true);
         setError("");
 
-        const tg = window.Telegram?.WebApp;
-        const startParam = tg?.initDataUnsafe?.start_param || "";
-
-        // ✅ inviter_code فقط اگر payload referral بود
-        let inviterCode = null;
-
-        if (startParam.startsWith("ref_")) {
-          inviterCode = startParam.slice(4);
-        } else {
-          // fallback اگر از قبل ذخیره شده بود
-          inviterCode = localStorage.getItem("inviter_code") || null;
-        }
+        // inviter_code from localStorage (saved from deep link)
+        const inviterCode = localStorage.getItem("inviter_code") || null;
 
         const res = await api.post("/connect/", {
           wallet_address: address,
@@ -112,11 +101,11 @@ export default function Referrals() {
     };
   }, [address]);
 
-  // ✅ لینک درست Mini App که مستقیم referral رو باز می‌کنه
-  // startapp=ref_<MYCODE>
+  // ✅ لینک رفرال: مستقیم MiniApp رو باز کنه و مقصدش /referrals باشه
+  // چون shortname نداری: https://t.me/BOT?startapp=...
   const referralLink = myCode
-    ? `https://t.me/${BOT_USERNAME}/${MINIAPP_NAME}?startapp=${encodeURIComponent(
-        `ref_${myCode}`
+    ? `https://t.me/${BOT_USERNAME}?startapp=${encodeURIComponent(
+        `p=referrals&ref=${myCode}`
       )}`
     : "";
 
@@ -124,17 +113,13 @@ export default function Referrals() {
     if (!referralLink) return;
 
     const tg = window.Telegram?.WebApp;
+    const text = "Join via my referral link";
 
-    // متن کوتاه (سازگارتر با کلاینت‌ها)
-    const text = `Join via my referral link`;
-
-    // صفحه share تلگرام
     const shareUrl =
       `https://t.me/share/url?` +
       `url=${encodeURIComponent(referralLink)}` +
       `&text=${encodeURIComponent(text)}`;
 
-    // داخل تلگرام
     if (tg) {
       try {
         tg.openTelegramLink?.(shareUrl);
@@ -150,11 +135,8 @@ export default function Referrals() {
       return;
     }
 
-    // خارج از تلگرام
     if (navigator.share) {
-      navigator
-        .share({ title: "Referral Link", text, url: referralLink })
-        .catch(() => {});
+      navigator.share({ title: "Referral Link", text, url: referralLink }).catch(() => {});
     } else {
       window.open(shareUrl, "_blank");
     }
