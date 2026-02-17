@@ -12,7 +12,12 @@ export default function Referrals() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // When wallet connects: automatically get referral code + referral count
+  // Tell Telegram WebApp we're ready (helps in some clients)
+  useEffect(() => {
+    const tg = window.Telegram?.WebApp;
+    if (tg?.ready) tg.ready();
+  }, []);
+
   useEffect(() => {
     if (!address) {
       setMyCode(null);
@@ -31,7 +36,6 @@ export default function Referrals() {
         const urlParams = new URLSearchParams(window.location.search);
         const inviterFromLink = urlParams.get("ref") || null;
 
-        // Create / fetch user and referral code automatically
         const res = await api.post("/connect/", {
           wallet_address: address,
           inviter_code: inviterFromLink,
@@ -42,7 +46,6 @@ export default function Referrals() {
         const code = res.data?.user?.referral_code;
         setMyCode(code);
 
-        // Fetch referral count
         const countRes = await api.get(`/referrals/count/`, {
           params: { wallet_address: address },
         });
@@ -62,42 +65,62 @@ export default function Referrals() {
     }
 
     autoRegisterAndFetch();
-
     return () => {
       cancelled = true;
     };
   }, [address]);
 
-  const referralLink = myCode
-    ? `${window.location.origin}/?ref=${myCode}`
-    : "";
+  // IMPORTANT: use https origin if possible
+  const referralLink = myCode ? `${window.location.origin}/?ref=${myCode}` : "";
 
   function shareReferralLink() {
     if (!referralLink) return;
 
-    const text = `My referral link:\n${referralLink}`;
+    // Keep the text simple (some Telegram clients are picky with newlines/long text)
+    const text = `Join with my referral link: ${referralLink}`;
 
-    // Inside Telegram (Telegram WebApp)
+    // Telegram share URL
+    const shareUrl =
+      `https://t.me/share/url?` +
+      `url=${encodeURIComponent(referralLink)}` +
+      `&text=${encodeURIComponent(text)}`;
+
     const tg = window.Telegram?.WebApp;
-    if (tg?.openTelegramLink) {
-      const url =
-        "https://t.me/share/url?" +
-        `url=${encodeURIComponent(referralLink)}` +
-        `&text=${encodeURIComponent(text)}`;
 
-      tg.openTelegramLink(url);
+    // ✅ Inside Telegram Mini App
+    if (tg) {
+      // 1) Best option for Telegram internal links
+      if (typeof tg.openTelegramLink === "function") {
+        try {
+          tg.openTelegramLink(shareUrl);
+          return;
+        } catch (err) {
+          // continue to fallback
+        }
+      }
+
+      // 2) Fallback: openLink works in more clients
+      if (typeof tg.openLink === "function") {
+        try {
+          tg.openLink(shareUrl);
+          return;
+        } catch (err) {
+          // continue to fallback
+        }
+      }
+
+      // 3) Last fallback inside Telegram
+      window.location.href = shareUrl;
       return;
     }
 
-    // Outside Telegram: Web Share API
+    // ✅ Outside Telegram: Web Share API
     if (navigator.share) {
-      navigator
-        .share({ title: "Referral Link", text, url: referralLink })
-        .catch(() => {});
+      navigator.share({ title: "Referral Link", text, url: referralLink }).catch(() => {});
       return;
     }
 
-    // Final fallback: copy to clipboard
+    // ✅ Final fallback: copy to clipboard
     if (navigator.clipboard?.writeText) {
       navigator.clipboard.writeText(referralLink);
       alert("Link copied successfully.");
