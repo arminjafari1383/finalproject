@@ -37,9 +37,9 @@ def apply_referral(inviter_code: str, user: AppUser):
     logger.info("[REF] apply inviter_code=%s to user=%s (inviter_id=%s)",
                 inviter_code, user.wallet_address, user.inviter_id)
 
-    # if user.inviter_id:
-    #     logger.info("[REF] skipped: inviter already set")
-    #     return
+    if user.inviter_id:
+        logger.info("[REF] skipped: inviter already set")
+        return
 
     inviter = AppUser.objects.filter(referral_code=inviter_code).first()
     logger.info("[REF] inviter found? %s", bool(inviter))
