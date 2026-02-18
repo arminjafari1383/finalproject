@@ -40,6 +40,7 @@ export default function Wallet() {
         inviter_code: inviter_code || null,
        });
 
+       localStorage.removeItem("inviter_code");
         // If you want it to apply only once:
         // localStorage.removeItem("inviter_code");
 
