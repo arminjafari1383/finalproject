@@ -2,20 +2,18 @@ import { useEffect, useMemo, useState } from "react";
 import { useTonWallet, TonConnectButton } from "@tonconnect/ui-react";
 import { api } from "../api";
 import "./Wallet.css";
-import { captureInviterCode } from "../utils/referral";
+import { captureInviterCode, clearInviterCode } from "../utils/referral";
 
 export default function Wallet() {
   const tonWallet = useTonWallet();
   const address = useMemo(() => tonWallet?.account?.address, [tonWallet]);
   const [wallet, setWallet] = useState(null);
 
-  // modal states
   const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
   const [amount, setAmount] = useState("");
   const [withdrawError, setWithdrawError] = useState("");
   const [isWithdrawing, setIsWithdrawing] = useState(false);
 
-  // ✅ Debug state (نمایش داخل UI)
   const [debug, setDebug] = useState({
     tgStartParam: "",
     lsInviterCode: "",
@@ -24,7 +22,7 @@ export default function Wallet() {
     connectError: "",
   });
 
-  // ✅ وقتی صفحه باز شد: inviter_code را از start_param یا ?ref ذخیره کن
+  // وقتی صفحه باز شد (وب یا تلگرام)، ref رو ذخیره کن
   useEffect(() => {
     const code = captureInviterCode();
     setDebug((d) => ({
@@ -37,14 +35,10 @@ export default function Wallet() {
     }));
   }, []);
 
-  // ✅ وقتی آدرس ولت آماده شد: connect + load wallet
   useEffect(() => {
     if (!address) {
       setWallet(null);
-      setDebug((d) => ({
-        ...d,
-        connectStatus: "No wallet connected yet",
-      }));
+      setDebug((d) => ({ ...d, connectStatus: "No wallet connected yet" }));
       return;
     }
 
@@ -56,7 +50,8 @@ export default function Wallet() {
           window.Telegram?.WebApp?.initDataUnsafe?.start_param || "";
         const lsInviterCode = localStorage.getItem("inviter_code") || "";
 
-        const inviter_code = captureInviterCode(); // start_param / ref / stored
+        // مهم: اینجا ref از localStorage گرفته می‌شه
+        const inviter_code = captureInviterCode();
 
         setDebug((d) => ({
           ...d,
@@ -67,7 +62,7 @@ export default function Wallet() {
           connectError: "",
         }));
 
-        const connectRes = await api.post("/connect/", {
+        await api.post("/connect/", {
           wallet_address: address,
           inviter_code: inviter_code || null,
         });
@@ -79,9 +74,12 @@ export default function Wallet() {
           connectStatus: "connect OK ✅",
         }));
 
-        // load wallet
         const r = await api.get(`/wallet/${address}/`);
         if (!cancelled) setWallet(r.data);
+
+        // ✅ اگر می‌خوای “یک بار مصرف” باشه، این رو فعال کن:
+        // clearInviterCode();
+
       } catch (e) {
         if (cancelled) return;
 
@@ -97,7 +95,6 @@ export default function Wallet() {
           connectError: errText,
         }));
 
-        // Even if connect fails, try to load wallet
         try {
           const r = await api.get(`/wallet/${address}/`);
           if (!cancelled) setWallet(r.data);
@@ -118,15 +115,13 @@ export default function Wallet() {
     }
 
     connectAndLoadWallet();
-
     return () => {
       cancelled = true;
     };
   }, [address]);
 
-  // ✅ دکمه ریست رفرال برای تست
   const resetReferral = () => {
-    localStorage.removeItem("inviter_code");
+    clearInviterCode();
     setDebug((d) => ({
       ...d,
       lsInviterCode: "",
@@ -152,18 +147,9 @@ export default function Wallet() {
     setWithdrawError("");
 
     const n = Number(amount);
-    if (!Number.isFinite(n)) {
-      setWithdrawError("Invalid amount.");
-      return;
-    }
-    if (n < 60) {
-      setWithdrawError("Minimum withdrawal is 60.");
-      return;
-    }
-    if (!address) {
-      setWithdrawError("Please connect your wallet first.");
-      return;
-    }
+    if (!Number.isFinite(n)) return setWithdrawError("Invalid amount.");
+    if (n < 60) return setWithdrawError("Minimum withdrawal is 60.");
+    if (!address) return setWithdrawError("Please connect your wallet first.");
 
     try {
       setIsWithdrawing(true);
@@ -176,7 +162,6 @@ export default function Wallet() {
 
       const r = await api.get(`/wallet/${address}/`);
       setWallet(r.data);
-
       setIsWithdrawOpen(false);
     } catch (e) {
       setWithdrawError(
@@ -195,7 +180,7 @@ export default function Wallet() {
         <h2>Connect Wallet</h2>
         <TonConnectButton />
 
-        {/* ✅ Debug Box */}
+        {/* Debug Box */}
         <div
           style={{
             marginTop: 12,
@@ -225,7 +210,7 @@ export default function Wallet() {
             </div>
           ) : null}
 
-          <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
+          <div style={{ marginTop: 8 }}>
             <button onClick={resetReferral} style={{ padding: "6px 10px" }}>
               Reset Referral
             </button>
@@ -240,7 +225,6 @@ export default function Wallet() {
               <>
                 <h3>Total Balance</h3>
                 <div>{wallet.withdrawable_total}</div>
-
                 <button className="withdraw-btn" onClick={openWithdraw}>
                   Withdraw
                 </button>
@@ -270,10 +254,7 @@ export default function Wallet() {
                 placeholder="e.g. 60"
                 min="0"
               />
-
-              {withdrawError && (
-                <div className="error-text">{withdrawError}</div>
-              )}
+              {withdrawError && <div className="error-text">{withdrawError}</div>}
             </div>
 
             <div className="modal-footer">

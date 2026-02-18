@@ -1,21 +1,32 @@
+// frontend/src/utils/referral.js
+
 export function captureInviterCode() {
+  // 1) از Query وب بخون: ?ref=xxxx
+  try {
+    const url = new URL(window.location.href);
+    const ref = url.searchParams.get("ref");
+    if (ref) {
+      localStorage.setItem("inviter_code", ref);
+      return ref;
+    }
+  } catch (e) {}
+
+  // 2) از تلگرام start_param بخون (اگر یک روزی کار کرد)
   const tg = window.Telegram?.WebApp;
   const startParam = tg?.initDataUnsafe?.start_param || null;
-
-  // اگر start_param هست، همون رو ذخیره کن (حتی اگر قبلاً چیزی بوده)
   if (startParam) {
     localStorage.setItem("inviter_code", startParam);
     return startParam;
   }
 
-  // وب: ?ref=
-  const urlParams = new URLSearchParams(window.location.search);
-  const ref = urlParams.get("ref") || null;
-  if (ref) {
-    localStorage.setItem("inviter_code", ref);
-    return ref;
-  }
-
-  // در غیر اینصورت همون قبلی
+  // 3) اگر هیچکدوم نبود، مقدار ذخیره‌شده رو برگردون (پاک نکن)
   return localStorage.getItem("inviter_code");
+}
+
+export function getStoredInviterCode() {
+  return localStorage.getItem("inviter_code");
+}
+
+export function clearInviterCode() {
+  localStorage.removeItem("inviter_code");
 }

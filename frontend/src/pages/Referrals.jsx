@@ -13,10 +13,8 @@ export default function Referrals() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // بهتره از env بخونی، ولی فعلاً همون ثابت:
-  const BOT_USERNAME = "Aipolifybot";
+  const SITE_URL = "https://cryptoocapitalhub.com"; // ✅ دامنه خودت
 
-  /* ---------------- Telegram Ready ---------------- */
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
     if (tg) {
@@ -25,14 +23,11 @@ export default function Referrals() {
     }
   }, []);
 
-  /* -------- Capture inviter code once (start_param or ?ref) -------- */
+  // اگر کسی با ?ref وارد وب شد، ذخیره کن
   useEffect(() => {
-    // ✅ این تابع هم start_param تلگرام رو می‌گیره هم ?ref وب رو
-    // و داخل localStorage ذخیره می‌کنه
     captureInviterCode();
   }, []);
 
-  /* -------- Register user & fetch referrals -------- */
   useEffect(() => {
     if (!address) {
       setMyCode(null);
@@ -48,9 +43,10 @@ export default function Referrals() {
         setLoading(true);
         setError("");
 
-        // ✅ همیشه از یک منبع واحد بخون
+        // inviter_code ممکنه از وب ذخیره شده باشه
         const inviterCode = localStorage.getItem("inviter_code");
 
+        // connect (برای ساخت user + اگر inviter_code هست اعمالش می‌کنه)
         const res = await api.post("/connect/", {
           wallet_address: address,
           inviter_code: inviterCode || null,
@@ -58,8 +54,7 @@ export default function Referrals() {
 
         if (cancelled) return;
 
-        const code = res.data?.user?.referral_code || null;
-        setMyCode(code);
+        setMyCode(res.data?.user?.referral_code || null);
 
         const countRes = await api.get("/referrals/count/", {
           params: { wallet_address: address },
@@ -67,10 +62,6 @@ export default function Referrals() {
 
         if (cancelled) return;
         setRefCount(countRes.data?.count ?? 0);
-
-        // اگر می‌خوای فقط یک بار اعمال بشه (پیشنهادی):
-        // بعد از اینکه connect انجام شد و ثبت شد، پاکش کن
-        // localStorage.removeItem("inviter_code");
       } catch (e) {
         if (cancelled) return;
         setError(
@@ -84,38 +75,24 @@ export default function Referrals() {
     }
 
     fetchData();
-
     return () => {
       cancelled = true;
     };
   }, [address]);
 
-  /* ---------------- Referral link (clean & stable) ---------------- */
-  // ✅ ساده‌ترین payload: فقط خود کد رفرال
-  // لینک: t.me/BOT?startapp=MYCODE
-  const APP_SHORT_NAME = "openapp"; // دقیقا همونی که تو BotFather ست کردی
-  const referralLink = myCode
-  ? `https://t.me/${BOT_USERNAME}/${APP_SHORT_NAME}?startapp=${encodeURIComponent(myCode)}`
-  : "";
+  // ✅ لینک رفرال نهایی: روی سایت خودت
+  const referralLink = myCode ? `${SITE_URL}/?ref=${encodeURIComponent(myCode)}` : "";
 
-
-  /* ---------------- Share inside Telegram ---------------- */
   function shareReferralLink() {
     if (!referralLink) return;
 
     const tg = window.Telegram?.WebApp;
-    const text = `🚀 Join me on Aipolify\n\n${referralLink}`;
-
-    // ✅ این لینک “به خود تلگرام” می‌گه Share UI رو باز کنه
     const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(
       referralLink
     )}&text=${encodeURIComponent("🚀 Join me on Aipolify")}`;
 
-    if (tg?.openTelegramLink) {
-      tg.openTelegramLink(shareUrl);
-    } else {
-      window.open(shareUrl, "_blank");
-    }
+    if (tg?.openTelegramLink) tg.openTelegramLink(shareUrl);
+    else window.open(shareUrl, "_blank");
   }
 
   function copyReferralLink() {
@@ -142,29 +119,27 @@ export default function Referrals() {
           <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
             <input value={referralLink} readOnly className="linkreferral" />
 
-            <button
-              onClick={shareReferralLink}
-              disabled={!referralLink}
-              className="copy-button"
-            >
+            <button onClick={shareReferralLink} className="copy-button">
               Share
             </button>
 
-            <button
-              onClick={copyReferralLink}
-              disabled={!referralLink}
-              className="copy-button1"
-            >
+            <button onClick={copyReferralLink} className="copy-button1">
               📋 Copy
             </button>
           </div>
 
-          <div className="wallet-box1">
+          <div className="wallet-box1" style={{ marginTop: 12 }}>
             {refCount === null ? (
               <div>Loading referral count...</div>
             ) : (
               <div>Number of people invited: {refCount}</div>
             )}
+          </div>
+
+          {/* توضیح کوتاه برای کاربران */}
+          <div style={{ marginTop: 12, fontSize: 12, opacity: 0.8 }}>
+            If your friend opens this link in Telegram and presses <b>OPEN APP</b>,
+            the referral will still work.
           </div>
         </>
       )}
