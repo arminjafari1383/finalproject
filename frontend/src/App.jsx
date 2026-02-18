@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Navbar from "./components/Navbar";
 import Wallet from "./pages/Wallet";
 import Referrals from "./pages/Referrals";
@@ -8,7 +8,7 @@ import Timer from "./pages/Timer";
 import useTgStartRedirect from "./hooks/useTgStartRedirect";
 
 function AppContent() {
-  useTgStartRedirect(); // ✅ دیپ‌لینک اینجا هندل میشه
+  useTgStartRedirect();
 
   return (
     <>
@@ -20,6 +20,9 @@ function AppContent() {
           <Route path="/stake" element={<Purchase />} />
           <Route path="/Aboutus" element={<AboutUs />} />
           <Route path="/Timer" element={<Timer />} />
+
+          {/* ✅ هر مسیر ناشناخته‌ای رفت، برگرد به Wallet */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
     </>
