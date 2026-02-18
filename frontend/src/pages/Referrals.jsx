@@ -93,9 +93,11 @@ export default function Referrals() {
   /* ---------------- Referral link (clean & stable) ---------------- */
   // ✅ ساده‌ترین payload: فقط خود کد رفرال
   // لینک: t.me/BOT?startapp=MYCODE
+  const APP_SHORT_NAME = "openapp"; // دقیقا همونی که تو BotFather ست کردی
   const referralLink = myCode
-    ? `https://t.me/${BOT_USERNAME}?startapp=${encodeURIComponent(myCode)}`
-    : "";
+  ? `https://t.me/${BOT_USERNAME}/${APP_SHORT_NAME}?startapp=${encodeURIComponent(myCode)}`
+  : "";
+
 
   /* ---------------- Share inside Telegram ---------------- */
   function shareReferralLink() {
