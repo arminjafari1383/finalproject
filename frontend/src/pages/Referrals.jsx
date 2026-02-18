@@ -15,6 +15,7 @@ export default function Referrals() {
 
   const SITE_URL = "https://cryptoocapitalhub.com"; // ✅ دامنه خودت
 
+  /* ---------------- Telegram Ready ---------------- */
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
     if (tg) {
@@ -23,11 +24,12 @@ export default function Referrals() {
     }
   }, []);
 
-  // اگر کسی با ?ref وارد وب شد، ذخیره کن
+  /* -------- Capture inviter code once (from ?ref or start_param) -------- */
   useEffect(() => {
     captureInviterCode();
   }, []);
 
+  /* -------- Register user & fetch referrals -------- */
   useEffect(() => {
     if (!address) {
       setMyCode(null);
@@ -43,10 +45,8 @@ export default function Referrals() {
         setLoading(true);
         setError("");
 
-        // inviter_code ممکنه از وب ذخیره شده باشه
         const inviterCode = localStorage.getItem("inviter_code");
 
-        // connect (برای ساخت user + اگر inviter_code هست اعمالش می‌کنه)
         const res = await api.post("/connect/", {
           wallet_address: address,
           inviter_code: inviterCode || null,
@@ -75,30 +75,35 @@ export default function Referrals() {
     }
 
     fetchData();
+
     return () => {
       cancelled = true;
     };
   }, [address]);
 
-  // ✅ لینک رفرال نهایی: روی سایت خودت
-  const referralLink = myCode ? `${SITE_URL}/?ref=${encodeURIComponent(myCode)}` : "";
+  /* ---------------- Referral link (WEBSITE ONLY) ---------------- */
+  const referralLink = myCode
+    ? `${SITE_URL}/?ref=${encodeURIComponent(myCode)}`
+    : "";
 
-  function shareReferralLink() {
+  /* ---------------- Open website link (NO Telegram share url) ---------------- */
+  function openReferralLink() {
     if (!referralLink) return;
 
+    // اگر داخل تلگرام باشیم، لینک وب را داخل تلگرام باز می‌کند
     const tg = window.Telegram?.WebApp;
-    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(
-      referralLink
-    )}&text=${encodeURIComponent("🚀 Join me on Aipolify")}`;
-
-    if (tg?.openTelegramLink) tg.openTelegramLink(shareUrl);
-    else window.open(shareUrl, "_blank");
+    if (tg?.openTelegramLink) {
+      tg.openTelegramLink(referralLink);
+    } else {
+      // خارج از تلگرام
+      window.open(referralLink, "_blank");
+    }
   }
 
   function copyReferralLink() {
     if (!referralLink) return;
     navigator.clipboard?.writeText(referralLink);
-    alert("Link copied successfully");
+    alert("Website referral link copied");
   }
 
   if (!address) {
@@ -114,16 +119,24 @@ export default function Referrals() {
 
       {myCode && (
         <>
-          <p className="referral-link">🔗 Invite Link</p>
+          <p className="referral-link">🔗 Website Invite Link</p>
 
           <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
             <input value={referralLink} readOnly className="linkreferral" />
 
-            <button onClick={shareReferralLink} className="copy-button">
-              Share
+            <button
+              onClick={openReferralLink}
+              disabled={!referralLink}
+              className="copy-button"
+            >
+              Open Link
             </button>
 
-            <button onClick={copyReferralLink} className="copy-button1">
+            <button
+              onClick={copyReferralLink}
+              disabled={!referralLink}
+              className="copy-button1"
+            >
               📋 Copy
             </button>
           </div>
@@ -136,10 +149,9 @@ export default function Referrals() {
             )}
           </div>
 
-          {/* توضیح کوتاه برای کاربران */}
           <div style={{ marginTop: 12, fontSize: 12, opacity: 0.8 }}>
-            If your friend opens this link in Telegram and presses <b>OPEN APP</b>,
-            the referral will still work.
+            This link is a <b>website</b> link. Your friend can open it and then
+            press <b>OPEN APP</b> in Telegram.
           </div>
         </>
       )}
