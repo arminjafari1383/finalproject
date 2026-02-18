@@ -15,15 +15,36 @@ export default function Wallet() {
   const [withdrawError, setWithdrawError] = useState("");
   const [isWithdrawing, setIsWithdrawing] = useState(false);
 
+  // ✅ Debug state (نمایش داخل UI)
+  const [debug, setDebug] = useState({
+    tgStartParam: "",
+    lsInviterCode: "",
+    sentInviterCode: "",
+    connectStatus: "",
+    connectError: "",
+  });
+
   // ✅ وقتی صفحه باز شد: inviter_code را از start_param یا ?ref ذخیره کن
   useEffect(() => {
-    captureInviterCode();
+    const code = captureInviterCode();
+    setDebug((d) => ({
+      ...d,
+      tgStartParam: window.Telegram?.WebApp?.initDataUnsafe?.start_param || "",
+      lsInviterCode: localStorage.getItem("inviter_code") || "",
+      sentInviterCode: code || "",
+      connectStatus: "Wallet page loaded",
+      connectError: "",
+    }));
   }, []);
 
   // ✅ وقتی آدرس ولت آماده شد: connect + load wallet
   useEffect(() => {
     if (!address) {
       setWallet(null);
+      setDebug((d) => ({
+        ...d,
+        connectStatus: "No wallet connected yet",
+      }));
       return;
     }
 
@@ -31,42 +52,67 @@ export default function Wallet() {
 
     async function connectAndLoadWallet() {
       try {
-        // 🔍 دیباگ: ببین start_param و localStorage چی هستند
-        console.log(
-          "TG start_param =>",
-          window.Telegram?.WebApp?.initDataUnsafe?.start_param
-        );
-        console.log(
-          "LS inviter_code =>",
-          localStorage.getItem("inviter_code")
-        );
+        const tgStartParam =
+          window.Telegram?.WebApp?.initDataUnsafe?.start_param || "";
+        const lsInviterCode = localStorage.getItem("inviter_code") || "";
 
-        // inviter_code نهایی
-        const inviter_code = captureInviterCode();
+        const inviter_code = captureInviterCode(); // start_param / ref / stored
 
-        console.log("INVITER_CODE SENT =>", inviter_code);
-        console.log("WALLET ADDRESS =>", address);
+        setDebug((d) => ({
+          ...d,
+          tgStartParam,
+          lsInviterCode,
+          sentInviterCode: inviter_code || "",
+          connectStatus: "Sending /connect ...",
+          connectError: "",
+        }));
 
-        // 1) connect
         const connectRes = await api.post("/connect/", {
           wallet_address: address,
           inviter_code: inviter_code || null,
         });
 
-        console.log("CONNECT RESPONSE =>", connectRes?.data);
+        if (cancelled) return;
 
-        // 2) load wallet
+        setDebug((d) => ({
+          ...d,
+          connectStatus: "connect OK ✅",
+        }));
+
+        // load wallet
         const r = await api.get(`/wallet/${address}/`);
         if (!cancelled) setWallet(r.data);
       } catch (e) {
-        console.log("CONNECT/LOAD ERROR =>", e?.response?.data || e);
+        if (cancelled) return;
 
-        // حتی اگر connect fail شد، تلاش کن wallet رو بخونی
+        const errText =
+          e?.response?.data?.error ||
+          e?.response?.data?.detail ||
+          JSON.stringify(e?.response?.data || {}) ||
+          String(e);
+
+        setDebug((d) => ({
+          ...d,
+          connectStatus: "connect FAILED ❌",
+          connectError: errText,
+        }));
+
+        // Even if connect fails, try to load wallet
         try {
           const r = await api.get(`/wallet/${address}/`);
           if (!cancelled) setWallet(r.data);
         } catch (e2) {
-          console.log("WALLET LOAD ERROR =>", e2?.response?.data || e2);
+          const errText2 =
+            e2?.response?.data?.error ||
+            e2?.response?.data?.detail ||
+            JSON.stringify(e2?.response?.data || {}) ||
+            String(e2);
+
+          setDebug((d) => ({
+            ...d,
+            connectStatus: "wallet load FAILED ❌",
+            connectError: errText2,
+          }));
         }
       }
     }
@@ -77,6 +123,19 @@ export default function Wallet() {
       cancelled = true;
     };
   }, [address]);
+
+  // ✅ دکمه ریست رفرال برای تست
+  const resetReferral = () => {
+    localStorage.removeItem("inviter_code");
+    setDebug((d) => ({
+      ...d,
+      lsInviterCode: "",
+      sentInviterCode: "",
+      connectStatus: "Referral reset done",
+      connectError: "",
+    }));
+    alert("inviter_code پاک شد");
+  };
 
   const openWithdraw = () => {
     setWithdrawError("");
@@ -115,7 +174,6 @@ export default function Wallet() {
         amount: n,
       });
 
-      // refresh wallet
       const r = await api.get(`/wallet/${address}/`);
       setWallet(r.data);
 
@@ -136,6 +194,43 @@ export default function Wallet() {
       <div className="wallet-box">
         <h2>Connect Wallet</h2>
         <TonConnectButton />
+
+        {/* ✅ Debug Box */}
+        <div
+          style={{
+            marginTop: 12,
+            padding: 10,
+            border: "1px solid #444",
+            borderRadius: 8,
+            fontSize: 12,
+            direction: "ltr",
+            wordBreak: "break-all",
+          }}
+        >
+          <div>
+            <b>TG start_param:</b> {debug.tgStartParam || "-"}
+          </div>
+          <div>
+            <b>LS inviter_code:</b> {debug.lsInviterCode || "-"}
+          </div>
+          <div>
+            <b>SENT inviter_code:</b> {debug.sentInviterCode || "-"}
+          </div>
+          <div>
+            <b>Status:</b> {debug.connectStatus || "-"}
+          </div>
+          {debug.connectError ? (
+            <div style={{ color: "red" }}>
+              <b>Error:</b> {debug.connectError}
+            </div>
+          ) : null}
+
+          <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
+            <button onClick={resetReferral} style={{ padding: "6px 10px" }}>
+              Reset Referral
+            </button>
+          </div>
+        </div>
 
         {address && (
           <>
