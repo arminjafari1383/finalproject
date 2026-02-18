@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTonWallet } from "@tonconnect/ui-react";
 import { api } from "../api";
 import "./Referrals.css";
+import { captureInviterCode } from "../utils/referral";
 
 export default function Referrals() {
   const tonWallet = useTonWallet();
@@ -12,8 +13,8 @@ export default function Referrals() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // بهتره از env بخونی، ولی فعلاً همون ثابت:
   const BOT_USERNAME = "Aipolifybot";
-  const APP_NAME = "openapp"; // ✅ short name Mini App
 
   /* ---------------- Telegram Ready ---------------- */
   useEffect(() => {
@@ -24,27 +25,11 @@ export default function Referrals() {
     }
   }, []);
 
-  /* ----------- Get ref from start_param ------------ */
+  /* -------- Capture inviter code once (start_param or ?ref) -------- */
   useEffect(() => {
-    const tg = window.Telegram?.WebApp;
-    if (!tg) return;
-
-    if (localStorage.getItem("inviter_code")) return;
-
-    const raw = tg.initDataUnsafe?.start_param || "";
-    if (!raw) return;
-
-    let startParam = raw;
-    try {
-      startParam = decodeURIComponent(raw);
-    } catch (e) {}
-
-    const params = new URLSearchParams(startParam);
-    const ref = params.get("ref");
-
-    if (ref) {
-      localStorage.setItem("inviter_code", ref);
-    }
+    // ✅ این تابع هم start_param تلگرام رو می‌گیره هم ?ref وب رو
+    // و داخل localStorage ذخیره می‌کنه
+    captureInviterCode();
   }, []);
 
   /* -------- Register user & fetch referrals -------- */
@@ -63,6 +48,7 @@ export default function Referrals() {
         setLoading(true);
         setError("");
 
+        // ✅ همیشه از یک منبع واحد بخون
         const inviterCode = localStorage.getItem("inviter_code");
 
         const res = await api.post("/connect/", {
@@ -72,7 +58,8 @@ export default function Referrals() {
 
         if (cancelled) return;
 
-        setMyCode(res.data?.user?.referral_code || null);
+        const code = res.data?.user?.referral_code || null;
+        setMyCode(code);
 
         const countRes = await api.get("/referrals/count/", {
           params: { wallet_address: address },
@@ -81,7 +68,8 @@ export default function Referrals() {
         if (cancelled) return;
         setRefCount(countRes.data?.count ?? 0);
 
-        // اگر فقط یک بار باید ثبت شود:
+        // اگر می‌خوای فقط یک بار اعمال بشه (پیشنهادی):
+        // بعد از اینکه connect انجام شد و ثبت شد، پاکش کن
         // localStorage.removeItem("inviter_code");
       } catch (e) {
         if (cancelled) return;
@@ -102,11 +90,11 @@ export default function Referrals() {
     };
   }, [address]);
 
-  /* ---------------- Correct Mini App Link ---------------- */
+  /* ---------------- Referral link (clean & stable) ---------------- */
+  // ✅ ساده‌ترین payload: فقط خود کد رفرال
+  // لینک: t.me/BOT?startapp=MYCODE
   const referralLink = myCode
-    ? `https://t.me/${BOT_USERNAME}/${APP_NAME}?startapp=${encodeURIComponent(
-        `p=referrals&ref=${myCode}`
-      )}`
+    ? `https://t.me/${BOT_USERNAME}?startapp=${encodeURIComponent(myCode)}`
     : "";
 
   /* ---------------- Share inside Telegram ---------------- */
@@ -114,10 +102,12 @@ export default function Referrals() {
     if (!referralLink) return;
 
     const tg = window.Telegram?.WebApp;
-
-    // بهترین و پایدارترین روش Share
     const text = `🚀 Join me on Aipolify\n\n${referralLink}`;
-    const shareUrl = `https://t.me/share/url?text=${encodeURIComponent(text)}`;
+
+    // ✅ این لینک “به خود تلگرام” می‌گه Share UI رو باز کنه
+    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(
+      referralLink
+    )}&text=${encodeURIComponent("🚀 Join me on Aipolify")}`;
 
     if (tg?.openTelegramLink) {
       tg.openTelegramLink(shareUrl);

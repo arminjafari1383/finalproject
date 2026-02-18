@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useTonWallet, TonConnectButton } from "@tonconnect/ui-react";
 import { api } from "../api";
 import "./Wallet.css";
+import { captureInviterCode } from "../utils/referral";
+
 
 export default function Wallet() {
   const tonWallet = useTonWallet();
@@ -15,11 +17,11 @@ export default function Wallet() {
   const [isWithdrawing, setIsWithdrawing] = useState(false);
 
   // 1) Save ref from URL (if exists)
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const ref = params.get("ref");
-    if (ref) localStorage.setItem("inviter_code", ref);
-  }, []);
+ useEffect(() => {
+  // ✅ start_param تلگرام یا ref وب را ذخیره می‌کند
+  captureInviterCode();
+ }, []);
+
 
   // 2) When address is available: call connect (with inviter_code if exists) then load wallet
   useEffect(() => {
@@ -32,13 +34,11 @@ export default function Wallet() {
 
     async function connectAndLoadWallet() {
       try {
-        const inviter_code = localStorage.getItem("inviter_code"); // can be null
-
-        // ✅ Register referral here
+        const inviter_code = captureInviterCode(); // ✅ از تلگرام/وب می‌گیرد و ذخیره می‌کند
         await api.post("/connect/", {
-          wallet_address: address,
-          inviter_code: inviter_code || null,
-        });
+        wallet_address: address,
+        inviter_code: inviter_code || null,
+       });
 
         // If you want it to apply only once:
         // localStorage.removeItem("inviter_code");
