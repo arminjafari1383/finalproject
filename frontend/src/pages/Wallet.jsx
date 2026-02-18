@@ -4,7 +4,6 @@ import { api } from "../api";
 import "./Wallet.css";
 import { captureInviterCode } from "../utils/referral";
 
-
 export default function Wallet() {
   const tonWallet = useTonWallet();
   const address = useMemo(() => tonWallet?.account?.address, [tonWallet]);
@@ -16,14 +15,12 @@ export default function Wallet() {
   const [withdrawError, setWithdrawError] = useState("");
   const [isWithdrawing, setIsWithdrawing] = useState(false);
 
-  // 1) Save ref from URL (if exists)
- useEffect(() => {
-  // ✅ start_param تلگرام یا ref وب را ذخیره می‌کند
-  captureInviterCode();
- }, []);
+  // ✅ وقتی صفحه باز شد: inviter_code را از start_param یا ?ref ذخیره کن
+  useEffect(() => {
+    captureInviterCode();
+  }, []);
 
-
-  // 2) When address is available: call connect (with inviter_code if exists) then load wallet
+  // ✅ وقتی آدرس ولت آماده شد: connect + load wallet
   useEffect(() => {
     if (!address) {
       setWallet(null);
@@ -34,24 +31,43 @@ export default function Wallet() {
 
     async function connectAndLoadWallet() {
       try {
-        const inviter_code = captureInviterCode(); // ✅ از تلگرام/وب می‌گیرد و ذخیره می‌کند
-        await api.post("/connect/", {
-        wallet_address: address,
-        inviter_code: inviter_code || null,
-       });
+        // 🔍 دیباگ: ببین start_param و localStorage چی هستند
+        console.log(
+          "TG start_param =>",
+          window.Telegram?.WebApp?.initDataUnsafe?.start_param
+        );
+        console.log(
+          "LS inviter_code =>",
+          localStorage.getItem("inviter_code")
+        );
 
-       localStorage.removeItem("inviter_code");
-        // If you want it to apply only once:
-        // localStorage.removeItem("inviter_code");
+        // inviter_code نهایی
+        const inviter_code = captureInviterCode();
 
+        console.log("INVITER_CODE SENT =>", inviter_code);
+        console.log("WALLET ADDRESS =>", address);
+
+        // 1) connect
+        const connectRes = await api.post("/connect/", {
+          wallet_address: address,
+          inviter_code: inviter_code || null,
+        });
+
+        console.log("CONNECT RESPONSE =>", connectRes?.data);
+
+        // 2) load wallet
         const r = await api.get(`/wallet/${address}/`);
         if (!cancelled) setWallet(r.data);
       } catch (e) {
-        // Even if connect fails, try to load wallet
+        console.log("CONNECT/LOAD ERROR =>", e?.response?.data || e);
+
+        // حتی اگر connect fail شد، تلاش کن wallet رو بخونی
         try {
           const r = await api.get(`/wallet/${address}/`);
           if (!cancelled) setWallet(r.data);
-        } catch {}
+        } catch (e2) {
+          console.log("WALLET LOAD ERROR =>", e2?.response?.data || e2);
+        }
       }
     }
 

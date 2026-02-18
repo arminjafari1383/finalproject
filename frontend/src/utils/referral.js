@@ -1,8 +1,8 @@
 export function captureInviterCode() {
   const tg = window.Telegram?.WebApp;
-
-  // تلگرام: start_param
   const startParam = tg?.initDataUnsafe?.start_param || null;
+
+  // اگر start_param هست، همون رو ذخیره کن (حتی اگر قبلاً چیزی بوده)
   if (startParam) {
     localStorage.setItem("inviter_code", startParam);
     return startParam;
@@ -16,5 +16,6 @@ export function captureInviterCode() {
     return ref;
   }
 
+  // در غیر اینصورت همون قبلی
   return localStorage.getItem("inviter_code");
 }
