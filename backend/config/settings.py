@@ -80,7 +80,6 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [],
 }
 CSRF_TRUSTED_ORIGINS = [
-    "https://cryptoocapitalhub.com",
-    "https://www.cryptoocapitalhub.com",
+    "http://155.117.6.87",
 ]
 
