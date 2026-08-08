@@ -9,7 +9,7 @@ from decimal import Decimal, ROUND_DOWN
 
 logger = logging.getLogger(__name__)
 
-from .models import AppUser, Wallet, Ledger, Purchase , ReferraLevel
+from .models import AppUser, Wallet, Ledger, Purchase , ReferralLevel
 
 
 

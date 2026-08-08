@@ -4,11 +4,16 @@ from rest_framework import status
 from decimal import Decimal
 from datetime import timedelta
 from django.utils import timezone
-from .services import get_or_create_user, apply_referral, register_purchase,ecg_to_ton
-from .models import WithdrawRequest, Ledger,ReferraLevel
+from .services import get_or_create_user, apply_referral, register_purchase, ecg_to_ton
+from .models import (
+    AppUser, Wallet, Ledger, Purchase, 
+    WithdrawRequest, ReferralLevel  # ✅ هماهنگ با models
+)
 from .serializers import WalletSerializer, PurchaseSerializer, UserSerializer
 from django.conf import settings
 import os
+import requests  # ✅ اضافه شد
+
 
 @api_view(["POST"])
 def connect_wallet(request):
@@ -158,7 +163,6 @@ def request_withdraw(request):
 
     # 6) نهایی‌سازی
     req.status = "SUCCESS"
-    # فعلاً tx_hash نداریم (ton-service seqno برمی‌گردونه). می‌تونی همین رو ذخیره کنی:
     req.tx_hash = f"seqno:{data.get('sent_seqno')}"
     req.save(update_fields=["status", "tx_hash"])
 
@@ -166,6 +170,7 @@ def request_withdraw(request):
         {"id": req.id, "status": req.status, "ton_amount": str(ton_amount), "destination_wallet": dest},
         status=status.HTTP_201_CREATED
     )
+
 
 @api_view(["GET"])
 def referral_count(request):
@@ -195,7 +200,6 @@ def reward_status(request):
     w = user.wallet
     now = timezone.now()
 
-    # ✅ این فیلد باید در مدل AppUser وجود داشته باشد
     next_at = user.next_daily_claim_at
 
     if not next_at:
@@ -233,7 +237,6 @@ def tick(request):
             "seconds_remaining": seconds_remaining,
         }, status=status.HTTP_400_BAD_REQUEST)
 
-    # ✅ افزایش موجودی داخلی
     w.daily_reward_unlocked = w.daily_reward_unlocked + DAILY_REWARD
     w.save(update_fields=["daily_reward_unlocked"])
 
@@ -244,12 +247,11 @@ def tick(request):
         meta={"source": "timer"}
     )
 
-    # ✅ ست کردن زمان بعدی
     user.next_daily_claim_at = now + COOLDOWN
     user.save(update_fields=["next_daily_claim_at"])
 
     return Response({
-        "status": "rewarded",  # ✅ دقیقا چیزی که فرانت می‌خواهد
+        "status": "rewarded",
         "message": "1 ECG added",
         "balance_ecg": str(w.withdrawable_total()),
         "total_rewards": str(w.withdrawable_total()),
@@ -259,102 +261,100 @@ def tick(request):
     }, status=status.HTTP_200_OK)
 
 
+# =======================
+# ✅ Referral Levels API (هماهنگ با models)
+# =======================
+
 @api_view(["GET"])
 def get_referral_levels(request):
+    """
+    دریافت اطلاعات سطوح referral برای یک کاربر
+    شامل 5 سطح با لیست کاربران و تعداد
+    """
     wallet_address = request.query_params.get("wallet_address")
     if not wallet_address:
-        return Response({"error":"wallet_address required"},status=status.HTTP_400_BAD_REQUEST)
+        return Response({"error": "wallet_address required"}, status=status.HTTP_400_BAD_REQUEST)
 
     user = get_or_create_user(wallet_address)
 
-    level_obj,created = ReferraLevel.objects.get_or_create(user=user)
+    # ✅ استفاده از ReferralLevel (هماهنگ با models)
+    level_obj, created = ReferralLevel.objects.get_or_create(user=user)
 
-    is_test = request.query_params.get("test","false").lower() == "true"
+    is_test = request.query_params.get("test", "false").lower() == "true"
 
     if is_test:
-
         test_data = generate_test_data()
         return Response({
             "levels": {
-                "level_1" : {
-                    "count" : len(test_data["level_1"]),
-                    "users":test_data["level_1"]
-
+                "level_1": {
+                    "count": len(test_data["level_1"]),
+                    "users": test_data["level_1"]
                 },
-                "level_2" : {
-                    "count" : len(test_data["level_2"]),
-                    "users":test_data["level_2"]
+                "level_2": {
+                    "count": len(test_data["level_2"]),
+                    "users": test_data["level_2"]
                 },
-                "level_3" : {
-                    "count" : len(test_data["level_3"]),
-                    "users":test_data["level_3"]
-            
+                "level_3": {
+                    "count": len(test_data["level_3"]),
+                    "users": test_data["level_3"]
                 },
-                "level_4" : {
-                    "count" : len(test_data["level_4"]),
-                    "users":test_data["level_4"]
-                
+                "level_4": {
+                    "count": len(test_data["level_4"]),
+                    "users": test_data["level_4"]
                 },
-                "level_5" : {
-                    "count" : len(test_data["level_5"]),
-                    "users":test_data["level_5"]
-                
+                "level_5": {
+                    "count": len(test_data["level_5"]),
+                    "users": test_data["level_5"]
                 }
             },
-            "is_test":True
-        },status=status.HTTP_200_OK)
+            "is_test": True
+        }, status=status.HTTP_200_OK)
 
-
+    # داده‌های واقعی
     return Response({
-        "levels":{
+        "levels": {
             "level_1": {
                 "count": level_obj.level_1_count,
-                "users": level_obj.level_1_users[:20]
+                "users": level_obj.level_1_users[:20] if level_obj.level_1_users else []
             },
             "level_2": {
                 "count": level_obj.level_2_count,
-                "users": level_obj.level_2_users[:20]
+                "users": level_obj.level_2_users[:20] if level_obj.level_2_users else []
             },
             "level_3": {
                 "count": level_obj.level_3_count,
-                "users": level_obj.level_3_users[:20]
+                "users": level_obj.level_3_users[:20] if level_obj.level_3_users else []
             },
             "level_4": {
                 "count": level_obj.level_4_count,
-                "users": level_obj.level_4_users[:20]
+                "users": level_obj.level_4_users[:20] if level_obj.level_4_users else []
             },
             "level_5": {
                 "count": level_obj.level_5_count,
-                "users": level_obj.level_5_users[:20]
-            
+                "users": level_obj.level_5_users[:20] if level_obj.level_5_users else []
             }
         },
-        "is_test":False,
-        "total_referrals":level_obj.level_1_count + level_obj.level_2_count + level_obj.level_3_count + level_obj.level_4_count + level_obj.level_5_count
+        "is_test": False,
+        "total_referrals": (
+            level_obj.level_1_count + level_obj.level_2_count + 
+            level_obj.level_3_count + level_obj.level_4_count + 
+            level_obj.level_5_count
+        )
     }, status=status.HTTP_200_OK)
 
 
 def generate_test_data():
+    """تولید داده‌های تستی برای نمایش جدول"""
     import random
     import string
 
     def random_wallet():
-        return "0x" + ''.join(random.choices(string.hexdigits.lower(),k=40))
-
-    level_1 = [random_wallet() for _ in range(3)]
-
-    level_2 = [random_wallet() for _ in range(7)]
-
-    level_3 = [random_wallet() for _ in range(15)]
-
-    level_4 = [random_wallet() for _ in range(31)]
-
-    level_5 = [random_wallet() for _ in range(63)]
+        return "0x" + ''.join(random.choices(string.hexdigits.lower(), k=40))
 
     return {
-        "level_1" : level_1,
-        "level_2" : level_2,
-        "level_3" : level_3,
-        "level_4" : level_4,
-        "level_5" : level_5
-    } 
+        "level_1": [random_wallet() for _ in range(3)],
+        "level_2": [random_wallet() for _ in range(7)],
+        "level_3": [random_wallet() for _ in range(15)],
+        "level_4": [random_wallet() for _ in range(31)],
+        "level_5": [random_wallet() for _ in range(63)]
+    }

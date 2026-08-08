@@ -66,6 +66,7 @@ class Ledger(models.Model):
         ("PRINCIPAL_UNLOCK", "Principal unlock"),
         ("DOWNLINE_PROFIT", "Downline instant profit"),
         ("WITHDRAW", "Withdraw"),
+        ("LEVEL5_BONUS", "Level 5 bonus"),  # ✅ اضافه شد
     ]
     user = models.ForeignKey(AppUser, on_delete=models.CASCADE, related_name="ledgers")
     typ = models.CharField(max_length=32, choices=TYPE_CHOICES)
@@ -125,8 +126,11 @@ class WithdrawRequest(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
 
-class ReferraLevel(models.Model):
-    user = models.OneToOneField(AppUser,on_delete=models.CASCADE,related_name='referral_level')
+# ========================
+# ✅ مدل ReferralLevel (هماهنگ با views)
+# ========================
+class ReferralLevel(models.Model):
+    user = models.OneToOneField(AppUser, on_delete=models.CASCADE, related_name='referral_level')
 
     level_1_count = models.IntegerField(default=0)
     level_2_count = models.IntegerField(default=0)
@@ -134,17 +138,13 @@ class ReferraLevel(models.Model):
     level_4_count = models.IntegerField(default=0)
     level_5_count = models.IntegerField(default=0)
 
-    level_1_users = models.JSONField(default=list,blank=True)
+    level_1_users = models.JSONField(default=list, blank=True)
+    level_2_users = models.JSONField(default=list, blank=True)
+    level_3_users = models.JSONField(default=list, blank=True)
+    level_4_users = models.JSONField(default=list, blank=True)
+    level_5_users = models.JSONField(default=list, blank=True)
 
-    level_2_users = models.JSONField(default=list,blank=True)
-    level_3_users = models.JSONField(default=list,blank=True)
-    level_4_users = models.JSONField(default=list,blank=True)
-    level_5_users = models.JSONField(default=list,blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"{self.user.wallet_address} - levels"
-    
-
-    
-
