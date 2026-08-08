@@ -17,5 +17,5 @@ urlpatterns = [
     path("purchase/list/", views.list_purchases),
     path("withdraw/request/", views.request_withdraw),
 
-    path('api/referral/levels/',views.get_referral_levels,name='referral_levels')
+    path('referral/levels/',views.get_referral_levels,name='referral_levels')
 ]
