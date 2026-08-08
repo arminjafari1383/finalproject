@@ -1,10 +1,10 @@
 /* =========================
-   Main Container
+   Reset & Base
 ========================= */
-
 
 * {
   box-sizing: border-box;
+  max-width: 100%;
 }
 
 html, body {
@@ -12,17 +12,21 @@ html, body {
   margin: 0;
   padding: 0;
   background: linear-gradient(135deg, #0a0f2c, #0f1d3b, #112b4a);
-  overflow-x: hidden; /* حیاتی */
+  overflow-x: hidden;
 }
+
+/* =========================
+   Main Container
+========================= */
 
 .wallet-page-container {
   min-height: 100vh;
-  min-width: 100vw; /* FIXED */
+  width: 100%;
   display: flex;
   justify-content: center;
   align-items: center;
   background: linear-gradient(135deg, #0a0f2c, #0f1d3b, #112b4a);
-  padding: 3rem;
+  padding: 1rem;
 }
 
 /* =========================
@@ -31,7 +35,7 @@ html, body {
 
 .wallet-box {
   width: 100%;
-  max-width: 320px;
+  max-width: 400px;
   padding: 2rem;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -50,72 +54,155 @@ html, body {
   text-shadow: 0 0 10px rgba(0, 90, 255, 0.6);
 }
 
-.ref-info {
-  color: #7aff9c;
-  margin-bottom: 1rem;
-  font-size: 0.9rem;
+/* =========================
+   Connect Button - Fixed
+========================= */
+
+.connect-button-wrapper {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin: 10px 0;
 }
 
-.wallet-connected {
-  margin-top: 1rem;
-  font-size: 0.9rem;
-  color: #c5daff;
-}
-
-.msg-box {
-  margin-top: 1rem;
-  font-size: 0.9rem;
-  color: #a8c6ff;
+.connect-button-wrapper > div {
+  width: 100% !important;
+  max-width: 100% !important;
 }
 
 /* =========================
-   Referral Box
+   Debug Box
 ========================= */
 
-.ref-box {
-  margin-top: 2rem;
-  padding: 1rem;
-  border-radius: 15px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.25);
+.debug-box {
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  text-align: left;
+  font-size: 12px;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 10px;
+  border-radius: 10px;
+  margin-top: 15px;
 }
 
-.ref-label {
-  color: #b8d5ff;
-  font-size: 0.9rem;
-  margin-bottom: 0.3rem;
-  font-weight: 600;
-}
-
-.ref-inner {
+.debug-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: rgba(255,255,255,0.1);
-  padding: 0.7rem;
-  border-radius: 10px;
-  gap: 6px;
+  padding: 3px 0;
+  gap: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.ref-code {
-  font-size: 0.75rem;
-  color: white;
+.debug-item:last-of-type {
+  border-bottom: none;
+}
+
+.debug-label {
+  color: #8899bb;
+  font-weight: 500;
+  font-size: 11px;
+  white-space: nowrap;
+  min-width: 80px;
+  flex-shrink: 0;
+}
+
+.debug-value {
+  color: #a8c6ff;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 55%;
+  flex-shrink: 1;
+}
+
+.debug-error {
+  color: #ff6b6b;
+  padding: 6px 0 2px 0;
+  border-top: 1px solid rgba(255, 0, 0, 0.15);
+  margin-top: 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.debug-error .debug-label {
+  color: #ff6b6b;
+  min-width: 80px;
+  flex-shrink: 0;
+}
+
+.debug-error .debug-value {
+  color: #ff6b6b;
+  max-width: 55%;
+}
+
+.debug-reset {
+  margin-top: 10px;
+  text-align: center;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding-top: 10px;
+}
+
+.debug-reset-button {
+  background: rgba(255, 60, 60, 0.15);
+  border: 1px solid rgba(255, 60, 60, 0.25);
+  color: #ff6b6b;
+  padding: 6px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+  width: 100%;
+}
+
+.debug-reset-button:hover {
+  background: rgba(255, 60, 60, 0.3);
+}
+
+/* =========================
+   Wallet Content
+========================= */
+
+.wallet-content {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.wallet-content h3 {
+  color: #b8d5ff;
+  font-size: 14px;
+  font-weight: 400;
+  margin-bottom: 8px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.balance {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #4dff91;
+  text-shadow: 0 0 20px rgba(77, 255, 145, 0.3);
+  padding: 10px 0;
   word-break: break-all;
 }
 
-.ref-copy {
-  font-size: 0.8rem;
-  padding: 0.3rem 0.7rem;
-  border-radius: 8px;
-  border: 1px solid rgba(120,160,255,0.4);
-  color: #dce5ff;
-  background: rgba(255,255,255,0.05);
-  transition: 0.2s;
-  cursor: pointer;
+.loading-text {
+  color: #a8c6ff;
+  font-size: 16px;
+  padding: 30px 0;
+  animation: pulse 1.5s ease-in-out infinite;
 }
 
-.ref-copy:hover {
-  background: rgba(120,160,255,0.2);
+@keyframes pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
 }
 
 /* =========================
@@ -123,261 +210,462 @@ html, body {
 ========================= */
 
 .withdraw-btn {
-  margin-top: 30px;
+  margin-top: 25px;
   width: 100%;
   padding: 14px;
   border-radius: 14px;
   font-size: 18px;
-  background: #a9adbc;
-  color: black;
+  font-weight: 600;
+  background: linear-gradient(135deg, #4dff91, #24d96f);
+  color: #0a0f2c;
   border: none;
   cursor: pointer;
-  box-shadow: 0 0 20px rgba(36, 255, 111, 0.4);
+  box-shadow: 0 0 30px rgba(36, 255, 111, 0.3);
   transition: 0.25s;
 }
 
 .withdraw-btn:hover {
-  transform: scale(1.03);
+  transform: scale(1.02);
+  box-shadow: 0 0 40px rgba(36, 255, 111, 0.5);
 }
 
 /* =========================
-   Modal Background
+   Modal
 ========================= */
-
-.withdraw-modal {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.65);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 99;
-}
-
-/* =========================
-   Withdraw Box
-========================= */
-
-.withdraw-box {
-  background: rgba(255, 255, 255, 0.1);
-  padding: 25px;
-  border-radius: 20px;
-  width: 90%;
-  max-width: 380px;
-  border: 1px solid rgba(255,255,255,0.2);
-  backdrop-filter: blur(20px);
-  text-align: center;
-}
-
-.withdraw-title {
-  font-size: 22px;
-  font-weight: bold;
-  color: #ffbebe;
-  margin-bottom: 20px;
-}
-
-.withdraw-input {
-  width: 100%;
-  padding: 12px;
-  margin-bottom: 12px;
-  border-radius: 12px;
-  border: 1px solid rgba(255,255,255,0.25);
-  background: rgba(255,255,255,0.1);
-  color: white;
-  text-align: center;
-  font-size: 16px;
-}
-
-.withdraw-submit {
-  width: 100%;
-  padding: 12px;
-  border-radius: 12px;
-  background: linear-gradient(90deg, #4dff91, #24ff6f);
-  color: black;
-  font-weight: bold;
-  font-size: 17px;
-  cursor: pointer;
-  margin-top: 8px;
-  border: none;
-}
-
-.withdraw-cancel {
-  margin-top: 10px;
-  background: none;
-  color: white;
-  cursor: pointer;
-}
-
-/* =========================
-   Arrow
-========================= */
-
-.arrow {
-  width: 10px;
-  height: 10px;
-  border-right: 2px solid #7fffd4;
-  border-bottom: 2px solid #7fffd4;
-  transform: rotate(45deg);
-}
-
-/* =========================
-   Random Classes
-========================= */
-
-/* /* .go3349661836 {
-  margin-left: 70px;
-  width: 70px;
-  height: 46px;
-} */
-
-/* .go526437840 {
-  width: 250px;
-  height: 180px;
-} */
-
-/* .go1487791704 {
-  width: 2px;
-  height: 2px;
-} */
-
-/* .go3205121330 {
-  margin: 55px;
-} */
-
-.go54158285,
-.go1423325091 {
-  width: 145px;
-  height: 145px;
-  margin-left: 60px;
-}
-
-.go526437840{
-    width: 150px;
-    height: 150px;
-    margin-left: 110px;
-    margin-top: 20px;
-    padding: 20px;
-}
-
-/* =========================
-   Mobile Responsive
-========================= */
-
-@media (max-width: 480px) {
-
-  .wallet-box {
-    max-width: 100%;
-    padding: 1.5rem;
-    border-radius: 18px;
-  }
-
-  .wallet-title {
-    font-size: 1.6rem;
-  }
-
-  .ref-inner {
-    flex-direction: column;
-  }
-
-  .ref-copy {
-    width: 100%;
-  }
-
-  .withdraw-btn {
-    font-size: 16px;
-    padding: 12px;
-  }
-
-  .withdraw-box {
-    width: 95%;
-    padding: 20px;
-  }
-
-  .withdraw-title {
-    font-size: 18px;
-  }
-
-  .withdraw-input {
-    font-size: 14px;
-  }
-
-  .go3349661836,
-  .go526437840,
-  .go884629673 {
-    margin-left: 0;
-    width: auto;
-    height: auto;
-  }
-
-  .go3205121330,
-  .go54158285,
-  .go1423325091 {
-    margin: 50px;
-  }
-}
 
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.55);
+  background: rgba(0, 0, 0, 0.7);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 9999;
+  padding: 16px;
 }
 
 .modal {
   width: min(420px, 92vw);
-  background: #fff;
-  border-radius: 14px;
-  padding: 16px;
+  max-width: 100%;
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  max-height: 90vh;
+  overflow-y: auto;
 }
 
 .modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #0a0f2c;
 }
 
 .modal-close {
   border: none;
   background: transparent;
-  font-size: 22px;
+  font-size: 24px;
   cursor: pointer;
+  color: #666;
+  padding: 0 8px;
+  transition: 0.2s;
+}
+
+.modal-close:hover {
+  color: #000;
+  transform: rotate(90deg);
+}
+
+.modal-close:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .modal-body {
-  margin-top: 12px;
+  margin-top: 16px;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
+.modal-body label {
+  font-weight: 500;
+  font-size: 14px;
+  color: #333;
+}
+
 .modal-body input {
-  padding: 10px;
-  border: 1px solid #ddd;
+  padding: 12px 14px;
+  border: 2px solid #ddd;
   border-radius: 10px;
+  font-size: 16px;
+  transition: 0.2s;
+  width: 100%;
+}
+
+.modal-body input:focus {
+  outline: none;
+  border-color: #4dff91;
+  box-shadow: 0 0 0 3px rgba(77, 255, 145, 0.2);
 }
 
 .error-text {
   color: #c62828;
   font-size: 13px;
+  padding: 6px 0;
 }
 
 .modal-footer {
-  margin-top: 14px;
+  margin-top: 20px;
   display: flex;
   gap: 10px;
   justify-content: flex-end;
+  padding-top: 16px;
+  border-top: 1px solid #e0e0e0;
 }
 
-.btn-primary, .btn-secondary {
-  padding: 10px 12px;
+.btn-primary,
+.btn-secondary {
+  padding: 10px 20px;
   border-radius: 10px;
   border: none;
   cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: 0.2s;
 }
 
-.btn-primary { background: #111; color: white; }
-.btn-secondary { background: #eee; color: #111; }
+.btn-primary {
+  background: #0a0f2c;
+  color: white;
+}
 
+.btn-primary:hover {
+  background: #1a2555;
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: #f0f0f0;
+  color: #333;
+}
+
+.btn-secondary:hover {
+  background: #e0e0e0;
+}
+
+.btn-secondary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* =========================
+   Fix for Logo Classes (TonConnect)
+========================= */
+
+/* حذف کلاس‌های اضافی که باعث مشکل می‌شن */
+.go54158285,
+.go1423325091,
+.go526437840,
+.go3349661836,
+.go884629673,
+.go3205121330 {
+  width: auto !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  max-width: 100% !important;
+}
+
+/* =========================
+   Mobile Responsive - Fixed for A36
+========================= */
+
+@media (max-width: 480px) {
+  .wallet-page-container {
+    padding: 8px;
+    min-height: 100vh;
+    align-items: flex-start;
+    padding-top: 16px;
+  }
+
+  .wallet-box {
+    max-width: 100%;
+    padding: 16px;
+    border-radius: 16px;
+    margin: 0;
+  }
+
+  .wallet-title {
+    font-size: 1.4rem;
+    margin-bottom: 1rem;
+  }
+
+  .connect-button-wrapper {
+    padding: 0;
+  }
+
+  .connect-button-wrapper button {
+    width: 100% !important;
+    font-size: 13px !important;
+    padding: 8px 12px !important;
+    min-height: 36px !important;
+  }
+
+  .connect-button-wrapper button svg {
+    width: 16px !important;
+    height: 16px !important;
+  }
+
+  .debug-box {
+    font-size: 10px;
+    padding: 8px;
+    margin-top: 12px;
+  }
+
+  .debug-item {
+    padding: 2px 0;
+    gap: 6px;
+  }
+
+  .debug-label {
+    font-size: 9px;
+    min-width: 65px;
+  }
+
+  .debug-value {
+    font-size: 9px;
+    max-width: 50%;
+  }
+
+  .debug-error {
+    padding: 4px 0 2px 0;
+    gap: 6px;
+  }
+
+  .debug-error .debug-label {
+    font-size: 9px;
+    min-width: 65px;
+  }
+
+  .debug-error .debug-value {
+    font-size: 9px;
+    max-width: 50%;
+  }
+
+  .debug-reset-button {
+    font-size: 10px;
+    padding: 5px 16px;
+  }
+
+  .balance {
+    font-size: 2rem;
+  }
+
+  .withdraw-btn {
+    font-size: 15px;
+    padding: 12px;
+    margin-top: 20px;
+  }
+
+  .modal {
+    width: 95vw;
+    padding: 16px;
+    margin: 10px;
+    max-height: 85vh;
+  }
+
+  .modal-header h3 {
+    font-size: 16px;
+  }
+
+  .modal-body input {
+    font-size: 14px;
+    padding: 10px 12px;
+  }
+
+  .modal-footer {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .modal-footer button {
+    width: 100%;
+    padding: 12px;
+    font-size: 14px;
+  }
+
+  .btn-secondary {
+    order: 2;
+  }
+
+  .btn-primary {
+    order: 1;
+  }
+
+  .loading-text {
+    font-size: 14px;
+    padding: 20px 0;
+  }
+
+  /* Fix برای لوگو در موبایل */
+  .go54158285,
+  .go1423325091,
+  .go526437840,
+  .go3349661836,
+  .go884629673,
+  .go3205121330 {
+    width: auto !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+    display: block !important;
+  }
+}
+
+/* =========================
+   Very Small Devices (A36 and similar)
+========================= */
+
+@media (max-width: 360px) {
+  .wallet-page-container {
+    padding: 4px;
+    padding-top: 12px;
+  }
+
+  .wallet-box {
+    padding: 12px;
+    border-radius: 12px;
+  }
+
+  .wallet-title {
+    font-size: 1.2rem;
+  }
+
+  .connect-button-wrapper button {
+    font-size: 11px !important;
+    padding: 6px 10px !important;
+    min-height: 32px !important;
+  }
+
+  .connect-button-wrapper button svg {
+    width: 14px !important;
+    height: 14px !important;
+  }
+
+  .debug-box {
+    font-size: 9px;
+    padding: 6px;
+  }
+
+  .debug-label {
+    font-size: 8px;
+    min-width: 55px;
+  }
+
+  .debug-value {
+    font-size: 8px;
+    max-width: 45%;
+  }
+
+  .debug-error .debug-label {
+    font-size: 8px;
+    min-width: 55px;
+  }
+
+  .debug-error .debug-value {
+    font-size: 8px;
+    max-width: 45%;
+  }
+
+  .balance {
+    font-size: 1.6rem;
+  }
+
+  .withdraw-btn {
+    font-size: 13px;
+    padding: 10px;
+  }
+
+  .modal {
+    padding: 12px;
+  }
+
+  .modal-body input {
+    font-size: 13px;
+    padding: 8px 10px;
+  }
+}
+
+/* =========================
+   Tablet & Desktop
+========================= */
+
+@media (min-width: 768px) {
+  .wallet-page-container {
+    padding: 2rem;
+  }
+
+  .wallet-box {
+    max-width: 420px;
+    padding: 2.5rem;
+  }
+}
+
+/* =========================
+   Animations
+========================= */
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.wallet-box {
+  animation: fadeIn 0.5s ease-out;
+}
+
+.modal {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* =========================
+   Scrollbar
+========================= */
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
