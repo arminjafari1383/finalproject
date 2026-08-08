@@ -9,7 +9,9 @@ from decimal import Decimal, ROUND_DOWN
 
 logger = logging.getLogger(__name__)
 
-from .models import AppUser, Wallet, Ledger, Purchase
+from .models import AppUser, Wallet, Ledger, Purchase , ReferraLevel
+
+
 
 # ثابت‌ها
 ECG_PER_USD = Decimal("312")  # مقدار هر 1 دلار به ECG
@@ -57,6 +59,7 @@ def apply_referral(inviter_code: str, user: AppUser):
     user.save(update_fields=["inviter"])
     logger.info("[REF] success user=%s inviter=%s", user.id, inviter.id)
 
+    update_referral_levels(user,inviter)
     # 👇 دادن پاداش 3 توکن به inviter
     try:
         with transaction.atomic():
@@ -81,6 +84,88 @@ def apply_referral(inviter_code: str, user: AppUser):
                         REFERRAL_TOKEN_REWARD, user.wallet_address)
     except Exception as e:
         logger.exception("[REF] failed to reward inviter: %s", e)
+
+def update_referral_levels(new_user: AppUser, direct_inviter:AppUser):
+
+    current = direct_inviter
+
+    level = 1
+
+    while current and level <= 5:
+        level_obj, created = ReferraLevel.objects.get_or_create(user = current)
+
+        if level == 1:
+            level_obj.level_1_count += 1
+
+            if new_user.wallet_address not in level_obj.level_1_users:
+
+                level_obj.level_1_users.append(new_user.wallet_address)
+
+        elif level == 2:
+            level_obj.level_2_count += 1
+            if new_user.wallet_address not in level_obj.level_2_users:
+                level_obj.level_2_users.append(new_user.wallet_address)
+
+        elif level == 3:
+            level_obj.level_3_count += 1
+            if new_user.wallet_address not in level_obj.level_3_users:
+                level_obj.level_3_users.append(new_user.wallet_address)
+
+        elif level == 4:
+            level_obj.level_4_count += 1
+            if new_user.wallet_address not in level_obj.level_4_users:
+                level_obj.level_4_users.append(new_user.wallet_address)
+
+        elif level == 5:
+            level_obj.level_5_count += 1
+            if new_user.wallet_address not in level_obj.level_5_users:
+                level_obj.level_5_users.append(new_user.wallet_address)
+
+        level_obj.save()
+        logger.info(f"[LEVEL] User {current.wallet_address} level {level} updated")
+
+        current = current.inviter
+        level += 1
+
+def distribute_level_5_purchase(user: AppUser, purchase_amount: Decimal):
+
+    logger.info(f"[LEVEL5] Distributing purchase for user {user.wallet_address}")
+
+    current = user.inviter
+    level = 1
+    bouns = Decimal("0.01")
+
+    while current and level <= 4:
+
+        level_obj = ReferraLevel.objects.filter(user=user).first()
+        if not level_obj or level_obj.level_5_count == 0:
+            logger.info(f"[LEVEL5] User {user.wallet_address} not level 5 yet")
+            return
+
+        while transaction.atomic():
+            w,created = Wallet.objects.get_or_create(user=current)
+            if created:
+                logger.info(f"[LEVEL5] Wallet created for {current.wallet_address}")
+
+                Wallet.objects.filter(user=current).update(
+                    referrral_bouns = F("referral_bouns") + bouns
+
+                )
+                Ledger.objects.create(
+                    user=current,
+                    typ = "LEVELS_BOUNS",
+                    amount=bouns,
+                    meta = {
+                        "from":user.wallet_address,
+                        "level":level,
+                        "purchase_amount": str(purchase_amount)
+                    }
+                )
+                logger.info(f"[LEVEL5] Bonus {bouns} given to level {level} user {current.wallet_address}")
+
+                current - current.inviter
+                level += 1
+
 
 
 def fetch_ton_usd_rate() -> Decimal:
@@ -176,6 +261,17 @@ def register_purchase(user: AppUser, ton_amount: Decimal, ton_tx_hash: str, is_t
     else:
         logger.info("[BUY] no inviter -> skip downline profit")
 
+
+    level_obj = ReferraLevel.objects.filter(user=user).first()
+    if level_obj and level_obj.level_5_count > 0:
+        logger.info(f"[LEVEL5] User {user.wallet_address} is level5,distributing bonuses")
+
+        distribute_level_5_purchase(user,ecg_value)
+
+    else:
+        logger.info(f"[LEVEL5] User {user.wallet_address} is not level 5 yet (count:{level_obj.level_5_count if level_obj else 0})")
+
+
     # 4) refresh از دیتابیس برای لاگ دقیق
     user.wallet.refresh_from_db()
     logger.info("[BUY] AFTER user_wallet principal_locked=%s self_profit_locked=%s downline_profit_instant=%s",
@@ -195,3 +291,45 @@ def ecg_to_ton(ecg_amount: Decimal) -> Decimal:
     ecg_per_ton = rate * ECG_PER_USD
     # 9 رقم اعشار TON (nanoTON)
     return (ecg_amount / ecg_per_ton).quantize(Decimal("0.000000001"), rounding=ROUND_DOWN)
+
+
+def distribute_level_5_purchase(user:AppUser,purchase_amount: Decimal):
+    logger.info(f"[LEVEL5] Distributing purchase for user {user.wallet_address}")
+
+
+    current = user.inviter
+    level = 1
+    bouns = Decimal
+
+    while current and level <= 4:
+        with transaction.atomic():
+            w,created = Wallet.objects.get_or_create(user=current)
+            if created:
+                logger.info(f"[LEVEL5] Wallet created for {current.wallet_address}")
+
+            Wallet.objects.filter(user=current).update(
+                referral_bouns=F("referral_bouns") + bouns
+            )
+
+            Ledger.objects.create(
+                user = current,
+                typ="LEVEL5_BOUNS",
+                amount=bouns,
+                meta={
+                    "from":user.wallet_address,
+                    "level":level,
+                    "purchase_amount":str(purchase_amount),
+                    "timestamp":str(timezone.now())
+                }
+
+            )
+            logger.info(f"[LEVEL5] Bouns{bouns} given to level {level} user {current.wallet_address}")
+
+            current = current.inviter
+            level += 1
+
+        if level <= 4:
+            logger.info(f"[LEVEL5] Only {level-1} upline levels found, distributed to {level-1} users")
+
+
+        

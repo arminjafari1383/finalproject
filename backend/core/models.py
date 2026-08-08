@@ -123,3 +123,28 @@ class WithdrawRequest(models.Model):
 
     status = models.CharField(max_length=16, choices=STATUS, default="PENDING")
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class ReferraLevel(models.Model):
+    user = models.OneToOneField(AppUser,on_delete=models.CASCADE,related_name='referral_level')
+
+    level_1_count = models.IntegerField(default=0)
+    level_2_count = models.IntegerField(default=0)
+    level_3_count = models.IntegerField(default=0)
+    level_4_count = models.IntegerField(default=0)
+    level_5_count = models.IntegerField(default=0)
+
+    level_1_users = models.JSONField(default=list,blank=True)
+
+    level_2_users = models.JSONField(default=list,blank=True)
+    level_3_users = models.JSONField(default=list,blank=True)
+    level_4_users = models.JSONField(default=list,blank=True)
+    level_5_users = models.JSONField(default=list,blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user.wallet_address} - levels"
+    
+
+    
+

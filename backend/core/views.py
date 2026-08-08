@@ -5,7 +5,7 @@ from decimal import Decimal
 from datetime import timedelta
 from django.utils import timezone
 from .services import get_or_create_user, apply_referral, register_purchase,ecg_to_ton
-from .models import WithdrawRequest, Ledger
+from .models import WithdrawRequest, Ledger,ReferraLevel
 from .serializers import WalletSerializer, PurchaseSerializer, UserSerializer
 from django.conf import settings
 import os
@@ -257,3 +257,104 @@ def tick(request):
         "rewards_count": user.ledgers.filter(typ="DAILY_UNLOCK").count(),
         "seconds_remaining": int(COOLDOWN.total_seconds()),
     }, status=status.HTTP_200_OK)
+
+
+@api_view(["GET"])
+def get_referral_levels(request):
+    wallet_address = request.query_params.get("wallet_address")
+    if not wallet_address:
+        return Response({"error":"wallet_address required"},status=status.HTTP_400_BAD_REQUEST)
+
+    user = get_or_create_user(wallet_address)
+
+    level_obj,created = ReferraLevel.objects.get_or_create(user=user)
+
+    is_test = request.query_params.get("test","false").lower() == "true"
+
+    if is_test:
+
+        test_data = generate_test_data()
+        return Response({
+            "levels": {
+                "level_1" : {
+                    "count" : len(test_data["level_1"]),
+                    "users":test_data["level_1"]
+
+                },
+                "level_2" : {
+                    "count" : len(test_data["level_2"]),
+                    "users":test_data["level_2"]
+                },
+                "level_3" : {
+                    "count" : len(test_data["level_3"]),
+                    "users":test_data["level_3"]
+            
+                },
+                "level_4" : {
+                    "count" : len(test_data["level_4"]),
+                    "users":test_data["level_4"]
+                
+                },
+                "level_5" : {
+                    "count" : len(test_data["level_5"]),
+                    "users":test_data["level_5"]
+                
+                }
+            },
+            "is_test":True
+        },status=status.HTTP_200_OK)
+
+
+    return Response({
+        "levels":{
+            "level_1": {
+                "count": level_obj.level_1_count,
+                "users": level_obj.level_1_users[:20]
+            },
+            "level_2": {
+                "count": level_obj.level_2_count,
+                "users": level_obj.level_2_users[:20]
+            },
+            "level_3": {
+                "count": level_obj.level_3_count,
+                "users": level_obj.level_3_users[:20]
+            },
+            "level_4": {
+                "count": level_obj.level_4_count,
+                "users": level_obj.level_4_users[:20]
+            },
+            "level_5": {
+                "count": level_obj.level_5_count,
+                "users": level_obj.level_5_users[:20]
+            
+            }
+        },
+        "is_test":False,
+        "total_referrals":level_obj.level_1_count + level_obj.level_2_count + level_obj.level_3_count + level_obj.level_4_count + level_obj.level_5_count
+    }, status=status.HTTP_200_OK)
+
+
+def generate_test_data():
+    import random
+    import string
+
+    def random_wallet():
+        return "0x" + ''.join(random.choices(string.hexdigits.lower(),k=40))
+
+    level_1 = [random_wallet() for _ in range(3)]
+
+    level_2 = [random_wallet() for _ in range(7)]
+
+    level_3 = [random_wallet() for _ in range(15)]
+
+    level_4 = [random_wallet() for _ in range(31)]
+
+    level_5 = [random_wallet() for _ in range(63)]
+
+    return {
+        "level_1" : level_1,
+        "level_2" : level_2,
+        "level_3" : level_3,
+        "level_4" : level_4,
+        "level_5" : level_5
+    } 
