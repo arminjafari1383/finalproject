@@ -24,9 +24,11 @@ html, body {
   width: 100%;
   display: flex;
   justify-content: center;
-  align-items: center;
+  align-items: flex-start;
   background: linear-gradient(135deg, #0a0f2c, #0f1d3b, #112b4a);
-  padding: 1rem;
+  padding: 0.5rem;
+  padding-top: 1rem;
+  padding-bottom: 80px;
 }
 
 /* =========================
@@ -35,8 +37,8 @@ html, body {
 
 .wallet-box {
   width: 100%;
-  max-width: 400px;
-  padding: 2rem;
+  max-width: 420px;
+  padding: 1.5rem;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.2);
   backdrop-filter: blur(25px);
@@ -44,30 +46,61 @@ html, body {
   color: white;
   text-align: center;
   box-shadow: 0 0 30px rgba(0, 0, 50, 0.3);
+  margin: 0 auto;
 }
 
 .wallet-title {
-  font-size: 2rem;
+  font-size: 1.8rem;
   font-weight: 800;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
   color: #a3c5ff;
   text-shadow: 0 0 10px rgba(0, 90, 255, 0.6);
 }
 
 /* =========================
-   Connect Button - Fixed
+   Connect Button - Small Logo
 ========================= */
 
 .connect-button-wrapper {
   width: 100%;
   display: flex;
   justify-content: center;
-  margin: 10px 0;
+  margin: 8px 0;
 }
 
-.connect-button-wrapper > div {
+.connect-button-wrapper button {
   width: 100% !important;
-  max-width: 100% !important;
+  max-width: 280px !important;
+  padding: 8px 16px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  min-height: 36px !important;
+  border-radius: 10px !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  color: white !important;
+  transition: all 0.3s ease !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+}
+
+/* کوچک کردن لوگو مثلثی */
+.connect-button-wrapper button svg {
+  width: 16px !important;
+  height: 16px !important;
+  flex-shrink: 0 !important;
+}
+
+.connect-button-wrapper button:hover {
+  background: rgba(255, 255, 255, 0.15) !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+  transform: translateY(-1px) !important;
+}
+
+.connect-button-wrapper button:active {
+  transform: scale(0.98) !important;
 }
 
 /* =========================
@@ -79,20 +112,21 @@ html, body {
   max-width: 100%;
   overflow: hidden;
   text-align: left;
-  font-size: 12px;
-  background: rgba(0, 0, 0, 0.3);
-  padding: 10px;
-  border-radius: 10px;
+  font-size: 11px;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 10px 12px;
+  border-radius: 12px;
   margin-top: 15px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .debug-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 3px 0;
-  gap: 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 4px 0;
+  gap: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 .debug-item:last-of-type {
@@ -102,16 +136,16 @@ html, body {
 .debug-label {
   color: #8899bb;
   font-weight: 500;
-  font-size: 11px;
+  font-size: 10px;
   white-space: nowrap;
-  min-width: 80px;
+  min-width: 75px;
   flex-shrink: 0;
 }
 
 .debug-value {
   color: #a8c6ff;
   font-family: 'Courier New', monospace;
-  font-size: 11px;
+  font-size: 10px;
   text-align: right;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -120,24 +154,29 @@ html, body {
   flex-shrink: 1;
 }
 
+.status-value {
+  color: #4dff91;
+  font-weight: 600;
+}
+
 .debug-error {
   color: #ff6b6b;
-  padding: 6px 0 2px 0;
-  border-top: 1px solid rgba(255, 0, 0, 0.15);
+  padding: 5px 0 2px 0;
+  border-top: 1px solid rgba(255, 0, 0, 0.12);
   margin-top: 4px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .debug-error .debug-label {
   color: #ff6b6b;
-  min-width: 80px;
+  min-width: 75px;
   flex-shrink: 0;
 }
 
-.debug-error .debug-value {
+.debug-error .error-value {
   color: #ff6b6b;
   max-width: 55%;
 }
@@ -145,24 +184,30 @@ html, body {
 .debug-reset {
   margin-top: 10px;
   text-align: center;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
   padding-top: 10px;
 }
 
 .debug-reset-button {
-  background: rgba(255, 60, 60, 0.15);
-  border: 1px solid rgba(255, 60, 60, 0.25);
+  background: rgba(255, 60, 60, 0.12);
+  border: 1px solid rgba(255, 60, 60, 0.2);
   color: #ff6b6b;
   padding: 6px 20px;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 11px;
   transition: all 0.2s;
   width: 100%;
+  font-weight: 500;
 }
 
 .debug-reset-button:hover {
-  background: rgba(255, 60, 60, 0.3);
+  background: rgba(255, 60, 60, 0.25);
+  border-color: rgba(255, 60, 60, 0.4);
+}
+
+.debug-reset-button:active {
+  transform: scale(0.98);
 }
 
 /* =========================
@@ -177,9 +222,9 @@ html, body {
 
 .wallet-content h3 {
   color: #b8d5ff;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 400;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   letter-spacing: 1px;
   text-transform: uppercase;
 }
@@ -195,8 +240,8 @@ html, body {
 
 .loading-text {
   color: #a8c6ff;
-  font-size: 16px;
-  padding: 30px 0;
+  font-size: 14px;
+  padding: 25px 0;
   animation: pulse 1.5s ease-in-out infinite;
 }
 
@@ -210,11 +255,11 @@ html, body {
 ========================= */
 
 .withdraw-btn {
-  margin-top: 25px;
+  margin-top: 20px;
   width: 100%;
   padding: 14px;
   border-radius: 14px;
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 600;
   background: linear-gradient(135deg, #4dff91, #24d96f);
   color: #0a0f2c;
@@ -227,6 +272,10 @@ html, body {
 .withdraw-btn:hover {
   transform: scale(1.02);
   box-shadow: 0 0 40px rgba(36, 255, 111, 0.5);
+}
+
+.withdraw-btn:active {
+  transform: scale(0.98);
 }
 
 /* =========================
@@ -242,6 +291,7 @@ html, body {
   justify-content: center;
   z-index: 9999;
   padding: 16px;
+  backdrop-filter: blur(8px);
 }
 
 .modal {
@@ -317,6 +367,11 @@ html, body {
   box-shadow: 0 0 0 3px rgba(77, 255, 145, 0.2);
 }
 
+.modal-body input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .error-text {
   color: #c62828;
   font-size: 13px;
@@ -350,11 +405,13 @@ html, body {
 
 .btn-primary:hover {
   background: #1a2555;
+  transform: scale(1.02);
 }
 
 .btn-primary:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+  transform: none;
 }
 
 .btn-secondary {
@@ -372,71 +429,66 @@ html, body {
 }
 
 /* =========================
-   Fix for Logo Classes (TonConnect)
+   Fix برای کلاس‌های TonConnect
 ========================= */
 
-/* حذف کلاس‌های اضافی که باعث مشکل می‌شن */
 .go54158285,
 .go1423325091,
 .go526437840,
 .go3349661836,
 .go884629673,
 .go3205121330 {
-  width: auto !important;
-  height: auto !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  max-width: 100% !important;
+  display: none !important;
 }
 
 /* =========================
-   Mobile Responsive - Fixed for A36
+   Mobile Responsive
 ========================= */
 
 @media (max-width: 480px) {
   .wallet-page-container {
-    padding: 8px;
-    min-height: 100vh;
-    align-items: flex-start;
-    padding-top: 16px;
+    padding: 6px;
+    padding-top: 12px;
+    padding-bottom: 70px;
   }
 
   .wallet-box {
-    max-width: 100%;
-    padding: 16px;
+    padding: 14px;
     border-radius: 16px;
-    margin: 0;
   }
 
   .wallet-title {
     font-size: 1.4rem;
-    margin-bottom: 1rem;
+    margin-bottom: 0.8rem;
   }
 
+  /* دکمه کانکت در موبایل */
   .connect-button-wrapper {
-    padding: 0;
+    margin: 6px 0;
   }
 
   .connect-button-wrapper button {
-    width: 100% !important;
-    font-size: 13px !important;
-    padding: 8px 12px !important;
-    min-height: 36px !important;
+    max-width: 100% !important;
+    padding: 6px 14px !important;
+    font-size: 12px !important;
+    min-height: 32px !important;
+    border-radius: 8px !important;
   }
 
   .connect-button-wrapper button svg {
-    width: 16px !important;
-    height: 16px !important;
+    width: 14px !important;
+    height: 14px !important;
   }
 
+  /* دیباگ باکس در موبایل */
   .debug-box {
     font-size: 10px;
-    padding: 8px;
+    padding: 8px 10px;
     margin-top: 12px;
   }
 
   .debug-item {
-    padding: 2px 0;
+    padding: 3px 0;
     gap: 6px;
   }
 
@@ -460,7 +512,7 @@ html, body {
     min-width: 65px;
   }
 
-  .debug-error .debug-value {
+  .debug-error .error-value {
     font-size: 9px;
     max-width: 50%;
   }
@@ -470,19 +522,25 @@ html, body {
     padding: 5px 16px;
   }
 
+  /* محتوای والت */
   .balance {
     font-size: 2rem;
+  }
+
+  .wallet-content h3 {
+    font-size: 12px;
   }
 
   .withdraw-btn {
     font-size: 15px;
     padding: 12px;
-    margin-top: 20px;
+    margin-top: 16px;
   }
 
+  /* مودال */
   .modal {
     width: 95vw;
-    padding: 16px;
+    padding: 14px;
     margin: 10px;
     max-height: 85vh;
   }
@@ -516,59 +574,48 @@ html, body {
   }
 
   .loading-text {
-    font-size: 14px;
-    padding: 20px 0;
-  }
-
-  /* Fix برای لوگو در موبایل */
-  .go54158285,
-  .go1423325091,
-  .go526437840,
-  .go3349661836,
-  .go884629673,
-  .go3205121330 {
-    width: auto !important;
-    height: auto !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    max-width: 100% !important;
-    display: block !important;
+    font-size: 13px;
+    padding: 18px 0;
   }
 }
 
 /* =========================
-   Very Small Devices (A36 and similar)
+   Very Small Devices (A36)
 ========================= */
 
 @media (max-width: 360px) {
   .wallet-page-container {
     padding: 4px;
-    padding-top: 12px;
+    padding-top: 8px;
+    padding-bottom: 60px;
   }
 
   .wallet-box {
-    padding: 12px;
+    padding: 10px;
     border-radius: 12px;
   }
 
   .wallet-title {
     font-size: 1.2rem;
+    margin-bottom: 0.6rem;
   }
 
   .connect-button-wrapper button {
+    padding: 5px 12px !important;
     font-size: 11px !important;
-    padding: 6px 10px !important;
-    min-height: 32px !important;
+    min-height: 28px !important;
+    border-radius: 6px !important;
   }
 
   .connect-button-wrapper button svg {
-    width: 14px !important;
-    height: 14px !important;
+    width: 12px !important;
+    height: 12px !important;
   }
 
   .debug-box {
     font-size: 9px;
-    padding: 6px;
+    padding: 6px 8px;
+    margin-top: 10px;
   }
 
   .debug-label {
@@ -586,27 +633,47 @@ html, body {
     min-width: 55px;
   }
 
-  .debug-error .debug-value {
+  .debug-error .error-value {
     font-size: 8px;
     max-width: 45%;
   }
 
+  .debug-reset-button {
+    font-size: 9px;
+    padding: 4px 12px;
+  }
+
   .balance {
     font-size: 1.6rem;
+    padding: 6px 0;
+  }
+
+  .wallet-content h3 {
+    font-size: 11px;
   }
 
   .withdraw-btn {
     font-size: 13px;
     padding: 10px;
+    margin-top: 12px;
   }
 
   .modal {
-    padding: 12px;
+    padding: 10px;
+  }
+
+  .modal-header h3 {
+    font-size: 14px;
   }
 
   .modal-body input {
     font-size: 13px;
     padding: 8px 10px;
+  }
+
+  .modal-footer button {
+    padding: 10px;
+    font-size: 13px;
   }
 }
 
@@ -617,11 +684,16 @@ html, body {
 @media (min-width: 768px) {
   .wallet-page-container {
     padding: 2rem;
+    align-items: center;
   }
 
   .wallet-box {
     max-width: 420px;
-    padding: 2.5rem;
+    padding: 2rem;
+  }
+
+  .connect-button-wrapper button {
+    max-width: 280px !important;
   }
 }
 
@@ -653,7 +725,7 @@ html, body {
 ========================= */
 
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 4px;
 }
 
 ::-webkit-scrollbar-track {
@@ -662,10 +734,10 @@ html, body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.15);
   border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.25);
 }

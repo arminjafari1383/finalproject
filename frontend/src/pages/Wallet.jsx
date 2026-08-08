@@ -2,11 +2,19 @@ import { useEffect, useMemo, useState } from "react";
 import { useTonWallet, TonConnectButton } from "@tonconnect/ui-react";
 import { api } from "../api";
 import "./Wallet.css";
-import { captureInviterCode, clearInviterCode } from "../utils/referral";
+import {
+  captureInviterCode,
+  clearInviterCode,
+} from "../utils/referral";
 
 export default function Wallet() {
   const tonWallet = useTonWallet();
-  const address = useMemo(() => tonWallet?.account?.address, [tonWallet]);
+
+  const address = useMemo(
+    () => tonWallet?.account?.address,
+    [tonWallet]
+  );
+
   const [wallet, setWallet] = useState(null);
 
   const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
@@ -22,23 +30,32 @@ export default function Wallet() {
     connectError: "",
   });
 
-  // وقتی صفحه باز شد (وب یا تلگرام)، ref رو ذخیره کن
+  // Capture referral when page opens
   useEffect(() => {
     const code = captureInviterCode();
+
     setDebug((d) => ({
       ...d,
-      tgStartParam: window.Telegram?.WebApp?.initDataUnsafe?.start_param || "",
-      lsInviterCode: localStorage.getItem("inviter_code") || "",
+      tgStartParam:
+        window.Telegram?.WebApp?.initDataUnsafe?.start_param || "",
+      lsInviterCode:
+        localStorage.getItem("inviter_code") || "",
       sentInviterCode: code || "",
       connectStatus: "Wallet page loaded",
       connectError: "",
     }));
   }, []);
 
+  // Connect wallet and load wallet information
   useEffect(() => {
     if (!address) {
       setWallet(null);
-      setDebug((d) => ({ ...d, connectStatus: "No wallet connected yet" }));
+
+      setDebug((d) => ({
+        ...d,
+        connectStatus: "No wallet connected yet",
+      }));
+
       return;
     }
 
@@ -48,9 +65,10 @@ export default function Wallet() {
       try {
         const tgStartParam =
           window.Telegram?.WebApp?.initDataUnsafe?.start_param || "";
-        const lsInviterCode = localStorage.getItem("inviter_code") || "";
 
-        // مهم: اینجا ref از localStorage گرفته می‌شه
+        const lsInviterCode =
+          localStorage.getItem("inviter_code") || "";
+
         const inviter_code = captureInviterCode();
 
         setDebug((d) => ({
@@ -75,10 +93,10 @@ export default function Wallet() {
         }));
 
         const r = await api.get(`/wallet/${address}/`);
-        if (!cancelled) setWallet(r.data);
 
-        // ✅ اگر می‌خوای “یک بار مصرف” باشه، این رو فعال کن:
-        // clearInviterCode();
+        if (!cancelled) {
+          setWallet(r.data);
+        }
 
       } catch (e) {
         if (cancelled) return;
@@ -97,7 +115,10 @@ export default function Wallet() {
 
         try {
           const r = await api.get(`/wallet/${address}/`);
-          if (!cancelled) setWallet(r.data);
+
+          if (!cancelled) {
+            setWallet(r.data);
+          }
         } catch (e2) {
           const errText2 =
             e2?.response?.data?.error ||
@@ -115,6 +136,7 @@ export default function Wallet() {
     }
 
     connectAndLoadWallet();
+
     return () => {
       cancelled = true;
     };
@@ -122,6 +144,7 @@ export default function Wallet() {
 
   const resetReferral = () => {
     clearInviterCode();
+
     setDebug((d) => ({
       ...d,
       lsInviterCode: "",
@@ -129,6 +152,7 @@ export default function Wallet() {
       connectStatus: "Referral reset done",
       connectError: "",
     }));
+
     alert("inviter_code پاک شد");
   };
 
@@ -147,20 +171,32 @@ export default function Wallet() {
     setWithdrawError("");
 
     const n = Number(amount);
-    if (!Number.isFinite(n)) return setWithdrawError("Invalid amount.");
-    if (n < 60) return setWithdrawError("Minimum withdrawal is 60.");
-    if (!address) return setWithdrawError("Please connect your wallet first.");
+
+    if (!Number.isFinite(n)) {
+      return setWithdrawError("Invalid amount.");
+    }
+
+    if (n < 60) {
+      return setWithdrawError("Minimum withdrawal is 60.");
+    }
+
+    if (!address) {
+      return setWithdrawError(
+        "Please connect your wallet first."
+      );
+    }
 
     try {
       setIsWithdrawing(true);
 
-      await api.post(`/withdraw/request/`, {
+      await api.post("/withdraw/request/", {
         wallet_address: address,
         scope: "ALL_WITHDRAWABLE",
         amount: n,
       });
 
       const r = await api.get(`/wallet/${address}/`);
+
       setWallet(r.data);
       setIsWithdrawOpen(false);
     } catch (e) {
@@ -177,84 +213,118 @@ export default function Wallet() {
   return (
     <div className="wallet-page-container">
       <div className="wallet-box">
-        <h2>Connect Wallet</h2>
-        <TonConnectButton />
+
+        <h1 className="wallet-title">
+          Connect Wallet
+        </h1>
+
+        <div className="connect-button-wrapper">
+          <TonConnectButton />
+        </div>
 
         {/* Debug Box */}
-        <div
-          style={{
-            marginTop: 12,
-            padding: 10,
-            border: "1px solid #444",
-            borderRadius: 8,
-            fontSize: 12,
-            direction: "ltr",
-            wordBreak: "break-all",
-          }}
-        >
-          <div>
-            <b>TG start_param:</b> {debug.tgStartParam || "-"}
+        <div className="debug-box">
+          <div className="debug-item">
+            <span className="debug-label">TG start_param:</span>
+            <span className="debug-value">{debug.tgStartParam || "-"}</span>
           </div>
-          <div>
-            <b>LS inviter_code:</b> {debug.lsInviterCode || "-"}
+          <div className="debug-item">
+            <span className="debug-label">LS inviter_code:</span>
+            <span className="debug-value">{debug.lsInviterCode || "-"}</span>
           </div>
-          <div>
-            <b>SENT inviter_code:</b> {debug.sentInviterCode || "-"}
+          <div className="debug-item">
+            <span className="debug-label">SENT inviter_code:</span>
+            <span className="debug-value">{debug.sentInviterCode || "-"}</span>
           </div>
-          <div>
-            <b>Status:</b> {debug.connectStatus || "-"}
+          <div className="debug-item">
+            <span className="debug-label">Status:</span>
+            <span className="debug-value status-value">{debug.connectStatus || "-"}</span>
           </div>
           {debug.connectError ? (
-            <div style={{ color: "red" }}>
-              <b>Error:</b> {debug.connectError}
+            <div className="debug-error">
+              <span className="debug-label">Error:</span>
+              <span className="debug-value error-value">{debug.connectError}</span>
             </div>
           ) : null}
-
-          <div style={{ marginTop: 8 }}>
-            <button onClick={resetReferral} style={{ padding: "6px 10px" }}>
+          <div className="debug-reset">
+            <button onClick={resetReferral} className="debug-reset-button">
               Reset Referral
             </button>
           </div>
         </div>
 
         {address && (
-          <>
+          <div className="wallet-content">
+
             {!wallet ? (
-              <div>Loading...</div>
+              <div className="loading-text">
+                Loading...
+              </div>
             ) : (
               <>
                 <h3>Total Balance</h3>
-                <div>{wallet.withdrawable_total}</div>
-                <button className="withdraw-btn" onClick={openWithdraw}>
+
+                <div className="balance">
+                  {wallet.withdrawable_total}
+                </div>
+
+                <button
+                  className="withdraw-btn"
+                  onClick={openWithdraw}
+                >
                   Withdraw
                 </button>
               </>
             )}
-          </>
+
+          </div>
         )}
+
       </div>
 
+      {/* Withdraw Modal */}
       {isWithdrawOpen && (
-        <div className="modal-backdrop" onClick={closeWithdraw}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="modal-backdrop"
+          onClick={closeWithdraw}
+        >
+          <div
+            className="modal"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="modal-header">
               <h3>Withdraw ECG</h3>
-              <button className="modal-close" onClick={closeWithdraw}>
+
+              <button
+                className="modal-close"
+                onClick={closeWithdraw}
+                disabled={isWithdrawing}
+              >
                 ×
               </button>
             </div>
 
             <div className="modal-body">
-              <label>Withdrawal Amount (ECG)</label>
+              <label>
+                Withdrawal Amount (ECG)
+              </label>
+
               <input
                 type="number"
                 inputMode="decimal"
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={(e) =>
+                  setAmount(e.target.value)
+                }
                 placeholder="e.g. 60"
                 min="0"
               />
-              {withdrawError && <div className="error-text">{withdrawError}</div>}
+
+              {withdrawError && (
+                <div className="error-text">
+                  {withdrawError}
+                </div>
+              )}
             </div>
 
             <div className="modal-footer">
@@ -265,12 +335,15 @@ export default function Wallet() {
               >
                 Cancel
               </button>
+
               <button
                 className="btn-primary"
                 onClick={onWithdraw}
                 disabled={isWithdrawing}
               >
-                {isWithdrawing ? "Submitting..." : "Confirm Withdrawal"}
+                {isWithdrawing
+                  ? "Submitting..."
+                  : "Confirm Withdrawal"}
               </button>
             </div>
           </div>
