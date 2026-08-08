@@ -223,7 +223,7 @@ export default function Wallet() {
         </div>
 
         {/* Debug Box */}
-        <div className="debug-box">
+        {/* <div className="debug-box">
           <div className="debug-item">
             <span className="debug-label">TG start_param:</span>
             <span className="debug-value">{debug.tgStartParam || "-"}</span>
@@ -251,7 +251,7 @@ export default function Wallet() {
               Reset Referral
             </button>
           </div>
-        </div>
+        </div> */}
 
         {address && (
           <div className="wallet-content">
