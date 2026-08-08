@@ -10,10 +10,14 @@ export default function Referrals() {
 
   const [myCode, setMyCode] = useState(null);
   const [refCount, setRefCount] = useState(null);
+  const [levels, setLevels] = useState(null);
+  const [showTestTable, setShowTestTable] = useState(false);
+  const [testData, setTestData] = useState(null); // ✅ اصلاح: useState بود
+  const [totalReferrals, setTotalReferrals] = useState(0); // ✅ اصلاح: useState بود و مقدار پیش‌فرض 0
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const SITE_URL = "https://cryptoocapitalhub.com"; // ✅ دامنه خودت
+  const SITE_URL = "http://155.117.6.87/"; // ✅ دامنه خودت
 
   /* ---------------- Telegram Ready ---------------- */
   useEffect(() => {
@@ -81,6 +85,46 @@ export default function Referrals() {
     };
   }, [address]);
 
+  /* -------- Fetch referral levels -------- */
+  useEffect(() => { // ✅ اصلاح: useInsertionEffect به useEffect تغییر کرد
+    if (!address) return;
+
+    async function fetchLevels() {
+      try {
+        const response = await api.get("/referral/levels/", {
+          params: { wallet_address: address }
+        });
+        setLevels(response.data.levels);
+        setTotalReferrals(response.data.total_referrals || 0);
+      } catch (e) {
+        console.error("Failed to fetch levels:", e);
+      }
+    }
+    fetchLevels();
+
+  }, [address]);
+
+  /* -------- Fetch test data -------- */
+  async function fetchTestData() {
+    if (!address) return;
+    try {
+      setLoading(true);
+      const response = await api.get("/referral/levels/", {
+        params: {
+          wallet_address: address,
+          test: "true"
+        }
+      });
+      setTestData(response.data.levels);
+      setShowTestTable(true);
+    } catch (e) {
+      console.error("Failed to fetch test data:", e);
+      setError("Failed to load test data");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   /* ---------------- Referral link (WEBSITE ONLY) ---------------- */
   const referralLink = myCode
     ? `${SITE_URL}/?ref=${encodeURIComponent(myCode)}`
@@ -106,52 +150,165 @@ export default function Referrals() {
     alert("Website referral link copied");
   }
 
+  /* ---------------- Render level table ---------------- */
+  function renderLevelTable(level, data) {
+    if (!data) {
+      return (
+        <div className="level-table">
+          <h4>Level {level}</h4>
+          <p>No data available</p>
+        </div>
+      );
+    }
+
+    const users = data.users || [];
+    const count = data.count || 0;
+    const displayUsers = users.slice(0, 10);
+
+    return (
+      <div className="level-table">
+        <div className="level-header">
+          <h4>⭐ Level {level}</h4>
+          <span className="level-count">Total: {count}</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Wallet Address</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {displayUsers.length === 0 ? (
+              <tr>
+                <td colSpan="3" className="empty-message">No users in this level</td>
+              </tr>
+            ) : (
+              displayUsers.map((wallet, index) => (
+                <tr key={index}>
+                  <td>{index + 1}</td>
+                  <td className="wallet-address">
+                    {wallet.length > 10 ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : wallet}
+                  </td>
+                  <td>🟢 Active</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+        {users.length > 10 && (
+          <div className="show-more">+ {users.length - 10} more users</div>
+        )}
+      </div>
+    );
+  }
+
   if (!address) {
-    return <div>Please connect your wallet first.</div>;
+    return <div className="connect-warning">🔌 Please connect your wallet first.</div>;
   }
 
   return (
-    <div>
-      <h2 className="ref-title">Referral Dashboard</h2>
+    <div className="referrals-container">
+      <h2 className="ref-title">🎯 Referral Dashboard</h2>
 
-      {loading && <div>Loading...</div>}
-      {error && <div style={{ color: "red" }}>{error}</div>}
+      {loading && <div className="loading-spinner">Loading...</div>}
+      {error && <div className="error-message">❌ {error}</div>}
 
       {myCode && (
         <>
-          <p className="referral-link">🔗 Website Invite Link</p>
+          {/* بخش لینک دعوت */}
+          <div className="referral-link-section">
+            <p className="referral-link-label">🔗 Website Invite Link</p>
 
-          <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
-            <input value={referralLink} readOnly className="linkreferral" />
+            <div className="link-actions">
+              <input 
+                value={referralLink} 
+                readOnly 
+                className="link-input" 
+              />
 
-            <button
-              onClick={openReferralLink}
-              disabled={!referralLink}
-              className="copy-button"
-            >
-              Open Link
-            </button>
+              <button
+                onClick={openReferralLink}
+                disabled={!referralLink}
+                className="btn-open"
+              >
+                🌐 Open
+              </button>
 
-            <button
-              onClick={copyReferralLink}
-              disabled={!referralLink}
-              className="copy-button1"
-            >
-              📋 Copy
-            </button>
+              <button
+                onClick={copyReferralLink}
+                disabled={!referralLink}
+                className="btn-copy"
+              >
+                📋 Copy
+              </button>
+            </div>
+
+            {/* بخش آمار */}
+            <div className="stats-box">
+              <div className="stat-item">
+                <span className="stat-label">👥 Direct Invites</span>
+                <span className="stat-value">{refCount === null ? '...' : refCount}</span>
+              </div>
+              <div className="stat-item">
+                <span className="stat-label">🌳 Total Tree</span>
+                <span className="stat-value">{totalReferrals}</span>
+              </div>
+            </div>
+
+            <div className="info-note">
+              💡 This link is a <b>website</b> link. Your friend can open it and then press <b>OPEN APP</b> in Telegram.
+            </div>
           </div>
 
-          <div className="wallet-box1" style={{ marginTop: 12 }}>
-            {refCount === null ? (
-              <div>Loading referral count...</div>
-            ) : (
-              <div>Number of people invited: {refCount}</div>
+          {/* ========== بخش نمایش سطوح ========== */}
+          <div className="levels-section">
+            <h3>🔺 Referral Tree (5 Levels)</h3>
+            
+            <div className="levels-grid">
+              {[1, 2, 3, 4, 5].map(level => (
+                <div key={level} className="level-card">
+                  {renderLevelTable(level, levels?.[`level_${level}`])}
+                </div>
+              ))}
+            </div>
+
+            {/* دکمه برای نمایش جدول تستی */}
+            <div className="test-actions">
+              <button 
+                onClick={fetchTestData}
+                className="btn-test"
+                disabled={loading}
+              >
+                🧪 Show Test Table
+              </button>
+            </div>
+
+            {/* جدول تستی */}
+            {showTestTable && testData && (
+              <div className="test-table-section">
+                <div className="test-header">
+                  <h3>🧪 Test Data (5 Levels)</h3>
+                  <button 
+                    onClick={() => setShowTestTable(false)}
+                    className="btn-close"
+                  >
+                    ✕ Close
+                  </button>
+                </div>
+                <div className="levels-grid">
+                  {[1, 2, 3, 4, 5].map(level => (
+                    <div key={`test-${level}`} className="level-card test-card">
+                      {renderLevelTable(level, testData?.[`level_${level}`])}
+                    </div>
+                  ))}
+                </div>
+                <div className="test-note">
+                  ⚡ This is test data showing how the referral tree will look with sample users
+                </div>
+              </div>
             )}
-          </div>
-
-          <div style={{ marginTop: 12, fontSize: 12, opacity: 0.8 }}>
-            This link is a <b>website</b> link. Your friend can open it and then
-            press <b>OPEN APP</b> in Telegram.
           </div>
         </>
       )}
