@@ -23,25 +23,46 @@ export default function Referrals() {
   /* ---------------- Telegram Ready ---------------- */
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
+    console.log("🔍 [DEBUG] Checking Telegram WebApp...");
+    console.log("🔍 [DEBUG] window.Telegram:", window.Telegram);
+    console.log("🔍 [DEBUG] window.Telegram?.WebApp:", window.Telegram?.WebApp);
+    
     if (tg) {
+      console.log("✅ [DEBUG] Telegram WebApp found!");
       tg.ready();
       tg.expand();
+      console.log("✅ [DEBUG] tg.ready() and tg.expand() called");
+      
       // دریافت ID تلگرام
       if (tg.initDataUnsafe?.user?.id) {
         setTelegramId(tg.initDataUnsafe.user.id);
-        console.log("✅ Telegram ID:", tg.initDataUnsafe.user.id);
+        console.log("✅ [DEBUG] Telegram ID:", tg.initDataUnsafe.user.id);
+        console.log("✅ [DEBUG] User:", tg.initDataUnsafe.user);
+      } else {
+        console.log("⚠️ [DEBUG] No user ID found in initDataUnsafe");
+        console.log("📊 [DEBUG] initDataUnsafe:", tg.initDataUnsafe);
       }
+    } else {
+      console.log("❌ [DEBUG] Telegram WebApp NOT found!");
+      console.log("⚠️ [DEBUG] Make sure you're opening from Telegram mini-app");
     }
   }, []);
 
   /* -------- Capture inviter code once (from ?ref or start_param) -------- */
   useEffect(() => {
+    console.log("🔍 [DEBUG] Capturing inviter code...");
     captureInviterCode();
+    console.log("📊 [DEBUG] inviter_code from localStorage:", localStorage.getItem("inviter_code"));
   }, []);
 
   /* -------- Register user & fetch referrals -------- */
   useEffect(() => {
+    console.log("🔍 [DEBUG] Register user effect triggered");
+    console.log("📊 [DEBUG] address:", address);
+    console.log("📊 [DEBUG] telegramId:", telegramId);
+    
     if (!address) {
+      console.log("⚠️ [DEBUG] No address, clearing state");
       setMyCode(null);
       setRefCount(null);
       setError("");
@@ -52,64 +73,102 @@ export default function Referrals() {
 
     async function fetchData() {
       try {
+        console.log("🔄 [DEBUG] Starting fetchData...");
         setLoading(true);
         setError("");
 
         const inviterCode = localStorage.getItem("inviter_code");
+        console.log("📊 [DEBUG] inviterCode from localStorage:", inviterCode);
 
         // ✅ ارسال اطلاعات تلگرام به سرور
-        const res = await api.post("/connect/", {
+        const payload = {
           wallet_address: address,
           inviter_code: inviterCode || null,
           telegram_id: telegramId,
           is_telegram: true
-        });
+        };
+        console.log("📤 [DEBUG] Sending to /connect/:", payload);
+
+        const res = await api.post("/connect/", payload);
+        console.log("✅ [DEBUG] /connect/ response:", res.data);
 
         if (cancelled) return;
 
         setMyCode(res.data?.user?.referral_code || null);
+        console.log("📊 [DEBUG] myCode set to:", res.data?.user?.referral_code);
 
+        console.log("🔄 [DEBUG] Fetching referral count...");
         const countRes = await api.get("/referrals/count/", {
           params: { wallet_address: address },
         });
+        console.log("✅ [DEBUG] /referrals/count/ response:", countRes.data);
 
         if (cancelled) return;
         setRefCount(countRes.data?.count ?? 0);
+        console.log("📊 [DEBUG] refCount set to:", countRes.data?.count ?? 0);
+        
       } catch (e) {
+        console.log("❌ [DEBUG] Error in fetchData:");
+        console.log("❌ [DEBUG] Error object:", e);
+        console.log("❌ [DEBUG] Error response:", e?.response);
+        console.log("❌ [DEBUG] Error data:", e?.response?.data);
+        console.log("❌ [DEBUG] Error status:", e?.response?.status);
+        console.log("❌ [DEBUG] Error message:", e?.message);
+        
         if (cancelled) return;
         setError(
           e?.response?.data?.error ||
             e?.response?.data?.detail ||
+            e?.message ||
             "Failed to fetch referral information."
         );
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          console.log("✅ [DEBUG] fetchData completed");
+        }
       }
     }
 
     if (telegramId) {
+      console.log("✅ [DEBUG] telegramId exists, calling fetchData()");
       fetchData();
+    } else {
+      console.log("⚠️ [DEBUG] telegramId is null/undefined, waiting...");
     }
 
     return () => {
+      console.log("🔚 [DEBUG] Cleanup: cancelling fetchData");
       cancelled = true;
     };
   }, [address, telegramId]);
 
   /* -------- Fetch referral levels -------- */
   useEffect(() => {
-    if (!address) return;
+    console.log("🔍 [DEBUG] Fetch levels effect triggered");
+    console.log("📊 [DEBUG] address:", address);
+    
+    if (!address) {
+      console.log("⚠️ [DEBUG] No address, skipping fetchLevels");
+      return;
+    }
 
     async function fetchLevels() {
       try {
+        console.log("🔄 [DEBUG] Fetching referral levels...");
         const response = await api.get("/referral/levels/", {
           params: { wallet_address: address }
         });
-        console.log("✅ Levels data:", response.data);
+        console.log("✅ [DEBUG] Levels response:", response.data);
         setLevels(response.data.levels);
         setTotalReferrals(response.data.total_referrals || 0);
+        console.log("📊 [DEBUG] levels set, totalReferrals:", response.data.total_referrals || 0);
       } catch (e) {
-        console.error("Failed to fetch levels:", e);
+        console.log("❌ [DEBUG] Failed to fetch levels:");
+        console.log("❌ [DEBUG] Error:", e);
+        console.log("❌ [DEBUG] Error response:", e?.response);
+        console.log("❌ [DEBUG] Error data:", e?.response?.data);
+        console.log("❌ [DEBUG] Error status:", e?.response?.status);
       }
     }
     fetchLevels();
@@ -118,8 +177,16 @@ export default function Referrals() {
 
   /* -------- Fetch test data -------- */
   async function fetchTestData() {
-    if (!address) return;
+    console.log("🔍 [DEBUG] fetchTestData called");
+    console.log("📊 [DEBUG] address:", address);
+    
+    if (!address) {
+      console.log("⚠️ [DEBUG] No address, returning");
+      return;
+    }
+    
     try {
+      console.log("🔄 [DEBUG] Fetching test data...");
       setLoading(true);
       const response = await api.get("/referral/levels/", {
         params: {
@@ -127,14 +194,20 @@ export default function Referrals() {
           test: "true"
         }
       });
-      console.log("✅ Test data received:", response.data);
+      console.log("✅ [DEBUG] Test data response:", response.data);
       setTestData(response.data.levels);
       setShowTestTable(true);
+      console.log("📊 [DEBUG] testData set, showTestTable: true");
     } catch (e) {
-      console.error("Failed to fetch test data:", e);
-      setError("Failed to load test data");
+      console.log("❌ [DEBUG] Failed to fetch test data:");
+      console.log("❌ [DEBUG] Error:", e);
+      console.log("❌ [DEBUG] Error response:", e?.response);
+      console.log("❌ [DEBUG] Error data:", e?.response?.data);
+      console.log("❌ [DEBUG] Error status:", e?.response?.status);
+      setError(`Failed to load test data: ${e?.response?.data?.error || e?.message || 'Unknown error'}`);
     } finally {
       setLoading(false);
+      console.log("✅ [DEBUG] fetchTestData completed");
     }
   }
 
@@ -143,27 +216,48 @@ export default function Referrals() {
     ? `${SITE_URL}/?ref=${encodeURIComponent(myCode)}`
     : "";
 
+  console.log("📊 [DEBUG] referralLink:", referralLink);
+
   /* ---------------- Open website link ---------------- */
   function openReferralLink() {
-    if (!referralLink) return;
+    console.log("🔍 [DEBUG] openReferralLink called");
+    console.log("📊 [DEBUG] referralLink:", referralLink);
+    
+    if (!referralLink) {
+      console.log("⚠️ [DEBUG] No referral link, returning");
+      return;
+    }
 
     const tg = window.Telegram?.WebApp;
+    console.log("📊 [DEBUG] window.Telegram?.WebApp:", tg);
+    
     if (tg?.openTelegramLink) {
+      console.log("✅ [DEBUG] Using tg.openTelegramLink");
       tg.openTelegramLink(referralLink);
     } else {
+      console.log("✅ [DEBUG] Using window.open");
       window.open(referralLink, "_blank");
     }
   }
 
   function copyReferralLink() {
-    if (!referralLink) return;
+    console.log("🔍 [DEBUG] copyReferralLink called");
+    if (!referralLink) {
+      console.log("⚠️ [DEBUG] No referral link, returning");
+      return;
+    }
     navigator.clipboard?.writeText(referralLink);
+    console.log("✅ [DEBUG] Referral link copied:", referralLink);
     alert("Website referral link copied");
   }
 
   /* ---------------- Render level table with 4 columns ---------------- */
   function renderLevelTable(level, data) {
+    console.log(`🔍 [DEBUG] renderLevelTable called for level ${level}`);
+    console.log(`📊 [DEBUG] data for level ${level}:`, data);
+    
     if (!data) {
+      console.log(`⚠️ [DEBUG] No data for level ${level}`);
       return (
         <div className="level-table">
           <h4>⭐ Level {level}</h4>
@@ -175,6 +269,8 @@ export default function Referrals() {
     const users = data.users || [];
     const count = data.count || 0;
     const displayUsers = users.slice(0, 10);
+    
+    console.log(`📊 [DEBUG] Level ${level} - count: ${count}, users: ${users.length}, displaying: ${displayUsers.length}`);
 
     return (
       <div className="level-table">
@@ -200,7 +296,6 @@ export default function Referrals() {
                 </tr>
               ) : (
                 displayUsers.map((user, index) => {
-                  // اگر user یک string بود (حالت قدیمی) یا object بود (حالت جدید)
                   const isString = typeof user === 'string';
                   const telegramId = isString ? '-' : (user.telegram_id || '-');
                   const wallet = isString ? user : (user.wallet || '-');
@@ -230,13 +325,28 @@ export default function Referrals() {
     );
   }
 
+  console.log("📊 [DEBUG] Component state:", {
+    address,
+    telegramId,
+    myCode,
+    refCount,
+    levels,
+    testData,
+    totalReferrals,
+    loading,
+    error,
+    showTestTable
+  });
+
   // اگر ولت متصل نیست
   if (!address) {
+    console.log("⚠️ [DEBUG] No address, showing connect warning");
     return <div className="connect-warning">🔌 Please connect your wallet first.</div>;
   }
 
   // اگر تلگرام ID دریافت نشده
   if (!telegramId) {
+    console.log("⚠️ [DEBUG] No telegramId, showing warning");
     return (
       <div className="connect-warning">
         ⚠️ Please open this app from Telegram mini-app
