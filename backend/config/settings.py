@@ -83,9 +83,5 @@ CSRF_TRUSTED_ORIGINS = [
     "https://aipolynet.com/",
 ]
 
-CORS_ALLOWED_ORIGINS = [
-    "https://aipolynet.com",
-    "http://aipolynet.com",
-    "https://www.aipolynet.com",
-]
+CORS_ALLOW_ALL_ORIGINS = True
 
