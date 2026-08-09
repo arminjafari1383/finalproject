@@ -80,6 +80,6 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [],
 }
 CSRF_TRUSTED_ORIGINS = [
-    "http://155.117.6.87",
+    "https://aipolynet.com/",
 ]
 
