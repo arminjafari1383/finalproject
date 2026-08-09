@@ -18,7 +18,7 @@ export default function Referrals() {
   const [error, setError] = useState("");
   const [telegramId, setTelegramId] = useState(null);
 
-  const SITE_URL = "http://155.117.6.87/";
+  const SITE_URL = "https://aipolynet.com/";
 
   /* ---------------- Telegram Ready ---------------- */
   useEffect(() => {

@@ -5,7 +5,7 @@ import "./Timer.css";
 import Logo from "../assets/2.png";
 import Blade from "../assets/1.png";
 
-const API = "http://155.117.6.87/api/wallet";
+const API = "https://aipolynet.com/api/wallet";
 
 export default function TimerPage() {
   const tonWallet = useTonWallet();
