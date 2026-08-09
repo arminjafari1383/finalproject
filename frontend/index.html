@@ -4,10 +4,130 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+    <title>Crypto Capital Hub</title>
+    
+    <!-- ✅ جلوگیری از ایندکس شدن توسط موتورهای جستجو -->
+    <meta name="robots" content="noindex, nofollow" />
+    
+    <!-- ✅ جلوگیری از نمایش در iframe -->
+    <meta http-equiv="X-Frame-Options" content="DENY" />
+    
+    <style>
+      /* استایل‌های صفحه خطا برای غیرتلگرام */
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      
+      .telegram-error {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        background: #0a0a1a;
+        color: #fff;
+        flex-direction: column;
+        text-align: center;
+        padding: 20px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      }
+      
+      .telegram-error h1 {
+        color: #e94560;
+        font-size: 2.5rem;
+        margin-bottom: 15px;
+      }
+      
+      .telegram-error .icon {
+        font-size: 4rem;
+        margin-bottom: 20px;
+      }
+      
+      .telegram-error p {
+        color: #888;
+        font-size: 1.1rem;
+        max-width: 400px;
+        line-height: 1.6;
+      }
+      
+      .telegram-error .sub-text {
+        color: #666;
+        font-size: 0.9rem;
+        margin-top: 10px;
+      }
+      
+      .telegram-error .telegram-btn {
+        margin-top: 25px;
+        padding: 12px 30px;
+        background: #e94560;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-size: 1rem;
+        cursor: pointer;
+        text-decoration: none;
+        transition: background 0.3s;
+      }
+      
+      .telegram-error .telegram-btn:hover {
+        background: #c73e54;
+      }
+      
+      /* مخفی کردن محتوای اصلی اگر تلگرام نباشد */
+      #root {
+        width: 100%;
+        min-height: 100vh;
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- ✅ اگر از تلگرام نباشد، این پیام نمایش داده می‌شود -->
+      <div id="telegram-check">
+        <div class="telegram-error">
+          <div class="icon">⛔</div>
+          <h1>Access Denied</h1>
+          <p>This application is only available through Telegram mini-app.</p>
+          <p class="sub-text">Please open it from Telegram</p>
+          <a href="https://t.me/" target="_blank" class="telegram-btn">
+            📱 Open in Telegram
+          </a>
+        </div>
+      </div>
+    </div>
+    
     <script type="module" src="/src/main.jsx"></script>
+    
+    <script>
+      // ✅ چک کردن اینکه از تلگرام آمده است
+      (function() {
+        try {
+          const isTelegram = !!(window.Telegram?.WebApp);
+          const checkElement = document.getElementById('telegram-check');
+          
+          if (isTelegram) {
+            // اگر از تلگرام است، المان خطا را مخفی کن
+            if (checkElement) {
+              checkElement.style.display = 'none';
+            }
+          } else {
+            // اگر از تلگرام نیست، فقط خطا نشان بده
+            const root = document.getElementById('root');
+            if (root) {
+              // اطمینان از اینکه فقط المان خطا نمایش داده شود
+              const children = root.children;
+              for (let i = 0; i < children.length; i++) {
+                if (children[i].id !== 'telegram-check') {
+                  children[i].style.display = 'none';
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.log('Telegram check error:', e);
+        }
+      })();
+    </script>
   </body>
 </html>

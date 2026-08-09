@@ -71,6 +71,10 @@ export default function Wallet() {
 
         const inviter_code = captureInviterCode();
 
+        // ✅ دریافت Telegram ID
+        const telegramId =
+          window.Telegram?.WebApp?.initDataUnsafe?.user?.id || null;
+
         setDebug((d) => ({
           ...d,
           tgStartParam,
@@ -80,9 +84,12 @@ export default function Wallet() {
           connectError: "",
         }));
 
+        // ✅ ارسال اطلاعات کامل به سرور
         await api.post("/connect/", {
           wallet_address: address,
           inviter_code: inviter_code || null,
+          telegram_id: telegramId,
+          is_telegram: true
         });
 
         if (cancelled) return;
@@ -222,7 +229,7 @@ export default function Wallet() {
           <TonConnectButton />
         </div>
 
-        {/* Debug Box */}
+        {/* Debug Box - کامنت شده */}
         {/* <div className="debug-box">
           <div className="debug-item">
             <span className="debug-label">TG start_param:</span>

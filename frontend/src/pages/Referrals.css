@@ -498,3 +498,113 @@
   background: #1a1a2e;
   color: #fff;
 }
+
+/* ========== Table with 4 Columns ========== */
+.table-wrapper {
+  overflow-x: auto;
+}
+
+.level-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  min-width: 500px;
+}
+
+.level-table th {
+  background: #1a1a3e;
+  color: #888;
+  padding: 8px 10px;
+  text-align: left;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  border-bottom: 2px solid #2a2a4a;
+}
+
+.level-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid #1a1a2e;
+  color: #ccc;
+  font-size: 11px;
+}
+
+.level-table tr:hover td {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.telegram-id {
+  font-family: monospace;
+  font-size: 10px;
+  color: #ffd700;
+}
+
+.wallet-address {
+  font-family: monospace;
+  font-size: 10px;
+  color: #6c8cff;
+}
+
+.investment-cell {
+  color: #4fc3f7;
+  font-weight: bold;
+}
+
+.profit-cell {
+  color: #4caf50;
+  font-weight: bold;
+}
+
+.empty-message {
+  color: #444;
+  text-align: center;
+  padding: 15px !important;
+  font-style: italic;
+}
+
+.no-data {
+  color: #666;
+  text-align: center;
+  padding: 20px;
+  font-style: italic;
+}
+
+.show-more {
+  text-align: center;
+  color: #666;
+  font-size: 11px;
+  padding: 8px;
+  font-style: italic;
+  border-top: 1px solid #1a1a2e;
+  margin-top: 5px;
+}
+
+/* ========== Responsive ========== */
+@media (max-width: 768px) {
+  .level-table table {
+    font-size: 10px;
+    min-width: 400px;
+  }
+  
+  .level-table th,
+  .level-table td {
+    padding: 4px 6px;
+  }
+  
+  .wallet-address {
+    font-size: 9px;
+  }
+}
+
+@media (max-width: 480px) {
+  .level-table table {
+    font-size: 9px;
+    min-width: 350px;
+  }
+  
+  .level-table th,
+  .level-table td {
+    padding: 3px 4px;
+  }
+}

@@ -9,8 +9,7 @@ from decimal import Decimal, ROUND_DOWN
 
 logger = logging.getLogger(__name__)
 
-from .models import AppUser, Wallet, Ledger, Purchase , ReferralLevel
-
+from .models import AppUser, Wallet, Ledger, Purchase, ReferralLevel  # ✅ اصلاح نام
 
 
 # ثابت‌ها
@@ -21,13 +20,36 @@ COINGECKO_URL = "https://api.coingecko.com/api/v3/simple/price?ids=the-open-netw
 REFERRAL_TOKEN_REWARD = Decimal("3")  # پاداش هر دعوت
 
 
-def get_or_create_user(wallet_address: str) -> AppUser:
+def get_or_create_user(wallet_address: str, telegram_id: int = None, is_telegram: bool = False) -> AppUser:
     """
-    دریافت یا ساخت کاربر جدید با ایجاد کیف پول
+    دریافت یا ساخت کاربر جدید با احراز هویت تلگرام
     """
-    user, created = AppUser.objects.get_or_create(wallet_address=wallet_address)
+    if not is_telegram:
+        raise ValueError("Only Telegram mini-app users are allowed")
+
+    if not telegram_id:
+        raise ValueError("Telegram ID is required")
+
+    existing_user = AppUser.objects.filter(telegram_id=telegram_id).first()
+
+    if existing_user:
+        if existing_user.wallet_address != wallet_address:
+            raise ValueError("This Telegram ID is already linked to another wallet")
+        return existing_user
+    
+    user, created = AppUser.objects.get_or_create(
+        wallet_address=wallet_address,
+        defaults={
+            'telegram_id': telegram_id,
+            'is_telegram_user': True,
+            'telegram_verified': True
+        }
+    )
+
     if created:
         Wallet.objects.create(user=user)
+        logger.info(f"✅ New user created: {telegram_id} - {wallet_address}")
+
     return user
 
 
@@ -35,6 +57,7 @@ def apply_referral(inviter_code: str, user: AppUser):
     """
     اعمال کد دعوت (referral) به کاربر
     + دادن 3 توکن به inviter در referral_bonus
+    + بروزرسانی سطوح
     """
     logger.info("[REF] apply inviter_code=%s to user=%s (inviter_id=%s)",
                 inviter_code, user.wallet_address, user.inviter_id)
@@ -59,67 +82,87 @@ def apply_referral(inviter_code: str, user: AppUser):
     user.save(update_fields=["inviter"])
     logger.info("[REF] success user=%s inviter=%s", user.id, inviter.id)
 
-    update_referral_levels(user,inviter)
-    # 👇 دادن پاداش 3 توکن به inviter
+    # بروزرسانی سطوح
+    update_referral_levels(user, inviter)
+
+    # دادن پاداش 3 توکن به inviter
+    give_referral_bonus(inviter, user)
+
+
+def give_referral_bonus(inviter: AppUser, new_user: AppUser):
+    """پاداش ۳ توکن به دعوت‌کننده"""
     try:
         with transaction.atomic():
-            # مطمئن شدن که wallet وجود دارد
             w, created = Wallet.objects.get_or_create(user=inviter)
             if created:
                 logger.info("[REF] inviter wallet created inviter_id=%s", inviter.id)
 
-            # اضافه کردن referral_bonus
             Wallet.objects.filter(user=inviter).update(
                 referral_bonus=F("referral_bonus") + REFERRAL_TOKEN_REWARD
             )
 
-            # ثبت Ledger برای ردگیری
             Ledger.objects.create(
                 user=inviter,
                 typ="REF_BONUS",
                 amount=REFERRAL_TOKEN_REWARD,
-                meta={"invitee": user.wallet_address}
+                meta={"invitee": new_user.wallet_address}
             )
             logger.info("[REF] inviter rewarded %s tokens for invitee=%s",
-                        REFERRAL_TOKEN_REWARD, user.wallet_address)
+                        REFERRAL_TOKEN_REWARD, new_user.wallet_address)
     except Exception as e:
         logger.exception("[REF] failed to reward inviter: %s", e)
 
-def update_referral_levels(new_user: AppUser, direct_inviter:AppUser):
 
+def update_referral_levels(new_user: AppUser, direct_inviter: AppUser):
+    """
+    بروزرسانی سطوح ۱ تا ۵ برای همه بالاسری‌ها
+    هر سطح شامل: telegram_id, wallet, investment, profit
+    """
     current = direct_inviter
-
     level = 1
 
     while current and level <= 5:
-        level_obj, created = ReferraLevel.objects.get_or_create(user = current)
+        # ✅ استفاده از ReferralLevel
+        level_obj, created = ReferralLevel.objects.get_or_create(user=current)
+
+        # اطلاعات کاربر جدید با ۴ ستون
+        user_data = {
+            "telegram_id": new_user.telegram_id,
+            "wallet": new_user.wallet_address,
+            "investment": 0,
+            "profit": 0
+        }
 
         if level == 1:
             level_obj.level_1_count += 1
-
-            if new_user.wallet_address not in level_obj.level_1_users:
-
-                level_obj.level_1_users.append(new_user.wallet_address)
+            # بررسی تکراری نبودن
+            existing_wallets = [u.get("wallet") for u in level_obj.level_1_users]
+            if new_user.wallet_address not in existing_wallets:
+                level_obj.level_1_users.append(user_data)
 
         elif level == 2:
             level_obj.level_2_count += 1
-            if new_user.wallet_address not in level_obj.level_2_users:
-                level_obj.level_2_users.append(new_user.wallet_address)
+            existing_wallets = [u.get("wallet") for u in level_obj.level_2_users]
+            if new_user.wallet_address not in existing_wallets:
+                level_obj.level_2_users.append(user_data)
 
         elif level == 3:
             level_obj.level_3_count += 1
-            if new_user.wallet_address not in level_obj.level_3_users:
-                level_obj.level_3_users.append(new_user.wallet_address)
+            existing_wallets = [u.get("wallet") for u in level_obj.level_3_users]
+            if new_user.wallet_address not in existing_wallets:
+                level_obj.level_3_users.append(user_data)
 
         elif level == 4:
             level_obj.level_4_count += 1
-            if new_user.wallet_address not in level_obj.level_4_users:
-                level_obj.level_4_users.append(new_user.wallet_address)
+            existing_wallets = [u.get("wallet") for u in level_obj.level_4_users]
+            if new_user.wallet_address not in existing_wallets:
+                level_obj.level_4_users.append(user_data)
 
         elif level == 5:
             level_obj.level_5_count += 1
-            if new_user.wallet_address not in level_obj.level_5_users:
-                level_obj.level_5_users.append(new_user.wallet_address)
+            existing_wallets = [u.get("wallet") for u in level_obj.level_5_users]
+            if new_user.wallet_address not in existing_wallets:
+                level_obj.level_5_users.append(user_data)
 
         level_obj.save()
         logger.info(f"[LEVEL] User {current.wallet_address} level {level} updated")
@@ -127,56 +170,66 @@ def update_referral_levels(new_user: AppUser, direct_inviter:AppUser):
         current = current.inviter
         level += 1
 
-def distribute_level_5_purchase(user: AppUser, purchase_amount: Decimal):
 
-    logger.info(f"[LEVEL5] Distributing purchase for user {user.wallet_address}")
-
+def update_user_investment(user: AppUser, ton_amount: Decimal):
+    """
+    بروزرسانی مبلغ سرمایه‌گذاری کاربر در جدول سطوح بالاسری‌ها
+    """
     current = user.inviter
     level = 1
-    bouns = Decimal("0.01")
 
-    while current and level <= 4:
+    while current and level <= 5:
+        level_obj = ReferralLevel.objects.filter(user=current).first()
+        if level_obj:
+            level_field = f"level_{level}_users"
+            users = getattr(level_obj, level_field)
+            
+            # پیدا کردن کاربر و بروزرسانی investment
+            for i, u in enumerate(users):
+                if u.get("wallet") == user.wallet_address:
+                    users[i]["investment"] = float(ton_amount)
+                    break
+            
+            setattr(level_obj, level_field, users)
+            level_obj.save()
 
-        level_obj = ReferraLevel.objects.filter(user=user).first()
-        if not level_obj or level_obj.level_5_count == 0:
-            logger.info(f"[LEVEL5] User {user.wallet_address} not level 5 yet")
-            return
+        current = current.inviter
+        level += 1
 
-        while transaction.atomic():
-            w,created = Wallet.objects.get_or_create(user=current)
-            if created:
-                logger.info(f"[LEVEL5] Wallet created for {current.wallet_address}")
 
-                Wallet.objects.filter(user=current).update(
-                    referrral_bouns = F("referral_bouns") + bouns
+def update_level_profit(user: AppUser, level: int, from_wallet: str, profit: Decimal):
+    """بروزرسانی سود در جدول سطوح"""
+    level_obj = ReferralLevel.objects.filter(user=user).first()
+    if not level_obj:
+        return
 
-                )
-                Ledger.objects.create(
-                    user=current,
-                    typ = "LEVELS_BOUNS",
-                    amount=bouns,
-                    meta = {
-                        "from":user.wallet_address,
-                        "level":level,
-                        "purchase_amount": str(purchase_amount)
-                    }
-                )
-                logger.info(f"[LEVEL5] Bonus {bouns} given to level {level} user {current.wallet_address}")
+    level_field = f"level_{level}_users"
+    users = getattr(level_obj, level_field)
 
-                current - current.inviter
-                level += 1
+    # پیدا کردن کاربر در لیست و بروزرسانی سود
+    for i, u in enumerate(users):
+        if u.get("wallet") == from_wallet:
+            current_profit = Decimal(str(u.get("profit", 0)))
+            users[i]["profit"] = float(current_profit + profit)
+            break
 
+    setattr(level_obj, level_field, users)
+    level_obj.save()
 
 
 def fetch_ton_usd_rate() -> Decimal:
     """
     گرفتن نرخ TON به USD از CoinGecko
     """
-    r = requests.get(COINGECKO_URL, timeout=10)
-    r.raise_for_status()
-    data = r.json()
-    rate = data["the-open-network"]["usd"]
-    return Decimal(str(rate))
+    try:
+        r = requests.get(COINGECKO_URL, timeout=10)
+        r.raise_for_status()
+        data = r.json()
+        rate = data["the-open-network"]["usd"]
+        return Decimal(str(rate))
+    except Exception as e:
+        logger.error(f"Failed to fetch TON rate: {e}")
+        return Decimal("2.5")  # مقدار پیش‌فرض
 
 
 @transaction.atomic
@@ -187,6 +240,7 @@ def register_purchase(user: AppUser, ton_amount: Decimal, ton_tx_hash: str, is_t
     - اضافه کردن Locked ها به Wallet کاربر
     - افزودن Ledger
     - پرداخت 5٪ به بالاسری در downline_profit_instant
+    - اگر کاربر سطح 5 باشد، به 4 سطح بالاتر 0.01 می‌دهد
     """
     logger.info("[BUY] start user=%s user_id=%s inviter_id=%s ton_amount=%s tx=%s",
                 user.wallet_address, user.id, user.inviter_id, ton_amount, ton_tx_hash)
@@ -197,7 +251,6 @@ def register_purchase(user: AppUser, ton_amount: Decimal, ton_tx_hash: str, is_t
         raise ValueError("TX already registered")
 
     # fetch rate
-    from .services import fetch_ton_usd_rate
     rate = fetch_ton_usd_rate()
     usd_value = ton_amount * rate
     ecg_value = usd_value * ECG_PER_USD
@@ -261,16 +314,16 @@ def register_purchase(user: AppUser, ton_amount: Decimal, ton_tx_hash: str, is_t
     else:
         logger.info("[BUY] no inviter -> skip downline profit")
 
+    # ✅ بروزرسانی سرمایه‌گذاری در جدول سطوح
+    update_user_investment(user, ton_amount)
 
-    level_obj = ReferraLevel.objects.filter(user=user).first()
+    # ✅ بررسی سطح 5 و توزیع پاداش
+    level_obj = ReferralLevel.objects.filter(user=user).first()
     if level_obj and level_obj.level_5_count > 0:
-        logger.info(f"[LEVEL5] User {user.wallet_address} is level5,distributing bonuses")
-
-        distribute_level_5_purchase(user,ecg_value)
-
+        logger.info(f"[LEVEL5] User {user.wallet_address} is level 5, distributing bonuses")
+        distribute_level_5_purchase(user, ecg_value)
     else:
-        logger.info(f"[LEVEL5] User {user.wallet_address} is not level 5 yet (count:{level_obj.level_5_count if level_obj else 0})")
-
+        logger.info(f"[LEVEL5] User {user.wallet_address} is not level 5 yet (count: {level_obj.level_5_count if level_obj else 0})")
 
     # 4) refresh از دیتابیس برای لاگ دقیق
     user.wallet.refresh_from_db()
@@ -286,50 +339,63 @@ def register_purchase(user: AppUser, ton_amount: Decimal, ton_tx_hash: str, is_t
 
     return p
 
+
 def ecg_to_ton(ecg_amount: Decimal) -> Decimal:
-    rate = fetch_ton_usd_rate()  # USD per TON
+    """
+    تبدیل ECG به TON
+    """
+    rate = fetch_ton_usd_rate()
     ecg_per_ton = rate * ECG_PER_USD
-    # 9 رقم اعشار TON (nanoTON)
     return (ecg_amount / ecg_per_ton).quantize(Decimal("0.000000001"), rounding=ROUND_DOWN)
 
 
-def distribute_level_5_purchase(user:AppUser,purchase_amount: Decimal):
+def distribute_level_5_purchase(user: AppUser, purchase_amount: Decimal):
+    """
+    وقتی کاربر سطح 5 خرید انجام داد، به 4 سطح بالاتر 0.01 می‌دهد
+    """
     logger.info(f"[LEVEL5] Distributing purchase for user {user.wallet_address}")
 
+    # بررسی اینکه کاربر سطح 5 است
+    level_obj = ReferralLevel.objects.filter(user=user).first()
+    if not level_obj or level_obj.level_5_count == 0:
+        logger.info(f"[LEVEL5] User {user.wallet_address} is not level 5")
+        return
 
     current = user.inviter
     level = 1
-    bouns = Decimal
+    bonus = Decimal("0.01")  # ✅ مقدار ثابت 0.01
 
     while current and level <= 4:
         with transaction.atomic():
-            w,created = Wallet.objects.get_or_create(user=current)
+            w, created = Wallet.objects.get_or_create(user=current)
             if created:
                 logger.info(f"[LEVEL5] Wallet created for {current.wallet_address}")
 
+            # ✅ اصلاح: referral_bonus
             Wallet.objects.filter(user=current).update(
-                referral_bouns=F("referral_bouns") + bouns
+                referral_bonus=F("referral_bonus") + bonus
             )
 
+            # ثبت در Ledger
             Ledger.objects.create(
-                user = current,
-                typ="LEVEL5_BOUNS",
-                amount=bouns,
+                user=current,
+                typ="LEVEL5_BONUS",
+                amount=bonus,
                 meta={
-                    "from":user.wallet_address,
-                    "level":level,
-                    "purchase_amount":str(purchase_amount),
-                    "timestamp":str(timezone.now())
+                    "from": user.wallet_address,
+                    "level": level,
+                    "purchase_amount": str(purchase_amount),
+                    "timestamp": str(timezone.now())
                 }
-
             )
-            logger.info(f"[LEVEL5] Bouns{bouns} given to level {level} user {current.wallet_address}")
 
-            current = current.inviter
-            level += 1
+            # ✅ بروزرسانی سود در جدول سطوح
+            update_level_profit(current, level, user.wallet_address, bonus)
 
-        if level <= 4:
-            logger.info(f"[LEVEL5] Only {level-1} upline levels found, distributed to {level-1} users")
+            logger.info(f"[LEVEL5] Bonus {bonus} given to level {level} user {current.wallet_address}")
 
+        current = current.inviter
+        level += 1
 
-        
+    if level <= 4:
+        logger.info(f"[LEVEL5] Only {level-1} upline levels found, distributed to {level-1} users")

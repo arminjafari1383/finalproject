@@ -7,29 +7,44 @@ from django.utils import timezone
 from .services import get_or_create_user, apply_referral, register_purchase, ecg_to_ton
 from .models import (
     AppUser, Wallet, Ledger, Purchase, 
-    WithdrawRequest, ReferralLevel  # ✅ هماهنگ با models
+    WithdrawRequest, ReferralLevel
 )
 from .serializers import WalletSerializer, PurchaseSerializer, UserSerializer
 from django.conf import settings
 import os
-import requests  # ✅ اضافه شد
+import requests
 
 
 @api_view(["POST"])
 def connect_wallet(request):
     wallet_address = request.data.get("wallet_address")
-    inviter_code = request.data.get("inviter_code")  # optional
+    inviter_code = request.data.get("inviter_code")
+    telegram_id = request.data.get("telegram_id")
+    is_telegram = request.data.get("is_telegram", False)
 
     if not wallet_address:
         return Response({"error": "wallet_address required"}, status=status.HTTP_400_BAD_REQUEST)
 
-    user = get_or_create_user(wallet_address)
+    if not telegram_id:
+        return Response({"error": "telegram_id required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    if not is_telegram:
+        return Response({"error": "Only Telegram mini-app allowed"}, status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        user = get_or_create_user(wallet_address, telegram_id, is_telegram)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
     if inviter_code:
         apply_referral(inviter_code, user)
 
     return Response({
-        "user": UserSerializer(user).data,
-        "wallet": WalletSerializer(user.wallet).data
+        "user": {
+            "telegram_id": user.telegram_id,
+            "wallet_address": user.wallet_address,
+            "referral_code": user.referral_code
+        }
     }, status=status.HTTP_200_OK)
 
 
@@ -94,7 +109,6 @@ def request_withdraw(request):
     user = get_or_create_user(wallet_address)
     w = user.wallet
 
-    # 1) فقط چک موجودی
     if scope == "DOWNLINE_ONLY":
         if amount > w.downline_profit_instant:
             return Response({"error": "insufficient downline instant balance"}, status=status.HTTP_400_BAD_REQUEST)
@@ -104,12 +118,9 @@ def request_withdraw(request):
     else:
         return Response({"error": "invalid scope"}, status=status.HTTP_400_BAD_REQUEST)
 
-    # 2) محاسبه TON معادل (معکوسِ خرید)
     ton_amount = ecg_to_ton(amount)
+    dest = wallet_address
 
-    dest = wallet_address  # ✅ مقصد همیشه ولت وصل‌شده
-
-    # 3) ثبت درخواست
     req = WithdrawRequest.objects.create(
         user=user,
         scope=scope,
@@ -119,7 +130,6 @@ def request_withdraw(request):
         status="PENDING",
     )
 
-    # 4) ارسال TON از خزانه (ton-service)
     ton_service_url = os.getenv("TON_SERVICE_URL", "http://tonservice:3001")
     try:
         r = requests.post(
@@ -136,7 +146,6 @@ def request_withdraw(request):
         req.save(update_fields=["status", "fail_reason"])
         return Response({"error": "ton transfer failed", "detail": req.fail_reason}, status=status.HTTP_502_BAD_GATEWAY)
 
-    # 5) فقط اگر انتقال TON موفق شد -> حالا ECG را کم کن
     if scope == "DOWNLINE_ONLY":
         w.downline_profit_instant -= amount
         w.save(update_fields=["downline_profit_instant"])
@@ -161,7 +170,6 @@ def request_withdraw(request):
         take("principal_unlocked")
         w.save()
 
-    # 6) نهایی‌سازی
     req.status = "SUCCESS"
     req.tx_hash = f"seqno:{data.get('sent_seqno')}"
     req.save(update_fields=["status", "tx_hash"])
@@ -262,55 +270,37 @@ def tick(request):
 
 
 # =======================
-# ✅ Referral Levels API (هماهنگ با models)
+# ✅ Referral Levels API با ۴ ستون
 # =======================
 
 @api_view(["GET"])
 def get_referral_levels(request):
     """
     دریافت اطلاعات سطوح referral برای یک کاربر
-    شامل 5 سطح با لیست کاربران و تعداد
+    شامل 5 سطح با 4 ستون: telegram_id, wallet, investment, profit
     """
     wallet_address = request.query_params.get("wallet_address")
     if not wallet_address:
         return Response({"error": "wallet_address required"}, status=status.HTTP_400_BAD_REQUEST)
 
-    user = get_or_create_user(wallet_address)
+    user = AppUser.objects.filter(wallet_address=wallet_address).first()
 
-    # ✅ استفاده از ReferralLevel (هماهنگ با models)
+    if not user:
+        return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
     level_obj, created = ReferralLevel.objects.get_or_create(user=user)
 
     is_test = request.query_params.get("test", "false").lower() == "true"
 
     if is_test:
-        test_data = generate_test_data()
+        # ✅ داده‌های تستی با ۴ ستون کامل
+        test_data = generate_test_data_with_columns()
         return Response({
-            "levels": {
-                "level_1": {
-                    "count": len(test_data["level_1"]),
-                    "users": test_data["level_1"]
-                },
-                "level_2": {
-                    "count": len(test_data["level_2"]),
-                    "users": test_data["level_2"]
-                },
-                "level_3": {
-                    "count": len(test_data["level_3"]),
-                    "users": test_data["level_3"]
-                },
-                "level_4": {
-                    "count": len(test_data["level_4"]),
-                    "users": test_data["level_4"]
-                },
-                "level_5": {
-                    "count": len(test_data["level_5"]),
-                    "users": test_data["level_5"]
-                }
-            },
+            "levels": test_data,
             "is_test": True
         }, status=status.HTTP_200_OK)
 
-    # داده‌های واقعی
+    # داده‌های واقعی با ۴ ستون
     return Response({
         "levels": {
             "level_1": {
@@ -343,18 +333,64 @@ def get_referral_levels(request):
     }, status=status.HTTP_200_OK)
 
 
-def generate_test_data():
-    """تولید داده‌های تستی برای نمایش جدول"""
+def generate_test_data_with_columns():
+    """
+    تولید داده‌های تستی با 4 ستون:
+    1. telegram_id
+    2. wallet
+    3. investment (TON)
+    4. profit
+    """
     import random
-    import string
-
-    def random_wallet():
-        return "0x" + ''.join(random.choices(string.hexdigits.lower(), k=40))
-
-    return {
-        "level_1": [random_wallet() for _ in range(3)],
-        "level_2": [random_wallet() for _ in range(7)],
-        "level_3": [random_wallet() for _ in range(15)],
-        "level_4": [random_wallet() for _ in range(31)],
-        "level_5": [random_wallet() for _ in range(63)]
+    
+    def generate_user(level):
+        """تولید یک کاربر تستی با ۴ ستون"""
+        telegram_id = random.randint(100000000, 999999999)
+        wallet = "0x" + ''.join(random.choices('0123456789abcdef', k=40))
+        investment = round(random.uniform(1, 100), 2)
+        profit = round(random.uniform(0.01, 5), 4)
+        
+        return {
+            "telegram_id": telegram_id,
+            "wallet": wallet,
+            "investment": investment,
+            "profit": profit
+        }
+    
+    # تعداد کاربران در هر سطح (طبق درخت باینری)
+    level_counts = {
+        "level_1": 3,
+        "level_2": 7,
+        "level_3": 15,
+        "level_4": 31,
+        "level_5": 63
     }
+    
+    return {
+        "level_1": {
+            "count": level_counts["level_1"],
+            "users": [generate_user(1) for _ in range(level_counts["level_1"])]
+        },
+        "level_2": {
+            "count": level_counts["level_2"],
+            "users": [generate_user(2) for _ in range(level_counts["level_2"])]
+        },
+        "level_3": {
+            "count": level_counts["level_3"],
+            "users": [generate_user(3) for _ in range(level_counts["level_3"])]
+        },
+        "level_4": {
+            "count": level_counts["level_4"],
+            "users": [generate_user(4) for _ in range(level_counts["level_4"])]
+        },
+        "level_5": {
+            "count": level_counts["level_5"],
+            "users": [generate_user(5) for _ in range(level_counts["level_5"])]
+        }
+    }
+
+
+# ✅ تابع قدیمی برای سازگاری (اختیاری)
+def generate_test_data():
+    """سازگاری با کدهای قبلی"""
+    return generate_test_data_with_columns()

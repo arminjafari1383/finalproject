@@ -4,6 +4,7 @@ from django.db.models import F
 import uuid
 
 class AppUser(models.Model):
+    telegram_id = models.BigIntegerField(unique=True,null=True,blank=True)
     wallet_address = models.CharField(max_length=128, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -12,13 +13,16 @@ class AppUser(models.Model):
     inviter = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL, related_name="invitees")
     next_daily_claim_at = models.DateTimeField(null=True, blank=True)
 
+    is_telegram_user = models.BooleanField(default=False)
+    telegram_verified = models.BooleanField(default=False)
+
     def save(self, *args, **kwargs):
         if not self.referral_code:
             self.referral_code = uuid.uuid4().hex[:10]
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return self.wallet_address
+        return f"{self.telegram_id} - {self.wallet_address}"
 
 
 class Wallet(models.Model):
@@ -43,6 +47,8 @@ class Wallet(models.Model):
     principal_unlocked = models.DecimalField(max_digits=24, decimal_places=6, default=0)
 
     updated_at = models.DateTimeField(auto_now=True)
+
+    level_profits = models.JSONField(default=dict)
 
     def withdrawable_total(self):
         return (

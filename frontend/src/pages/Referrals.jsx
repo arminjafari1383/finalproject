@@ -12,12 +12,13 @@ export default function Referrals() {
   const [refCount, setRefCount] = useState(null);
   const [levels, setLevels] = useState(null);
   const [showTestTable, setShowTestTable] = useState(false);
-  const [testData, setTestData] = useState(null); // ✅ اصلاح: useState بود
-  const [totalReferrals, setTotalReferrals] = useState(0); // ✅ اصلاح: useState بود و مقدار پیش‌فرض 0
+  const [testData, setTestData] = useState(null);
+  const [totalReferrals, setTotalReferrals] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [telegramId, setTelegramId] = useState(null);
 
-  const SITE_URL = "http://155.117.6.87/"; // ✅ دامنه خودت
+  const SITE_URL = "http://155.117.6.87/";
 
   /* ---------------- Telegram Ready ---------------- */
   useEffect(() => {
@@ -25,6 +26,11 @@ export default function Referrals() {
     if (tg) {
       tg.ready();
       tg.expand();
+      // دریافت ID تلگرام
+      if (tg.initDataUnsafe?.user?.id) {
+        setTelegramId(tg.initDataUnsafe.user.id);
+        console.log("✅ Telegram ID:", tg.initDataUnsafe.user.id);
+      }
     }
   }, []);
 
@@ -51,9 +57,12 @@ export default function Referrals() {
 
         const inviterCode = localStorage.getItem("inviter_code");
 
+        // ✅ ارسال اطلاعات تلگرام به سرور
         const res = await api.post("/connect/", {
           wallet_address: address,
           inviter_code: inviterCode || null,
+          telegram_id: telegramId,
+          is_telegram: true
         });
 
         if (cancelled) return;
@@ -78,15 +87,17 @@ export default function Referrals() {
       }
     }
 
-    fetchData();
+    if (telegramId) {
+      fetchData();
+    }
 
     return () => {
       cancelled = true;
     };
-  }, [address]);
+  }, [address, telegramId]);
 
   /* -------- Fetch referral levels -------- */
-  useEffect(() => { // ✅ اصلاح: useInsertionEffect به useEffect تغییر کرد
+  useEffect(() => {
     if (!address) return;
 
     async function fetchLevels() {
@@ -94,6 +105,7 @@ export default function Referrals() {
         const response = await api.get("/referral/levels/", {
           params: { wallet_address: address }
         });
+        console.log("✅ Levels data:", response.data);
         setLevels(response.data.levels);
         setTotalReferrals(response.data.total_referrals || 0);
       } catch (e) {
@@ -115,6 +127,7 @@ export default function Referrals() {
           test: "true"
         }
       });
+      console.log("✅ Test data received:", response.data);
       setTestData(response.data.levels);
       setShowTestTable(true);
     } catch (e) {
@@ -125,21 +138,19 @@ export default function Referrals() {
     }
   }
 
-  /* ---------------- Referral link (WEBSITE ONLY) ---------------- */
+  /* ---------------- Referral link ---------------- */
   const referralLink = myCode
     ? `${SITE_URL}/?ref=${encodeURIComponent(myCode)}`
     : "";
 
-  /* ---------------- Open website link (NO Telegram share url) ---------------- */
+  /* ---------------- Open website link ---------------- */
   function openReferralLink() {
     if (!referralLink) return;
 
-    // اگر داخل تلگرام باشیم، لینک وب را داخل تلگرام باز می‌کند
     const tg = window.Telegram?.WebApp;
     if (tg?.openTelegramLink) {
       tg.openTelegramLink(referralLink);
     } else {
-      // خارج از تلگرام
       window.open(referralLink, "_blank");
     }
   }
@@ -150,13 +161,13 @@ export default function Referrals() {
     alert("Website referral link copied");
   }
 
-  /* ---------------- Render level table ---------------- */
+  /* ---------------- Render level table with 4 columns ---------------- */
   function renderLevelTable(level, data) {
     if (!data) {
       return (
         <div className="level-table">
-          <h4>Level {level}</h4>
-          <p>No data available</p>
+          <h4>⭐ Level {level}</h4>
+          <p className="no-data">No data available</p>
         </div>
       );
     }
@@ -171,32 +182,47 @@ export default function Referrals() {
           <h4>⭐ Level {level}</h4>
           <span className="level-count">Total: {count}</span>
         </div>
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Wallet Address</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {displayUsers.length === 0 ? (
+        <div className="table-wrapper">
+          <table>
+            <thead>
               <tr>
-                <td colSpan="3" className="empty-message">No users in this level</td>
+                <th>#</th>
+                <th>Telegram ID</th>
+                <th>Wallet Address</th>
+                <th>Investment (TON)</th>
+                <th>Profit</th>
               </tr>
-            ) : (
-              displayUsers.map((wallet, index) => (
-                <tr key={index}>
-                  <td>{index + 1}</td>
-                  <td className="wallet-address">
-                    {wallet.length > 10 ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : wallet}
-                  </td>
-                  <td>🟢 Active</td>
+            </thead>
+            <tbody>
+              {displayUsers.length === 0 ? (
+                <tr>
+                  <td colSpan="5" className="empty-message">No users in this level</td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                displayUsers.map((user, index) => {
+                  // اگر user یک string بود (حالت قدیمی) یا object بود (حالت جدید)
+                  const isString = typeof user === 'string';
+                  const telegramId = isString ? '-' : (user.telegram_id || '-');
+                  const wallet = isString ? user : (user.wallet || '-');
+                  const investment = isString ? 0 : (user.investment || 0);
+                  const profit = isString ? 0 : (user.profit || 0);
+                  
+                  return (
+                    <tr key={index}>
+                      <td>{index + 1}</td>
+                      <td className="telegram-id">{telegramId}</td>
+                      <td className="wallet-address">
+                        {wallet.length > 10 ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : wallet}
+                      </td>
+                      <td className="investment-cell">{investment}</td>
+                      <td className="profit-cell">+ {profit}</td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
         {users.length > 10 && (
           <div className="show-more">+ {users.length - 10} more users</div>
         )}
@@ -204,8 +230,18 @@ export default function Referrals() {
     );
   }
 
+  // اگر ولت متصل نیست
   if (!address) {
     return <div className="connect-warning">🔌 Please connect your wallet first.</div>;
+  }
+
+  // اگر تلگرام ID دریافت نشده
+  if (!telegramId) {
+    return (
+      <div className="connect-warning">
+        ⚠️ Please open this app from Telegram mini-app
+      </div>
+    );
   }
 
   return (
@@ -262,7 +298,7 @@ export default function Referrals() {
             </div>
           </div>
 
-          {/* ========== بخش نمایش سطوح ========== */}
+          {/* ========== بخش نمایش سطوح با ۴ ستون ========== */}
           <div className="levels-section">
             <h3>🔺 Referral Tree (5 Levels)</h3>
             
@@ -283,7 +319,7 @@ export default function Referrals() {
               >
                 🧪 Show Test Table
               </button>
-            </div><br/><br /><br /><br /><br /><br />
+            </div>
 
             {/* جدول تستی */}
             {showTestTable && testData && (
