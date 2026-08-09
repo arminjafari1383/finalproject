@@ -1,17 +1,40 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useTonWallet } from "@tonconnect/ui-react";
 import { api } from "../api";
 import "./Referrals.css";
 import { captureInviterCode } from "../utils/referral";
-import { useUserData } from "../hooks/useUserData";
-import { cookieUtils } from "../utils/cookie";
+
+// ==========================================
+// ✅ توابع کمکی برای کار با localStorage (جایگزین کوکی)
+// ==========================================
+const USER_DATA_KEY = "my_app_user_data";
+
+const loadUserDataFromStorage = () => {
+  try {
+    const data = localStorage.getItem(USER_DATA_KEY);
+    return data ? JSON.parse(data) : null;
+  } catch (e) {
+    console.error("Error parsing localStorage data:", e);
+    return null;
+  }
+};
+
+const saveUserDataToStorage = (newData) => {
+  try {
+    const currentData = loadUserDataFromStorage() || {};
+    const mergedData = { ...currentData, ...newData };
+    localStorage.setItem(USER_DATA_KEY, JSON.stringify(mergedData));
+  } catch (e) {
+    console.error("Error saving to localStorage:", e);
+  }
+};
 
 export default function Referrals() {
   const tonWallet = useTonWallet();
   const address = useMemo(() => tonWallet?.account?.address, [tonWallet]);
   
-  // استفاده از هوک کاربر
-  const { userData, saveUserData, loadUserData, hasUserData } = useUserData();
+  // ✅ استفاده از useRef برای جلوگیری از ارسال درخواست‌های تکراری
+  const hasFetched = useRef(false);
 
   const [myCode, setMyCode] = useState(null);
   const [refCount, setRefCount] = useState(null);
@@ -24,24 +47,8 @@ export default function Referrals() {
   const [telegramId, setTelegramId] = useState(null);
   const [telegramUsername, setTelegramUsername] = useState(null);
   const [isTelegramWebApp, setIsTelegramWebApp] = useState(false);
-  const [isDataLoaded, setIsDataLoaded] = useState(false);
 
   const SITE_URL = "https://aipolynet.com/";
-
-  /* ---------------- بارگذاری اطلاعات از کوکی ---------------- */
-  useEffect(() => {
-    if (hasUserData()) {
-      const saved = loadUserData();
-      console.log("📂 [DEBUG] Loaded user data from cookie:", saved);
-      
-      if (saved) {
-        setTelegramId(saved.telegramId);
-        setTelegramUsername(saved.telegramUsername);
-        setIsTelegramWebApp(saved.isTelegram);
-      }
-    }
-    setIsDataLoaded(true);
-  }, []);
 
   /* ---------------- Telegram Detection ---------------- */
   useEffect(() => {
@@ -62,8 +69,8 @@ export default function Referrals() {
         setTelegramUsername(tgUsername);
         setIsTelegramWebApp(true);
         
-        // ذخیره در کوکی
-        saveUserData({
+        // ذخیره در localStorage
+        saveUserDataToStorage({
           telegramId: tgId,
           telegramUsername: tgUsername,
           isTelegram: true
@@ -71,35 +78,31 @@ export default function Referrals() {
         
         console.log("✅ [DEBUG] Telegram ID (number):", tgId);
         console.log("✅ [DEBUG] Telegram Username:", tgUsername);
-        console.log("💾 [DEBUG] Saved to cookie");
       } else {
         console.log("⚠️ [DEBUG] No user data found in initDataUnsafe");
-        setTelegramId(-1);
         setIsTelegramWebApp(true);
       }
     } else {
       console.log("⚠️ [DEBUG] Telegram WebApp NOT found - running in browser mode");
       setIsTelegramWebApp(false);
     }
-  }, [saveUserData]);
+  }, []);
 
-  /* ---------------- ذخیره آدرس ولت در کوکی ---------------- */
+  /* ---------------- ذخیره آدرس ولت در localStorage ---------------- */
   useEffect(() => {
     if (address) {
-      // به‌روزرسانی اطلاعات با آدرس ولت
-      const currentData = loadUserData() || {};
-      saveUserData({
+      const currentData = loadUserDataFromStorage() || {};
+      saveUserDataToStorage({
         ...currentData,
         walletAddress: address
       });
-      console.log("💾 [DEBUG] Wallet address saved to cookie:", address);
+      console.log("💾 [DEBUG] Wallet address saved to localStorage:", address);
     }
-  }, [address, saveUserData, loadUserData]);
+  }, [address]);
 
   /* -------- Generate browser telegram_id -------- */
   const getBrowserTelegramId = useMemo(() => {
     if (address) {
-      // تبدیل آدرس به عدد منحصر‌به‌فرد
       let hash = 0;
       for (let i = 0; i < address.length; i++) {
         const char = address.charCodeAt(i);
@@ -108,7 +111,6 @@ export default function Referrals() {
       }
       return Math.abs(hash) + 1000000000000;
     }
-    // اگر آدرس نبود، از تاریخ استفاده کن
     return Math.floor(Date.now() / 1000) + 2000000000000;
   }, [address]);
 
@@ -127,10 +129,14 @@ export default function Referrals() {
       return;
     }
 
-    // اگر اطلاعات تلگرام هنوز بارگذاری نشده، صبر کن
-    if (!isDataLoaded) return;
+    // ✅ اگر قبلاً درخواست داده شده، دیگر تکرار نکن
+    if (hasFetched.current) {
+        console.log("⛔️ [DEBUG] Data already fetched, skipping.");
+        return;
+    }
 
     let cancelled = false;
+    hasFetched.current = true; // قفل را فعال کن
 
     async function fetchData() {
       try {
@@ -139,25 +145,21 @@ export default function Referrals() {
 
         const inviterCode = localStorage.getItem("inviter_code");
 
-        // تعیین telegram_id نهایی
+        // تعیین telegram_id نهایی از localStorage
         let finalTelegramId;
         let finalTelegramUsername = null;
         
-        // اول از کوکی بخوان
-        const savedData = loadUserData();
+        const savedData = loadUserDataFromStorage();
         
         if (savedData?.telegramId && savedData.telegramId > 0) {
-          // از کوکی استفاده کن
           finalTelegramId = savedData.telegramId;
           finalTelegramUsername = savedData.telegramUsername;
-          console.log("📂 [DEBUG] Using telegram_id from cookie:", finalTelegramId);
+          console.log("📂 [DEBUG] Using telegram_id from localStorage:", finalTelegramId);
         } else if (isTelegramWebApp && telegramId && telegramId > 0) {
-          // کاربر واقعی تلگرام
           finalTelegramId = telegramId;
           finalTelegramUsername = telegramUsername;
           console.log("✅ [DEBUG] Using real telegram_id:", finalTelegramId);
         } else {
-          // کاربر مرورگر - از آدرس ولت استفاده کن
           finalTelegramId = getBrowserTelegramId;
           finalTelegramUsername = `browser_${address.slice(0, 8)}`;
           console.log("🌐 [DEBUG] Using browser telegram_id:", finalTelegramId);
@@ -212,7 +214,7 @@ export default function Referrals() {
     return () => {
       cancelled = true;
     };
-  }, [address, telegramId, telegramUsername, isTelegramWebApp, getBrowserTelegramId, isDataLoaded, loadUserData]);
+  }, [address, telegramId, telegramUsername, isTelegramWebApp, getBrowserTelegramId]);
 
   /* -------- Fetch referral levels -------- */
   useEffect(() => {
@@ -434,7 +436,7 @@ export default function Referrals() {
 
             {/* نمایش وضعیت تلگرام */}
             <div className="telegram-status">
-              {isTelegramWebApp || userData?.isTelegram ? (
+              {isTelegramWebApp || loadUserDataFromStorage()?.isTelegram ? (
                 <span className="status-active">✅ Connected to Telegram</span>
               ) : (
                 <span className="status-inactive">🌐 Browser Mode</span>
