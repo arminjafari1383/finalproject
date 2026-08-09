@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useTonWallet, TonConnectButton } from "@tonconnect/ui-react";
 import { api } from "../api";
 import "./Wallet.css";
@@ -16,6 +16,11 @@ export default function Wallet() {
     () => tonWallet?.account?.address,
     [tonWallet]
   );
+
+  // ✅ استفاده از useRef برای جلوگیری از درخواست‌های تکراری (جلوگیری از حلقه اصلی)
+  const isConnecting = useRef(false);
+  // ✅ استفاده از useRef برای جلوگیری از تغییر state در حین ذخیره‌سازی کوکی
+  const isSavingUserData = useRef(false);
 
   const [wallet, setWallet] = useState(null);
   const [walletLocked, setWalletLocked] = useState(false);
@@ -54,9 +59,9 @@ export default function Wallet() {
     }));
   }, []);
 
-  // ذخیره آدرس ولت در کوکی
+  // ذخیره آدرس ولت در کوکی (با استفاده از isSavingUserData برای جلوگیری از لوپ)
   useEffect(() => {
-    if (address) {
+    if (address && !isSavingUserData.current) {
       const currentData = loadUserData() || {};
       saveUserData({
         ...currentData,
@@ -66,7 +71,7 @@ export default function Wallet() {
     }
   }, [address, saveUserData, loadUserData]);
 
-  // Connect wallet and load wallet information
+  // Connect wallet and load wallet information (حلقه اصلی در اینجا اصلاح شده است)
   useEffect(() => {
     console.log("🔍 [Wallet] useEffect - connectAndLoadWallet triggered");
     console.log("📊 [Wallet] address:", address);
@@ -86,7 +91,14 @@ export default function Wallet() {
       return;
     }
 
+    // ✅ اگر در حال حاضر درخواستی در حال اجراست، از اجرای مجدد جلوگیری کن
+    if (isConnecting.current) {
+      console.log("⏳ [Wallet] Connection already in progress, skipping duplicate execution.");
+      return;
+    }
+
     let cancelled = false;
+    isConnecting.current = true; // ✅ قفل را فعال کن
 
     async function connectAndLoadWallet() {
       try {
@@ -128,11 +140,14 @@ export default function Wallet() {
             isTelegram = true;
             console.log("✅ [Wallet] Using telegram_id from Telegram:", telegramId);
             
+            // قبل از ذخیره، isSavingUserData را فعال کن تا باعث رندر مجدد نشود
+            isSavingUserData.current = true;
             saveUserData({
               telegramId: telegramId,
               telegramUsername: telegramUsername,
               isTelegram: true
             });
+            isSavingUserData.current = false; // قفل را باز کن
           } else {
             if (address) {
               let hash = 0;
@@ -146,12 +161,14 @@ export default function Wallet() {
               isTelegram = false;
               console.log("🌐 [Wallet] Generated browser telegram_id:", telegramId);
               
+              isSavingUserData.current = true;
               saveUserData({
                 telegramId: telegramId,
                 telegramUsername: telegramUsername,
                 isTelegram: false,
                 walletAddress: address
               });
+              isSavingUserData.current = false;
             }
           }
         }
@@ -198,12 +215,14 @@ export default function Wallet() {
 
         if (response.data?.user) {
           const user = response.data.user;
+          isSavingUserData.current = true;
           saveUserData({
             telegramId: user.telegram_id || telegramId,
             telegramUsername: user.telegram_username || telegramUsername,
             isTelegram: user.is_telegram || isTelegram,
             walletAddress: address
           });
+          isSavingUserData.current = false;
         }
 
         setDebug((d) => ({
@@ -264,6 +283,11 @@ export default function Wallet() {
         } catch (e2) {
           console.log("❌ [Wallet] Fallback also failed:", e2);
         }
+      } finally {
+        // ✅ در نهایت قفل اتصال را باز کن
+        if (!cancelled) {
+          isConnecting.current = false;
+        }
       }
     }
 
@@ -272,8 +296,10 @@ export default function Wallet() {
     return () => {
       console.log("🔚 [Wallet] Cleanup: cancelling");
       cancelled = true;
+      isConnecting.current = false; // Cleanup هم قفل را باز کند
     };
-  }, [address, loadUserData, saveUserData]);
+  // ✅ وابستگی‌های useEffect را به حداقل رساندیم (saveUserData و loadUserData را حذف کردیم چون با useRef کنترل می‌شوند)
+  }, [address]);
 
   // تابع برای قطع ارتباط ولت
   const disconnectWallet = () => {
@@ -283,12 +309,14 @@ export default function Wallet() {
     clearInviterCode();
     
     // پاک کردن داده‌های کاربر
+    isSavingUserData.current = true;
     saveUserData({
       walletAddress: null,
       telegramId: null,
       telegramUsername: null,
       isTelegram: false
     });
+    isSavingUserData.current = false;
     
     setWallet(null);
     setWalletLocked(false);
