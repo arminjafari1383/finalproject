@@ -12,102 +12,11 @@ import useTgStartRedirect from "./hooks/useTgStartRedirect";
 import { useTonWallet } from "@tonconnect/ui-react";
 
 
-// ===========================
-// ✅ محافظت از مسیرها با چک ولت
-// ===========================
 function ProtectedRoute({ children }) {
   const tonWallet = useTonWallet();
 
-  // Wallet وصل نیست → برگرد به Wallet
   if (!tonWallet?.account?.address) {
     return <Navigate to="/" replace />;
-  }
-
-  // Wallet وصل است → اجازه ورود
-  return children;
-}
-
-
-// ===========================
-// ✅ چک کردن تلگرام
-// ===========================
-function TelegramGuard({ children }) {
-  const [isTelegram, setIsTelegram] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const checkTelegram = () => {
-      const tg = window.Telegram?.WebApp;
-      
-      if (tg) {
-        try {
-          tg.ready();
-          tg.expand();
-        } catch (e) {
-          // خطا در تنظیمات تلگرام
-        }
-        setIsTelegram(true);
-      } else {
-        setIsTelegram(false);
-      }
-      setLoading(false);
-    };
-
-    // بررسی با تاخیر برای لود شدن اسکریپت
-    setTimeout(checkTelegram, 500);
-    
-    // بررسی مجدد بعد از 2 ثانیه
-    setTimeout(() => {
-      const tg = window.Telegram?.WebApp;
-      if (tg && !isTelegram) {
-        setIsTelegram(true);
-        setLoading(false);
-      }
-    }, 2000);
-
-  }, []);
-
-  if (loading) {
-    return (
-      <div style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        height: '100vh',
-        background: '#0a0a1a',
-        color: '#fff',
-        fontSize: '18px'
-      }}>
-        Loading...
-      </div>
-    );
-  }
-
-  // ❌ اگر از تلگرام نباشد، صفحه خطا نشان بده
-  if (!isTelegram) {
-    return (
-      <div style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        height: '100vh',
-        background: '#0a0a1a',
-        color: '#fff',
-        flexDirection: 'column',
-        textAlign: 'center',
-        padding: '20px'
-      }}>
-        <h1 style={{ color: '#e94560', fontSize: '2.5rem', marginBottom: '10px' }}>
-          ⛔ Access Denied
-        </h1>
-        <p style={{ color: '#888', fontSize: '1.1rem' }}>
-          This application is only available through Telegram mini-app.
-        </p>
-        <p style={{ color: '#666', fontSize: '0.9rem', marginTop: '10px' }}>
-          Please open it from Telegram
-        </p>
-      </div>
-    );
   }
 
   return children;
@@ -117,72 +26,63 @@ function TelegramGuard({ children }) {
 function AppContent() {
   useTgStartRedirect();
 
+  // راه‌اندازی خودکار تلگرام بدون چک
+  useEffect(() => {
+    const tg = window.Telegram?.WebApp;
+    if (tg) {
+      tg.ready();
+      tg.expand();
+    }
+  }, []);
+
   return (
-    <TelegramGuard>
-      <div style={{ padding: 16 }}>
-        <Routes>
+    <div style={{ padding: 16 }}>
+      <Routes>
+        <Route path="/" element={<Wallet />} />
 
-          {/* =========================
-              Wallet - تنها صفحه آزاد
-          ========================= */}
-          <Route path="/" element={<Wallet />} />
+        <Route
+          path="/referrals"
+          element={
+            <ProtectedRoute>
+              <Referrals />
+            </ProtectedRoute>
+          }
+        />
 
+        <Route
+          path="/stake"
+          element={
+            <ProtectedRoute>
+              <Purchase />
+            </ProtectedRoute>
+          }
+        />
 
-          {/* =========================
-              صفحات محافظت‌شده با ولت
-          ========================= */}
+        <Route
+          path="/Aboutus"
+          element={
+            <ProtectedRoute>
+              <AboutUs />
+            </ProtectedRoute>
+          }
+        />
 
-          <Route
-            path="/referrals"
-            element={
-              <ProtectedRoute>
-                <Referrals />
-              </ProtectedRoute>
-            }
-          />
+        <Route
+          path="/Timer"
+          element={
+            <ProtectedRoute>
+              <Timer />
+            </ProtectedRoute>
+          }
+        />
 
-          <Route
-            path="/stake"
-            element={
-              <ProtectedRoute>
-                <Purchase />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="/Aboutus"
-            element={
-              <ProtectedRoute>
-                <AboutUs />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="/Timer"
-            element={
-              <ProtectedRoute>
-                <Timer />
-              </ProtectedRoute>
-            }
-          />
-
-
-          {/* =========================
-              هر مسیر ناشناخته
-              ========================= */}
-          <Route
-            path="*"
-            element={<Navigate to="/" replace />}
-          />
-
-        </Routes>
-      </div>
-
-      {/* Navbar */}
+        <Route
+          path="*"
+          element={<Navigate to="/" replace />}
+        />
+      </Routes>
       <Navbar />
-    </TelegramGuard>
+    </div>
   );
 }
 
