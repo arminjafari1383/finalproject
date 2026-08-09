@@ -6,18 +6,41 @@ import {
   captureInviterCode,
   clearInviterCode,
 } from "../utils/referral";
-import { useUserData } from "../hooks/useUserData";
+// import { useUserData } from "../hooks/useUserData"; // حذف شد چون با localStorage کار می‌کنیم
+
+// توابع کمکی برای کار با localStorage
+const USER_DATA_KEY = "my_app_user_data";
+
+const loadUserDataFromStorage = () => {
+  try {
+    const data = localStorage.getItem(USER_DATA_KEY);
+    return data ? JSON.parse(data) : null;
+  } catch (e) {
+    console.error("Error parsing localStorage data:", e);
+    return null;
+  }
+};
+
+const saveUserDataToStorage = (newData) => {
+  try {
+    const currentData = loadUserDataFromStorage() || {};
+    const mergedData = { ...currentData, ...newData };
+    localStorage.setItem(USER_DATA_KEY, JSON.stringify(mergedData));
+  } catch (e) {
+    console.error("Error saving to localStorage:", e);
+  }
+};
 
 export default function Wallet() {
   const tonWallet = useTonWallet();
-  const { userData, saveUserData, loadUserData } = useUserData();
-
+  
+  // استفاده از useMemo برای آدرس
   const address = useMemo(
     () => tonWallet?.account?.address,
     [tonWallet]
   );
 
-  // ✅ استفاده از useRef برای اینکه مطمئن شویم درخواست فقط یک بار ارسال می‌شود
+  // ✅ قفل استفاده شده تا درخواست فقط یک بار ارسال شود
   const hasConnected = useRef(false);
 
   const [wallet, setWallet] = useState(null);
@@ -42,9 +65,7 @@ export default function Wallet() {
   useEffect(() => {
     console.log("🔍 [Wallet] useEffect - Capture referral");
     const code = captureInviterCode();
-    console.log("📊 [Wallet] inviter_code from localStorage:", localStorage.getItem("inviter_code"));
-    console.log("📊 [Wallet] captured code:", code);
-
+    
     setDebug((d) => ({
       ...d,
       tgStartParam:
@@ -57,20 +78,20 @@ export default function Wallet() {
     }));
   }, []);
 
-  // ذخیره آدرس ولت در کوکی (این useEffect تغییر state نمی‌دهد، فقط ذخیره می‌کند)
-  // بنابراین باعث حلقه نمی‌شود
+  // ✅ ذخیره آدرس ولت در localStorage (به جای کوکی)
+  // این useEffect هیچ رندر مجددی ایجاد نمی‌کند
   useEffect(() => {
     if (address) {
-      const currentData = loadUserData() || {};
-      saveUserData({
+      const currentData = loadUserDataFromStorage() || {};
+      saveUserDataToStorage({
         ...currentData,
         walletAddress: address
       });
-      console.log("💾 [Wallet] Wallet address saved to cookie:", address);
+      console.log("💾 [Wallet] Wallet address saved to localStorage:", address);
     }
-  }, [address, saveUserData, loadUserData]);
+  }, [address]);
 
-  // ✅ تابعی که فقط یک بار و به شرط وجود آدرس و عدم اتصال قبلی فراخوانی می‌شود
+  // ✅ تابعی که فقط یک بار و به شرط وجود آدرس اجرا می‌شود
   const connectAndLoadWallet = useCallback(async () => {
     // اگر قبلاً متصل شده‌ایم یا آدرس نداریم، خارج شو
     if (hasConnected.current || !address) {
@@ -94,19 +115,19 @@ export default function Wallet() {
     const inviter_code = captureInviterCode();
     console.log("📊 [Wallet] inviter_code from capture:", inviter_code);
 
-    // ✅ دریافت Telegram ID
+    // ✅ دریافت Telegram ID از localStorage (به جای کوکی)
     let telegramId = null;
     let telegramUsername = null;
     let isTelegram = false;
 
-    const savedData = loadUserData();
-    console.log("📂 [Wallet] Saved data from cookie:", savedData);
+    const savedData = loadUserDataFromStorage();
+    console.log("📂 [Wallet] Saved data from localStorage:", savedData);
 
     if (savedData?.telegramId && Number.isInteger(Number(savedData.telegramId)) && Number(savedData.telegramId) > 0) {
       telegramId = Number(savedData.telegramId);
       telegramUsername = savedData.telegramUsername || null;
       isTelegram = savedData.isTelegram || false;
-      console.log("📂 [Wallet] Using telegram_id from cookie:", telegramId);
+      console.log("📂 [Wallet] Using telegram_id from localStorage:", telegramId);
     } else {
       const tg = window.Telegram?.WebApp;
       if (tg?.initDataUnsafe?.user) {
@@ -116,8 +137,8 @@ export default function Wallet() {
         isTelegram = true;
         console.log("✅ [Wallet] Using telegram_id from Telegram:", telegramId);
         
-        // ذخیره اطلاعات تلگرام در کوکی
-        saveUserData({
+        // ذخیره در localStorage
+        saveUserDataToStorage({
           telegramId: telegramId,
           telegramUsername: telegramUsername,
           isTelegram: true
@@ -135,7 +156,7 @@ export default function Wallet() {
           isTelegram = false;
           console.log("🌐 [Wallet] Generated browser telegram_id:", telegramId);
           
-          saveUserData({
+          saveUserDataToStorage({
             telegramId: telegramId,
             telegramUsername: telegramUsername,
             isTelegram: false,
@@ -184,7 +205,7 @@ export default function Wallet() {
 
       if (response.data?.user) {
         const user = response.data.user;
-        saveUserData({
+        saveUserDataToStorage({
           telegramId: user.telegram_id || telegramId,
           telegramUsername: user.telegram_username || telegramUsername,
           isTelegram: user.is_telegram || isTelegram,
@@ -240,36 +261,28 @@ export default function Wallet() {
         console.log("❌ [Wallet] Fallback also failed:", e2);
       }
     }
-  }, [address, loadUserData, saveUserData]);
+  }, [address]);
 
-  // ✅ این useEffect کاملاً تمیز است و فقط و فقط به address وابسته است
-  // هر وقت address تغییر کرد یک بار اجرا می‌شود و تمام.
+  // ✅ این useEffect تمیز است و فقط یک بار اجرا می‌شود
   useEffect(() => {
     console.log("🔍 [Wallet] useEffect triggered (address changed)");
     connectAndLoadWallet();
-  }, [address, connectAndLoadWallet]);
+  }, [connectAndLoadWallet]);
 
   // تابع برای قطع ارتباط ولت
   const disconnectWallet = () => {
-    // پاک کردن کوکی و localStorage
-    localStorage.removeItem('telegram_id');
+    // پاک کردن localStorage
+    localStorage.removeItem('telegram_id'); // اگر جداگانه ذخیره شده
     localStorage.removeItem('inviter_code');
     clearInviterCode();
-    
-    // پاک کردن داده‌های کاربر
-    saveUserData({
-      walletAddress: null,
-      telegramId: null,
-      telegramUsername: null,
-      isTelegram: false
-    });
+    localStorage.removeItem(USER_DATA_KEY); // پاک کردن کل دیتای کاربر
     
     setWallet(null);
     setWalletLocked(false);
     setConnectError("");
     setWalletLinkedError(false);
     
-    // ✅ ریست کردن قفل اتصال تا اگر کاربر دوباره متصل شد، درخواست ارسال شود
+    // ✅ ریست کردن قفل اتصال
     hasConnected.current = false;
     
     // رفرش صفحه برای قطع ارتباط با ولت
@@ -279,7 +292,6 @@ export default function Wallet() {
   const resetReferral = () => {
     console.log("🔄 [Wallet] resetReferral called");
     clearInviterCode();
-    console.log("📊 [Wallet] inviter_code cleared from localStorage");
 
     setDebug((d) => ({
       ...d,
@@ -378,7 +390,6 @@ export default function Wallet() {
     withdrawError,
     isWithdrawing,
     debug,
-    userData
   });
 
   return (
