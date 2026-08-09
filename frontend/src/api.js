@@ -1,5 +1,5 @@
 import axios from "axios";
 
 export const api = axios.create({
-  baseURL: "https://aipolynet.com/",
+  baseURL: "https://aipolynet.com/api/",
 });
