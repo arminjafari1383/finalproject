@@ -263,6 +263,8 @@ def reward_status(request):
     telegram_id = request.query_params.get("telegram_id")
     is_telegram = request.query_params.get("is_telegram", "false").lower() == "true"
     
+    print(f"📊 reward_status - wallet: {wallet_address}, telegram_id: {telegram_id}")
+    
     if telegram_id:
         user = get_or_create_user(wallet_address, int(telegram_id), is_telegram)
     else:
@@ -295,8 +297,10 @@ def tick(request):
         return Response({"error": "wallet_address required"}, status=status.HTTP_400_BAD_REQUEST)
 
     # ✅ دریافت telegram_id از هدر
-    telegram_id = request.headers.get("X-Telegram-Id")
-    is_telegram = request.headers.get("X-Telegram") == "true"
+    telegram_id = request.headers.get("X-Telegram-Id") or request.data.get("telegram_id")
+    is_telegram = request.headers.get("X-Telegram") == "true" or request.data.get("is_telegram", False)
+    
+    print(f"📊 tick - wallet: {wallet_address}, telegram_id: {telegram_id}")
     
     if telegram_id:
         user = get_or_create_user(wallet_address, int(telegram_id), is_telegram)

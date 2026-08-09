@@ -30,9 +30,24 @@ def get_or_create_user(wallet_address: str, telegram_id: int = None, is_telegram
     # if not is_telegram:
     #     raise ValueError("Only Telegram mini-app users are allowed")
 
-    # اگر telegram_id وجود نداشت، خطا بده
+    # ✅ اگر telegram_id وجود نداشت، فقط با wallet_address کار کن
     if not telegram_id:
-        raise ValueError("Telegram ID is required")
+        logger.warning("⚠️ No telegram_id, trying to find by wallet_address")
+        user = AppUser.objects.filter(wallet_address=wallet_address).first()
+        if user:
+            logger.info(f"✅ User found by wallet_address: {user.wallet_address}")
+            return user
+        # اگر کاربر وجود نداشت، یکی بساز
+        user = AppUser.objects.create(
+            wallet_address=wallet_address,
+            telegram_id=None,
+            is_telegram_user=False,
+            telegram_verified=False,
+            wallet_locked=False
+        )
+        Wallet.objects.create(user=user)
+        logger.info(f"✅ New user created with wallet only: {wallet_address}")
+        return user
     
     # ✅ بررسی اینکه آیا این telegram_id قبلاً ثبت شده است
     existing_user_by_telegram = AppUser.objects.filter(telegram_id=telegram_id).first()
