@@ -37,26 +37,30 @@ function AppContent() {
     if (address) {
       const telegramId = localStorage.getItem('telegram_id');
       const savedWallet = localStorage.getItem('valid_wallet');
-      
-      if (telegramId && savedWallet) {
-        if (address === savedWallet) {
-          validateWallet(address, parseInt(telegramId));
-          setIsWalletValid(true);
-        } else {
-          setIsWalletValid(false);
-        }
-      } else if (telegramId) {
-        localStorage.setItem('valid_wallet', address);
+
+      // ✅ منطق اصلاح شده:
+      // اگر ولت در localStorage ذخیره شده و با ولت فعلی یکی است، اعتبارسنجی کن
+      if (savedWallet && address === savedWallet) {
         validateWallet(address, parseInt(telegramId));
+        setIsWalletValid(true);
+      } 
+      // ✅ اگر ولت ذخیره نشده ولی ولت فعلی وجود دارد، آن را به عنوان ولت معتبر بشناس
+      else {
+        // اینجا ولت را در localStorage ذخیره می‌کنیم تا دفعه بعد چک شود
+        localStorage.setItem('valid_wallet', address);
+        if (telegramId) {
+          validateWallet(address, parseInt(telegramId));
+        }
         setIsWalletValid(true);
       }
     } else {
+      // اگر ولت قطع شده
       setIsWalletValid(false);
     }
   }, [address, validateWallet, setIsWalletValid]);
 
   return (
-    <div style={{ padding: 16, paddingBottom: 80 }}> {/* paddingBottom اضافه شد تا محتوا زیر نوار نرود */}
+    <div style={{ padding: 16, paddingBottom: 80 }}>
       <Routes>
         <Route path="/" element={<Wallet />} />
 
@@ -102,7 +106,6 @@ function AppContent() {
         />
       </Routes>
       
-      {/* ✅ نوار ناوبری همیشه در پایین نمایش داده می‌شود */}
       <Navbar />
     </div>
   );
