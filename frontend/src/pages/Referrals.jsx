@@ -21,7 +21,7 @@ export default function Referrals() {
 
   const SITE_URL = "https://aipolynet.com/";
 
-  /* ---------------- Telegram Ready ---------------- */
+  /* ---------------- Telegram Detection ---------------- */
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
     console.log("🔍 [DEBUG] Checking Telegram WebApp...");
@@ -31,20 +31,22 @@ export default function Referrals() {
       tg.ready();
       tg.expand();
       
-      // دریافت ID و Username تلگرام
       if (tg.initDataUnsafe?.user) {
         const user = tg.initDataUnsafe.user;
         setTelegramId(user.id);
         setTelegramUsername(user.username || null);
         console.log("✅ [DEBUG] Telegram ID:", user.id);
         console.log("✅ [DEBUG] Telegram Username:", user.username);
-        console.log("✅ [DEBUG] User:", user);
       } else {
         console.log("⚠️ [DEBUG] No user data found in initDataUnsafe");
+        // اگر کاربر لاگین نکرده باشد، همچنان اجازه استفاده بدهیم
+        // اما با تابعیت محدودتر
+        setTelegramId('guest_' + Date.now());
       }
     } else {
-      console.log("❌ [DEBUG] Telegram WebApp NOT found!");
-      console.log("⚠️ [DEBUG] Make sure you're opening from Telegram mini-app");
+      console.log("⚠️ [DEBUG] Telegram WebApp NOT found - running in browser mode");
+      // در حالت مرورگر، یک ID موقت ایجاد می‌کنیم
+      setTelegramId('web_' + Date.now());
     }
   }, []);
 
@@ -76,9 +78,11 @@ export default function Referrals() {
           wallet_address: address,
           inviter_code: inviterCode || null,
           telegram_id: telegramId,
-          telegram_username: telegramUsername,
-          is_telegram: true
+          telegram_username: telegramUsername || null,
+          is_telegram: !!window.Telegram?.WebApp
         };
+
+        console.log("📤 [DEBUG] Sending payload:", payload);
 
         const res = await api.post("/connect/", payload);
 
@@ -108,6 +112,7 @@ export default function Referrals() {
       }
     }
 
+    // اگر telegramId وجود داشته باشد (حتی در حالت مرورگر)
     if (telegramId) {
       fetchData();
     }
@@ -162,7 +167,7 @@ export default function Referrals() {
     ? `${SITE_URL}/?ref=${encodeURIComponent(myCode)}`
     : "";
 
-  /* ==================== دکمه اشتراک‌گذاری جدید ==================== */
+  /* ==================== دکمه اشتراک‌گذاری ==================== */
   function shareOnTelegram() {
     console.log("🔍 [DEBUG] shareOnTelegram called");
     
@@ -171,7 +176,6 @@ export default function Referrals() {
       return;
     }
 
-    // متن پیام برای اشتراک‌گذاری
     const message = `🎯 Join me on AI PolyNet!\n\n` +
                     `🚀 Use my referral link to get started:\n` +
                     `${referralLink}\n\n` +
@@ -182,19 +186,15 @@ export default function Referrals() {
     if (tg) {
       console.log("✅ [DEBUG] Using Telegram WebApp share method");
       
-      // روش اول: استفاده از openTelegramLink برای باز کردن یک پیام با متن آماده
       try {
-        // این لینک یک پیام با متن آماده در تلگرام باز می‌کند
         const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent(message)}`;
         tg.openTelegramLink(shareUrl);
         console.log("✅ [DEBUG] Shared via openTelegramLink");
       } catch (error) {
         console.log("❌ [DEBUG] Error sharing:", error);
-        // روش دوم: استفاده از روش جایگزین
         window.open(`https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent(message)}`, '_blank');
       }
     } else {
-      // اگر در محیط تلگرام نیست، لینک را در مرورگر باز می‌کند
       console.log("⚠️ [DEBUG] Not in Telegram, using window.open fallback");
       window.open(`https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent(message)}`, '_blank');
     }
@@ -218,10 +218,10 @@ export default function Referrals() {
     if (!referralLink) return;
     navigator.clipboard?.writeText(referralLink);
     console.log("✅ [DEBUG] Referral link copied");
-    alert("Website referral link copied");
+    alert("✅ Referral link copied to clipboard!");
   }
 
-  /* ---------------- Render level table with 4 columns ---------------- */
+  /* ---------------- Render level table ---------------- */
   function renderLevelTable(level, data) {
     if (!data) {
       return (
@@ -294,23 +294,18 @@ export default function Referrals() {
     return <div className="connect-warning">🔌 Please connect your wallet first.</div>;
   }
 
-  // اگر تلگرام ID دریافت نشده
-  if (!telegramId) {
-    return (
-      <div className="connect-warning">
-        ⚠️ Please open this app from Telegram mini-app
-      </div>
-    );
+  // اگر در حال بارگذاری هستیم
+  if (loading) {
+    return <div className="loading-spinner">Loading...</div>;
   }
 
   return (
     <div className="referrals-container">
       <h2 className="ref-title">🎯 Referral Dashboard</h2>
 
-      {loading && <div className="loading-spinner">Loading...</div>}
       {error && <div className="error-message">❌ {error}</div>}
 
-      {myCode && (
+      {myCode ? (
         <>
           {/* بخش لینک دعوت */}
           <div className="referral-link-section">
@@ -339,7 +334,6 @@ export default function Referrals() {
                 📋 Copy
               </button>
 
-              {/* ==================== دکمه اشتراک‌گذاری ==================== */}
               <button
                 onClick={shareOnTelegram}
                 disabled={!referralLink}
@@ -361,12 +355,21 @@ export default function Referrals() {
               </div>
             </div>
 
+            {/* نمایش وضعیت تلگرام */}
+            <div className="telegram-status">
+              {window.Telegram?.WebApp ? (
+                <span className="status-active">✅ Connected to Telegram</span>
+              ) : (
+                <span className="status-inactive">🌐 Browser Mode - Some features may be limited</span>
+              )}
+            </div>
+
             <div className="info-note">
               💡 This link is a <b>website</b> link. Your friend can open it and then press <b>OPEN APP</b> in Telegram.
             </div>
           </div>
 
-          {/* ========== بخش نمایش سطوح با ۴ ستون ========== */}
+          {/* ========== بخش نمایش سطوح ========== */}
           <div className="levels-section">
             <h3>🔺 Referral Tree (5 Levels)</h3>
             
@@ -415,6 +418,8 @@ export default function Referrals() {
             )}
           </div>
         </>
+      ) : (
+        <div className="loading-spinner">Loading referral data...</div>
       )}
     </div>
   );
