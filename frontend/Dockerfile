@@ -5,14 +5,17 @@ FROM node:22-alpine AS build
 
 WORKDIR /app
 
-# کپی فقط package.json برای کش بهتر
+# کپی package.json و package-lock.json
 COPY package*.json ./
 
-# نصب وابستگی‌ها با cache پاک
-RUN npm ci --only=production || npm install
+# ✅ نصب همه dependencies (از جمله devDependencies)
+RUN npm install --include=dev
 
-# کپی کدهای پروژه
+# کپی کدهای پروژه (برای کش بهتر، این کار را آخر انجام دهید)
 COPY . .
+
+# ✅ چک کردن اینکه vite نصب شده است
+RUN npx vite --version || echo "Vite not found"
 
 # ساخت خروجی نهایی
 RUN npm run build
@@ -22,7 +25,7 @@ RUN npm run build
 # ===========================
 FROM nginx:1.25-alpine
 
-# نصب curl برای health check (اختیاری)
+# نصب curl برای health check
 RUN apk add --no-cache curl
 
 # پاک‌سازی فایل‌های پیش‌فرض
