@@ -26,18 +26,21 @@ def get_or_create_user(wallet_address: str, telegram_id: int = None, is_telegram
     """
     logger.info(f"🔍 get_or_create_user: wallet={wallet_address}, telegram_id={telegram_id}, is_telegram={is_telegram}")
     
-    # برای تست در مرورگر، این خط را کامنت کنید
+    # برای تست در مرورگر، این خط را کامنت کنید (اگر واقعاً فقط تلگرام می‌خواهید، آن‌را از کامنت خارج کنید)
     # if not is_telegram:
     #     raise ValueError("Only Telegram mini-app users are allowed")
 
-    # ✅ اگر telegram_id وجود نداشت، فقط با wallet_address کار کن (برای reward_status و wallet_view)
+    # ==========================================================
+    # سناریو 1: اگر telegram_id وجود نداشت (برای reward_status و wallet_view)
+    # ==========================================================
     if not telegram_id:
         logger.warning("⚠️ No telegram_id, trying to find by wallet_address")
         user = AppUser.objects.filter(wallet_address=wallet_address).first()
         if user:
             logger.info(f"✅ User found by wallet_address: {user.wallet_address}")
             return user
-        # اگر کاربر وجود نداشت، یکی بساز
+        
+        # اگر کاربر وجود نداشت، یکی بساز (بدون قفل)
         user = AppUser.objects.create(
             wallet_address=wallet_address,
             telegram_id=None,
@@ -49,15 +52,16 @@ def get_or_create_user(wallet_address: str, telegram_id: int = None, is_telegram
         logger.info(f"✅ New user created with wallet only: {wallet_address}")
         return user
     
-    # ✅ بررسی اینکه آیا این telegram_id قبلاً ثبت شده است
+    # ==========================================================
+    # سناریو 2: اگر کاربر با این telegram_id قبلاً وجود دارد
+    # ==========================================================
     existing_user_by_telegram = AppUser.objects.filter(telegram_id=telegram_id).first()
     
     if existing_user_by_telegram:
         logger.info(f"✅ User found by telegram_id: {existing_user_by_telegram.wallet_address}")
         
-        # ✅ اگر ولت قفل شده باشد، اجازه تغییر ولت را نده
+        # اگر ولت قفل شده باشد، اجازه تغییر ولت را نده
         if existing_user_by_telegram.wallet_locked:
-            # اگر ولت قبلی با ولت جدید یکی نیست، خطا بده
             if existing_user_by_telegram.wallet_address != wallet_address:
                 raise ValueError(
                     f"This Telegram ID is already linked to wallet: "
@@ -73,26 +77,43 @@ def get_or_create_user(wallet_address: str, telegram_id: int = None, is_telegram
         
         return existing_user_by_telegram
     
-    # ✅ بررسی اینکه آیا این wallet_address قبلاً با telegram_id دیگری ثبت شده است
+    # ==========================================================
+    # سناریو 3: اگر کاربر با این wallet_address قبلاً وجود دارد
+    # ==========================================================
     existing_user_by_wallet = AppUser.objects.filter(wallet_address=wallet_address).first()
     
     if existing_user_by_wallet:
         logger.info(f"⚠️ Wallet address already registered with telegram_id: {existing_user_by_wallet.telegram_id}")
         
-        # اگر ولت قبلاً ثبت شده ولی telegram_id ندارد، به‌روز کن
-        if not existing_user_by_wallet.telegram_id:
+        # ✅ اگر ولت قفل شده باشد (wallet_locked=True)، یعنی قبلاً به آیدی دیگری وصل شده
+        if existing_user_by_wallet.wallet_locked:
+            # اگر ولت قفل است و telegram_id ندارد، یعنی هنوز جفت نشده (می‌توان وصل کرد)
+            if not existing_user_by_wallet.telegram_id:
+                existing_user_by_wallet.telegram_id = telegram_id
+                existing_user_by_wallet.is_telegram_user = True
+                existing_user_by_wallet.telegram_verified = True
+                existing_user_by_wallet.wallet_locked = True
+                existing_user_by_wallet.save()
+                logger.info(f"🔒 Wallet locked for existing user (previously unlinked): {existing_user_by_wallet.wallet_address}")
+                return existing_user_by_wallet
+            
+            # اگر قفل است و telegram_id دارد، یعنی ولت دزدیده شده
+            raise ValueError("This wallet is already linked to another Telegram account (Locked)")
+        
+        else:
+            # ✅ اگر ولت قفل نیست (wallet_locked=False)، یعنی کاربر فقط با ولت ثبت شده ولی هنوز با تلگرام جفت نشده
+            # این مورد برای وقتی است که کاربر قبلاً با مرورگر وصل شده و حالا می‌خواهد با تلگرام وصل شود
             existing_user_by_wallet.telegram_id = telegram_id
             existing_user_by_wallet.is_telegram_user = True
             existing_user_by_wallet.telegram_verified = True
             existing_user_by_wallet.wallet_locked = True
             existing_user_by_wallet.save()
-            logger.info(f"🔒 Wallet locked for existing user: {existing_user_by_wallet.wallet_address}")
+            logger.info(f"✅ Wallet paired with Telegram ID successfully: {existing_user_by_wallet.wallet_address}")
             return existing_user_by_wallet
-        
-        # اگر ولت قبلاً با telegram_id دیگری ثبت شده، خطا بده
-        raise ValueError("This wallet is already linked to another Telegram account")
-    
-    # ✅ ایجاد کاربر جدید
+
+    # ==========================================================
+    # سناریو 4: ایجاد کاربر کاملاً جدید
+    # ==========================================================
     user = AppUser.objects.create(
         wallet_address=wallet_address,
         telegram_id=telegram_id,
