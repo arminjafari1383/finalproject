@@ -13,6 +13,16 @@ import { useTonWallet } from "@tonconnect/ui-react";
 import { useWallet } from "./context/WalletContext";
 
 
+// ✅ کامپوننت لایه‌بندی شده برای صفحاتی که نوار ناوبری می‌خواهند
+function LayoutWithNavbar({ children }) {
+  return (
+    <div style={{ padding: 16, paddingBottom: 80 }}> {/* paddingBottom اضافه شد تا محتوا زیر نوار نرود */}
+      {children}
+      <Navbar />
+    </div>
+  );
+}
+
 function ProtectedRoute({ children }) {
   const tonWallet = useTonWallet();
   const { isWalletValid } = useWallet();
@@ -22,7 +32,8 @@ function ProtectedRoute({ children }) {
     return <Navigate to="/" replace />;
   }
 
-  return children;
+  // ✅ اگر ولت معتبر است، نوار ناوبری را دور محتوا بپیچ
+  return <LayoutWithNavbar>{children}</LayoutWithNavbar>;
 }
 
 
@@ -62,8 +73,10 @@ function AppContent() {
   return (
     <div style={{ padding: 16 }}>
       <Routes>
+        {/* ✅ صفحه اصلی (Wallet) نوار ناوبری ندارد */}
         <Route path="/" element={<Wallet />} />
 
+        {/* ✅ بقیه صفحات درون ProtectedRoute هستند و نوار ناوبری دارند */}
         <Route
           path="/referrals"
           element={
@@ -105,7 +118,6 @@ function AppContent() {
           element={<Navigate to="/" replace />}
         />
       </Routes>
-      <Navbar />
     </div>
   );
 }
