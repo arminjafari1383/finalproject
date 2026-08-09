@@ -3,7 +3,7 @@ import axios from "axios";
 // ساخت نمونه axios با تنظیمات پیش‌فرض
 export const api = axios.create({
   // ✅ حتماً آدرس را با /api/ تمام کنید (همان کاری که کردید، درست است)
-  baseURL: "https://aipolynet.com/api/",
+  baseURL: "http://aipolynet.com/api/",
   
   // ✅ تایم‌اوت ۳۰ ثانیه (برای شبکه‌های کند موبایل)
   timeout: 30000,
