@@ -6,9 +6,10 @@ import {
   captureInviterCode,
   clearInviterCode,
 } from "../utils/referral";
-// import { useUserData } from "../hooks/useUserData"; // حذف شد چون با localStorage کار می‌کنیم
 
-// توابع کمکی برای کار با localStorage
+// =============================================
+// توابع کمکی برای کار با localStorage (جایگزین کوکی)
+// =============================================
 const USER_DATA_KEY = "my_app_user_data";
 
 const loadUserDataFromStorage = () => {
@@ -30,23 +31,26 @@ const saveUserDataToStorage = (newData) => {
     console.error("Error saving to localStorage:", e);
   }
 };
+// =============================================
 
 export default function Wallet() {
   const tonWallet = useTonWallet();
   
-  // استفاده از useMemo برای آدرس
+  // آدرس ولت
   const address = useMemo(
     () => tonWallet?.account?.address,
     [tonWallet]
   );
 
-  // ✅ قفل استفاده شده تا درخواست فقط یک بار ارسال شود
+  // ✅ قفل اتصال برای جلوگیری از حلقه (لوپ)
   const hasConnected = useRef(false);
 
   const [wallet, setWallet] = useState(null);
   const [walletLocked, setWalletLocked] = useState(false);
   const [connectError, setConnectError] = useState("");
-  const [walletLinkedError, setWalletLinkedError] = useState(false);
+  
+  // ✅ نوع خطا را ذخیره می‌کنیم تا در UI نمایش دهیم
+  const [errorType, setErrorType] = useState("none"); // 'locked', 'bad_request', 'server_error', 'none'
 
   const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
   const [amount, setAmount] = useState("");
@@ -61,7 +65,7 @@ export default function Wallet() {
     connectError: "",
   });
 
-  // Capture referral when page opens
+  // دریافت کد دعوت در اولین لود
   useEffect(() => {
     console.log("🔍 [Wallet] useEffect - Capture referral");
     const code = captureInviterCode();
@@ -78,8 +82,7 @@ export default function Wallet() {
     }));
   }, []);
 
-  // ✅ ذخیره آدرس ولت در localStorage (به جای کوکی)
-  // این useEffect هیچ رندر مجددی ایجاد نمی‌کند
+  // ذخیره آدرس ولت در localStorage
   useEffect(() => {
     if (address) {
       const currentData = loadUserDataFromStorage() || {};
@@ -91,18 +94,18 @@ export default function Wallet() {
     }
   }, [address]);
 
-  // ✅ تابعی که فقط یک بار و به شرط وجود آدرس اجرا می‌شود
+  // ✅ تابع اصلی اتصال به سرور
   const connectAndLoadWallet = useCallback(async () => {
-    // اگر قبلاً متصل شده‌ایم یا آدرس نداریم، خارج شو
+    // اگر قبلاً درخواست فرستاده شده یا آدرس نداریم، خارج شو
     if (hasConnected.current || !address) {
         console.log("⛔️ [Wallet] Already connected or no address, skipping connect.");
         return;
     }
 
     console.log("🔄 [Wallet] Starting connectAndLoadWallet...");
-    hasConnected.current = true; // ✅ قفل را بزن تا دیگر تکرار نشود
+    hasConnected.current = true; // قفل را بزن
     setConnectError("");
-    setWalletLinkedError(false);
+    setErrorType("none"); // ریست کردن نوع خطا
     
     const tgStartParam =
       window.Telegram?.WebApp?.initDataUnsafe?.start_param || "";
@@ -115,7 +118,7 @@ export default function Wallet() {
     const inviter_code = captureInviterCode();
     console.log("📊 [Wallet] inviter_code from capture:", inviter_code);
 
-    // ✅ دریافت Telegram ID از localStorage (به جای کوکی)
+    // ====== دریافت Telegram ID ======
     let telegramId = null;
     let telegramUsername = null;
     let isTelegram = false;
@@ -137,7 +140,6 @@ export default function Wallet() {
         isTelegram = true;
         console.log("✅ [Wallet] Using telegram_id from Telegram:", telegramId);
         
-        // ذخیره در localStorage
         saveUserDataToStorage({
           telegramId: telegramId,
           telegramUsername: telegramUsername,
@@ -170,6 +172,7 @@ export default function Wallet() {
       telegramId = Number(Math.floor(Math.random() * 1000000000) + 100000000);
       console.log("⚠️ [Wallet] Generated fallback telegram_id:", telegramId);
     }
+    // ======================================
 
     setDebug((d) => ({
       ...d,
@@ -224,25 +227,39 @@ export default function Wallet() {
       console.log("✅ [Wallet] Wallet data:", r.data);
 
       setWallet(r.data);
+      setErrorType("none"); // اتصال موفق
 
     } catch (e) {
       console.log("❌ [Wallet] Error in connectAndLoadWallet:");
       
       const errorData = e?.response?.data;
+      const statusCode = e?.response?.status;
+
+      // ====== 1. تشخیص خطای قفل بودن ولت (Locked) ======
       const isWalletLocked = errorData?.error?.includes("already linked") || 
                             errorData?.error?.includes("locked") ||
                             errorData?.detail?.includes("already linked");
 
       if (isWalletLocked) {
-        setWalletLinkedError(true);
+        setErrorType("locked");
         setConnectError("🔒 This wallet is already linked to another Telegram account.");
         console.log("🔒 [Wallet] Wallet linked to another account");
-      } else {
+      } 
+      // ====== 2. تشخیص خطای 400 (Bad Request) ======
+      else if (statusCode === 400) {
+        setErrorType("bad_request");
+        const msg = errorData?.error || errorData?.detail || "The wallet address format is invalid.";
+        setConnectError(`⚠️ Bad Request: ${msg}`);
+        console.log("❌ [Wallet] Bad Request (400). Check your wallet address format.");
+      } 
+      // ====== 3. سایر خطاهای سرور ======
+      else {
+        setErrorType("server_error");
         const errorMessage = errorData?.error ||
                             errorData?.detail ||
                             e?.message ||
                             "Failed to connect wallet. Please try again.";
-        setConnectError(errorMessage);
+        setConnectError(`❌ Server Error: ${errorMessage}`);
       }
 
       setDebug((d) => ({
@@ -251,41 +268,39 @@ export default function Wallet() {
         connectError: errorData?.error || errorData?.detail || "",
       }));
 
-      // تلاش برای دریافت اطلاعات ولت به هر حال
-      try {
-        console.log("🔄 [Wallet] Trying to fetch wallet data anyway...");
-        const r = await api.get(`/wallet/${address}/`);
-        console.log("✅ [Wallet] Wallet data (fallback):", r.data);
-        setWallet(r.data);
-      } catch (e2) {
-        console.log("❌ [Wallet] Fallback also failed:", e2);
+      // تلاش برای دریافت اطلاعات ولت (فقط اگر خطای 400 نباشد)
+      if (statusCode !== 400) {
+        try {
+          console.log("🔄 [Wallet] Trying to fetch wallet data anyway...");
+          const r = await api.get(`/wallet/${address}/`);
+          console.log("✅ [Wallet] Wallet data (fallback):", r.data);
+          setWallet(r.data);
+        } catch (e2) {
+          console.log("❌ [Wallet] Fallback also failed:", e2);
+        }
       }
     }
   }, [address]);
 
-  // ✅ این useEffect تمیز است و فقط یک بار اجرا می‌شود
+  // ✅ useEffect فقط به تابع اتصال وابسته است
   useEffect(() => {
     console.log("🔍 [Wallet] useEffect triggered (address changed)");
     connectAndLoadWallet();
   }, [connectAndLoadWallet]);
 
-  // تابع برای قطع ارتباط ولت
+  // تابع قطع ارتباط
   const disconnectWallet = () => {
-    // پاک کردن localStorage
-    localStorage.removeItem('telegram_id'); // اگر جداگانه ذخیره شده
+    localStorage.removeItem('telegram_id');
     localStorage.removeItem('inviter_code');
     clearInviterCode();
-    localStorage.removeItem(USER_DATA_KEY); // پاک کردن کل دیتای کاربر
+    localStorage.removeItem(USER_DATA_KEY);
     
     setWallet(null);
     setWalletLocked(false);
     setConnectError("");
-    setWalletLinkedError(false);
-    
-    // ✅ ریست کردن قفل اتصال
+    setErrorType("none");
     hasConnected.current = false;
     
-    // رفرش صفحه برای قطع ارتباط با ولت
     window.location.reload();
   };
 
@@ -305,77 +320,35 @@ export default function Wallet() {
   };
 
   const openWithdraw = () => {
-    console.log("🔍 [Wallet] openWithdraw called");
     setWithdrawError("");
     setAmount("");
     setIsWithdrawOpen(true);
   };
 
   const closeWithdraw = () => {
-    console.log("🔍 [Wallet] closeWithdraw called");
     if (isWithdrawing) return;
     setIsWithdrawOpen(false);
   };
 
   const onWithdraw = async () => {
-    console.log("🔍 [Wallet] onWithdraw called");
     setWithdrawError("");
 
     const n = Number(amount);
-    console.log("📊 [Wallet] Withdraw amount:", n);
-
-    if (!Number.isFinite(n)) {
-      console.log("❌ [Wallet] Invalid amount");
-      return setWithdrawError("Invalid amount.");
-    }
-
-    if (n < 60) {
-      console.log("❌ [Wallet] Amount too small:", n);
-      return setWithdrawError("Minimum withdrawal is 60.");
-    }
-
-    if (!address) {
-      console.log("❌ [Wallet] No address");
-      return setWithdrawError(
-        "Please connect your wallet first."
-      );
-    }
+    if (!Number.isFinite(n)) return setWithdrawError("Invalid amount.");
+    if (n < 60) return setWithdrawError("Minimum withdrawal is 60.");
+    if (!address) return setWithdrawError("Please connect your wallet first.");
 
     try {
-      console.log("🔄 [Wallet] Sending withdraw request...");
       setIsWithdrawing(true);
-
-      const payload = {
-        wallet_address: address,
-        scope: "ALL_WITHDRAWABLE",
-        amount: n,
-      };
-      console.log("📤 [Wallet] Withdraw payload:", payload);
-
+      const payload = { wallet_address: address, scope: "ALL_WITHDRAWABLE", amount: n };
       await api.post("/withdraw/request/", payload);
-      console.log("✅ [Wallet] Withdraw request successful");
-
-      console.log("🔄 [Wallet] Fetching updated wallet...");
       const r = await api.get(`/wallet/${address}/`);
-      console.log("✅ [Wallet] Updated wallet:", r.data);
-
       setWallet(r.data);
       setIsWithdrawOpen(false);
-      console.log("✅ [Wallet] Withdraw completed");
     } catch (e) {
-      console.log("❌ [Wallet] Withdraw failed:");
-      console.log("❌ [Wallet] Error:", e);
-      console.log("❌ [Wallet] Error response:", e?.response);
-      console.log("❌ [Wallet] Error data:", e?.response?.data);
-      
-      setWithdrawError(
-        e?.response?.data?.error ||
-          e?.response?.data?.detail ||
-          "Withdrawal failed."
-      );
+      setWithdrawError(e?.response?.data?.error || e?.response?.data?.detail || "Withdrawal failed.");
     } finally {
       setIsWithdrawing(false);
-      console.log("✅ [Wallet] Withdraw finished");
     }
   };
 
@@ -384,7 +357,7 @@ export default function Wallet() {
     wallet: wallet,
     walletLocked,
     connectError,
-    walletLinkedError,
+    errorType,
     isWithdrawOpen,
     amount,
     withdrawError,
@@ -407,21 +380,22 @@ export default function Wallet() {
         {/* ========== نمایش خطای اتصال ========== */}
         {connectError && (
           <div className="wallet-error" style={{
-            color: walletLinkedError ? '#ff6b6b' : '#ff6b6b',
-            background: walletLinkedError ? 'rgba(255,0,0,0.15)' : 'rgba(255,0,0,0.1)',
+            color: errorType === 'locked' ? '#ff6b6b' : '#ff6b6b',
+            background: errorType === 'locked' ? 'rgba(255,0,0,0.15)' : 'rgba(255,0,0,0.1)',
             padding: '16px 20px',
             borderRadius: '8px',
             marginTop: '12px',
-            border: walletLinkedError ? '2px solid rgba(255,0,0,0.3)' : '1px solid rgba(255,0,0,0.2)',
+            border: errorType === 'locked' ? '2px solid rgba(255,0,0,0.3)' : '1px solid rgba(255,0,0,0.2)',
             fontSize: '14px',
             textAlign: 'center'
           }}>
             <div style={{ fontSize: '20px', marginBottom: '8px' }}>
-              {walletLinkedError ? '🔒' : '⚠️'}
+              {errorType === 'locked' ? '🔒' : '⚠️'}
             </div>
             <div>{connectError}</div>
             
-            {walletLinkedError && (
+            {/* اگر خطای قفل بود، دکمه قطع اتصال را نشان بده */}
+            {errorType === 'locked' && (
               <div style={{ marginTop: '12px' }}>
                 <p style={{ fontSize: '13px', color: '#666', marginBottom: '10px' }}>
                   This wallet is connected to another Telegram account. 
@@ -442,6 +416,13 @@ export default function Wallet() {
                 >
                   🔄 Disconnect & Try Again
                 </button>
+              </div>
+            )}
+
+            {/* اگر خطای ۴۰۰ یا سرور بود، راهنمایی نشان بده */}
+            {errorType === 'bad_request' && (
+              <div style={{ marginTop: '12px', fontSize: '13px', color: '#888' }}>
+                Make sure you are using a valid TON wallet address.
               </div>
             )}
           </div>
