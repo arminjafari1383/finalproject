@@ -74,46 +74,9 @@
         width: 100%;
         min-height: 100vh;
       }
-
-      /* استایل برای لاگ‌ها */
-      #debug-log {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        background: rgba(0,0,0,0.9);
-        color: #0f0;
-        font-size: 11px;
-        padding: 10px;
-        max-height: 200px;
-        overflow-y: auto;
-        font-family: monospace;
-        z-index: 99999;
-        display: none;
-        border-top: 2px solid #0f0;
-      }
-      #debug-log.show {
-        display: block;
-      }
-      #debug-log .log-entry {
-        padding: 2px 0;
-        border-bottom: 1px solid #111;
-      }
-      #debug-log .error {
-        color: #f00;
-      }
-      #debug-log .success {
-        color: #0f0;
-      }
-      #debug-log .warn {
-        color: #ff0;
-      }
     </style>
   </head>
   <body>
-    <!-- دباگ لاگ -->
-    <div id="debug-log"></div>
-
     <div id="root">
       <div id="telegram-check">
         <div class="telegram-error">
@@ -128,166 +91,35 @@
       </div>
     </div>
     
-    <!-- اسکریپت Telegram WebApp -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     
     <script>
-      // ============================================
-      // تابع لاگ
-      // ============================================
-      function debugLog(message, type = 'info') {
-        const logDiv = document.getElementById('debug-log');
-        if (logDiv) {
-          logDiv.classList.add('show');
-          const entry = document.createElement('div');
-          entry.className = `log-entry ${type}`;
-          entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-          logDiv.appendChild(entry);
-          logDiv.scrollTop = logDiv.scrollHeight;
-        }
-        // همچنین در کنسول
-        if (type === 'error') console.error(message);
-        else if (type === 'warn') console.warn(message);
-        else console.log(message);
-      }
-
-      // ============================================
-      // مرحله 1: شروع فرآیند
-      // ============================================
-      debugLog('🚀 Application starting...', 'info');
-      debugLog(`📍 URL: ${window.location.href}`, 'info');
-      debugLog(`📱 User Agent: ${navigator.userAgent}`, 'info');
-
-      // ============================================
-      // مرحله 2: چک کردن Telegram WebApp
-      // ============================================
-      function checkTelegram() {
-        debugLog('🔍 Checking Telegram WebApp...', 'info');
-        
-        // چک کردن وجود window.Telegram
-        if (typeof window.Telegram === 'undefined') {
-          debugLog('❌ window.Telegram is undefined!', 'error');
-          return false;
-        }
-        debugLog('✅ window.Telegram exists', 'success');
-
-        // چک کردن وجود window.Telegram.WebApp
-        if (typeof window.Telegram.WebApp === 'undefined') {
-          debugLog('❌ window.Telegram.WebApp is undefined!', 'error');
-          return false;
-        }
-        debugLog('✅ window.Telegram.WebApp exists', 'success');
-
-        // چک کردن این که WebApp آماده است
-        const webApp = window.Telegram.WebApp;
-        debugLog(`📊 WebApp object: ${JSON.stringify(Object.keys(webApp))}`, 'info');
-        
-        // چک کردن initDataUnsafe
-        if (webApp.initDataUnsafe) {
-          debugLog(`👤 User data: ${JSON.stringify(webApp.initDataUnsafe.user || 'No user')}`, 'info');
-          if (webApp.initDataUnsafe.user) {
-            debugLog(`✅ User ID: ${webApp.initDataUnsafe.user.id}`, 'success');
-            debugLog(`👤 Username: ${webApp.initDataUnsafe.user.username || 'No username'}`, 'info');
-          }
-        } else {
-          debugLog('⚠️ initDataUnsafe is undefined', 'warn');
-        }
-
-        // چک کردن platform
-        if (webApp.platform) {
-          debugLog(`📱 Platform: ${webApp.platform}`, 'info');
-        }
-
-        // چک کردن version
-        if (webApp.version) {
-          debugLog(`📌 WebApp Version: ${webApp.version}`, 'info');
-        }
-
-        return true;
-      }
-
-      // ============================================
-      // مرحله 3: اجرا با تاخیر برای لود شدن اسکریپت
-      // ============================================
-      let attempts = 0;
-      const maxAttempts = 10;
-
-      function tryCheckTelegram() {
-        attempts++;
-        debugLog(`🔄 Attempt ${attempts}/${maxAttempts}`, 'info');
-        
-        const result = checkTelegram();
-        
-        if (result) {
-          // تلگرام پیدا شد
-          debugLog('✅ Telegram WebApp is available!', 'success');
+      (function() {
+        setTimeout(function() {
+          const isTelegram = !!(window.Telegram?.WebApp);
+          const checkElement = document.getElementById('telegram-check');
+          const root = document.getElementById('root');
           
-          // راه‌اندازی WebApp
-          try {
-            const webApp = window.Telegram.WebApp;
-            webApp.ready();
-            debugLog('✅ WebApp.ready() called', 'success');
-            
-            webApp.expand();
-            debugLog('✅ WebApp.expand() called', 'success');
-            
-            // مخفی کردن صفحه خطا
-            const checkElement = document.getElementById('telegram-check');
+          if (isTelegram) {
             if (checkElement) {
               checkElement.style.display = 'none';
-              debugLog('✅ Error page hidden', 'success');
             }
-            
-            // نشان دادن root
-            const root = document.getElementById('root');
+            if (window.Telegram?.WebApp) {
+              window.Telegram.WebApp.ready();
+              window.Telegram.WebApp.expand();
+            }
+          } else {
             if (root) {
-              // اطمینان از اینکه محتوای اصلی دیده می‌شود
               const children = root.children;
               for (let i = 0; i < children.length; i++) {
                 if (children[i].id !== 'telegram-check') {
-                  children[i].style.display = '';
+                  children[i].style.display = 'none';
                 }
               }
-              debugLog('✅ Root content shown', 'success');
-            }
-            
-            debugLog('🎉 ALL GOOD! Telegram WebApp is ready!', 'success');
-            
-          } catch (e) {
-            debugLog(`❌ Error initializing WebApp: ${e.message}`, 'error');
-            debugLog(`Stack: ${e.stack}`, 'error');
-          }
-          
-        } else {
-          // تلگرام پیدا نشد
-          if (attempts < maxAttempts) {
-            debugLog(`⏳ Waiting... Retry in 500ms (${attempts}/${maxAttempts})`, 'warn');
-            setTimeout(tryCheckTelegram, 500);
-          } else {
-            debugLog('❌ Telegram WebApp not found after max attempts!', 'error');
-            debugLog('💡 Make sure you are opening from Telegram mini-app', 'warn');
-            // صفحه خطا را نشان بده
-            const checkElement = document.getElementById('telegram-check');
-            if (checkElement) {
-              checkElement.style.display = 'flex';
             }
           }
-        }
-      }
-
-      // ============================================
-      // مرحله 4: شروع بررسی
-      // ============================================
-      debugLog('⏳ Starting Telegram check with delay...', 'info');
-      
-      // اولین بررسی بعد از 300ms
-      setTimeout(tryCheckTelegram, 300);
-
-      // ============================================
-      // مرحله 5: لاگ نهایی
-      // ============================================
-      debugLog('📝 Debug log initialized. Waiting for Telegram...', 'info');
-      
+        }, 500);
+      })();
     </script>
     
     <script type="module" src="/src/main.jsx"></script>
