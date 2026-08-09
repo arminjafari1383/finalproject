@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { useTonWallet, TonConnectButton } from "@tonconnect/ui-react";
 import { api } from "../api";
 import "./Wallet.css";
@@ -17,10 +17,8 @@ export default function Wallet() {
     [tonWallet]
   );
 
-  // ✅ استفاده از useRef برای جلوگیری از درخواست‌های تکراری (جلوگیری از حلقه اصلی)
-  const isConnecting = useRef(false);
-  // ✅ استفاده از useRef برای جلوگیری از تغییر state در حین ذخیره‌سازی کوکی
-  const isSavingUserData = useRef(false);
+  // ✅ استفاده از useRef برای اینکه مطمئن شویم درخواست فقط یک بار ارسال می‌شود
+  const hasConnected = useRef(false);
 
   const [wallet, setWallet] = useState(null);
   const [walletLocked, setWalletLocked] = useState(false);
@@ -59,9 +57,10 @@ export default function Wallet() {
     }));
   }, []);
 
-  // ذخیره آدرس ولت در کوکی (با استفاده از isSavingUserData برای جلوگیری از لوپ)
+  // ذخیره آدرس ولت در کوکی (این useEffect تغییر state نمی‌دهد، فقط ذخیره می‌کند)
+  // بنابراین باعث حلقه نمی‌شود
   useEffect(() => {
-    if (address && !isSavingUserData.current) {
+    if (address) {
       const currentData = loadUserData() || {};
       saveUserData({
         ...currentData,
@@ -71,235 +70,184 @@ export default function Wallet() {
     }
   }, [address, saveUserData, loadUserData]);
 
-  // Connect wallet and load wallet information (حلقه اصلی در اینجا اصلاح شده است)
-  useEffect(() => {
-    console.log("🔍 [Wallet] useEffect - connectAndLoadWallet triggered");
-    console.log("📊 [Wallet] address:", address);
+  // ✅ تابعی که فقط یک بار و به شرط وجود آدرس و عدم اتصال قبلی فراخوانی می‌شود
+  const connectAndLoadWallet = useCallback(async () => {
+    // اگر قبلاً متصل شده‌ایم یا آدرس نداریم، خارج شو
+    if (hasConnected.current || !address) {
+        console.log("⛔️ [Wallet] Already connected or no address, skipping connect.");
+        return;
+    }
+
+    console.log("🔄 [Wallet] Starting connectAndLoadWallet...");
+    hasConnected.current = true; // ✅ قفل را بزن تا دیگر تکرار نشود
+    setConnectError("");
+    setWalletLinkedError(false);
     
-    if (!address) {
-      console.log("⚠️ [Wallet] No address, clearing wallet");
-      setWallet(null);
-      setWalletLocked(false);
-      setConnectError("");
-      setWalletLinkedError(false);
+    const tgStartParam =
+      window.Telegram?.WebApp?.initDataUnsafe?.start_param || "";
+    console.log("📊 [Wallet] tgStartParam:", tgStartParam);
 
-      setDebug((d) => ({
-        ...d,
-        connectStatus: "No wallet connected yet",
-      }));
+    const lsInviterCode =
+      localStorage.getItem("inviter_code") || "";
+    console.log("📊 [Wallet] lsInviterCode:", lsInviterCode);
 
-      return;
-    }
+    const inviter_code = captureInviterCode();
+    console.log("📊 [Wallet] inviter_code from capture:", inviter_code);
 
-    // ✅ اگر در حال حاضر درخواستی در حال اجراست، از اجرای مجدد جلوگیری کن
-    if (isConnecting.current) {
-      console.log("⏳ [Wallet] Connection already in progress, skipping duplicate execution.");
-      return;
-    }
+    // ✅ دریافت Telegram ID
+    let telegramId = null;
+    let telegramUsername = null;
+    let isTelegram = false;
 
-    let cancelled = false;
-    isConnecting.current = true; // ✅ قفل را فعال کن
+    const savedData = loadUserData();
+    console.log("📂 [Wallet] Saved data from cookie:", savedData);
 
-    async function connectAndLoadWallet() {
-      try {
-        console.log("🔄 [Wallet] Starting connectAndLoadWallet...");
-        setConnectError("");
-        setWalletLinkedError(false);
+    if (savedData?.telegramId && Number.isInteger(Number(savedData.telegramId)) && Number(savedData.telegramId) > 0) {
+      telegramId = Number(savedData.telegramId);
+      telegramUsername = savedData.telegramUsername || null;
+      isTelegram = savedData.isTelegram || false;
+      console.log("📂 [Wallet] Using telegram_id from cookie:", telegramId);
+    } else {
+      const tg = window.Telegram?.WebApp;
+      if (tg?.initDataUnsafe?.user) {
+        const user = tg.initDataUnsafe.user;
+        telegramId = Number(user.id);
+        telegramUsername = user.username || null;
+        isTelegram = true;
+        console.log("✅ [Wallet] Using telegram_id from Telegram:", telegramId);
         
-        const tgStartParam =
-          window.Telegram?.WebApp?.initDataUnsafe?.start_param || "";
-        console.log("📊 [Wallet] tgStartParam:", tgStartParam);
-
-        const lsInviterCode =
-          localStorage.getItem("inviter_code") || "";
-        console.log("📊 [Wallet] lsInviterCode:", lsInviterCode);
-
-        const inviter_code = captureInviterCode();
-        console.log("📊 [Wallet] inviter_code from capture:", inviter_code);
-
-        // ✅ دریافت Telegram ID
-        let telegramId = null;
-        let telegramUsername = null;
-        let isTelegram = false;
-
-        // ابتدا از کوکی بخوان
-        const savedData = loadUserData();
-        console.log("📂 [Wallet] Saved data from cookie:", savedData);
-
-        if (savedData?.telegramId && Number.isInteger(Number(savedData.telegramId)) && Number(savedData.telegramId) > 0) {
-          telegramId = Number(savedData.telegramId);
-          telegramUsername = savedData.telegramUsername || null;
-          isTelegram = savedData.isTelegram || false;
-          console.log("📂 [Wallet] Using telegram_id from cookie:", telegramId);
-        } else {
-          const tg = window.Telegram?.WebApp;
-          if (tg?.initDataUnsafe?.user) {
-            const user = tg.initDataUnsafe.user;
-            telegramId = Number(user.id);
-            telegramUsername = user.username || null;
-            isTelegram = true;
-            console.log("✅ [Wallet] Using telegram_id from Telegram:", telegramId);
-            
-            // قبل از ذخیره، isSavingUserData را فعال کن تا باعث رندر مجدد نشود
-            isSavingUserData.current = true;
-            saveUserData({
-              telegramId: telegramId,
-              telegramUsername: telegramUsername,
-              isTelegram: true
-            });
-            isSavingUserData.current = false; // قفل را باز کن
-          } else {
-            if (address) {
-              let hash = 0;
-              for (let i = 0; i < address.length; i++) {
-                const char = address.charCodeAt(i);
-                hash = ((hash << 5) - hash) + char;
-                hash = hash & hash;
-              }
-              telegramId = Number(Math.abs(hash) + 1000000000000);
-              telegramUsername = `browser_${address.slice(0, 8)}`;
-              isTelegram = false;
-              console.log("🌐 [Wallet] Generated browser telegram_id:", telegramId);
-              
-              isSavingUserData.current = true;
-              saveUserData({
-                telegramId: telegramId,
-                telegramUsername: telegramUsername,
-                isTelegram: false,
-                walletAddress: address
-              });
-              isSavingUserData.current = false;
-            }
+        // ذخیره اطلاعات تلگرام در کوکی
+        saveUserData({
+          telegramId: telegramId,
+          telegramUsername: telegramUsername,
+          isTelegram: true
+        });
+      } else {
+        if (address) {
+          let hash = 0;
+          for (let i = 0; i < address.length; i++) {
+            const char = address.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash;
           }
-        }
-
-        if (!telegramId) {
-          telegramId = Number(Math.floor(Math.random() * 1000000000) + 100000000);
-          console.log("⚠️ [Wallet] Generated fallback telegram_id:", telegramId);
-        }
-
-        console.log("📊 [Wallet] Final telegramId (type):", typeof telegramId, telegramId);
-
-        setDebug((d) => ({
-          ...d,
-          tgStartParam,
-          lsInviterCode,
-          sentInviterCode: inviter_code || "",
-          connectStatus: "Sending /connect ...",
-          connectError: "",
-        }));
-
-        const payload = {
-          wallet_address: address,
-          inviter_code: inviter_code || null,
-          is_telegram: isTelegram
-        };
-
-        if (telegramId && Number.isInteger(telegramId) && telegramId > 0) {
-          payload.telegram_id = telegramId;
-          payload.telegram_username = telegramUsername || null;
-        }
-
-        console.log("📤 [Wallet] Sending to /api/connect/:");
-        console.log("📤 [Wallet] Payload:", JSON.stringify(payload, null, 2));
-
-        const response = await api.post("/connect/", payload);
-        console.log("✅ [Wallet] /connect/ response:", response.data);
-
-        if (cancelled) return;
-
-        if (response.data?.user?.wallet_locked) {
-          setWalletLocked(true);
-          console.log("🔒 [Wallet] Wallet is locked to this Telegram ID");
-        }
-
-        if (response.data?.user) {
-          const user = response.data.user;
-          isSavingUserData.current = true;
+          telegramId = Number(Math.abs(hash) + 1000000000000);
+          telegramUsername = `browser_${address.slice(0, 8)}`;
+          isTelegram = false;
+          console.log("🌐 [Wallet] Generated browser telegram_id:", telegramId);
+          
           saveUserData({
-            telegramId: user.telegram_id || telegramId,
-            telegramUsername: user.telegram_username || telegramUsername,
-            isTelegram: user.is_telegram || isTelegram,
+            telegramId: telegramId,
+            telegramUsername: telegramUsername,
+            isTelegram: false,
             walletAddress: address
           });
-          isSavingUserData.current = false;
-        }
-
-        setDebug((d) => ({
-          ...d,
-          connectStatus: "connect OK ✅",
-          connectError: "",
-        }));
-
-        console.log("🔄 [Wallet] Fetching wallet data...");
-        const r = await api.get(`/wallet/${address}/`);
-        console.log("✅ [Wallet] Wallet data:", r.data);
-
-        if (!cancelled) {
-          setWallet(r.data);
-        }
-
-      } catch (e) {
-        console.log("❌ [Wallet] Error in connectAndLoadWallet:");
-        
-        if (cancelled) {
-          console.log("⚠️ [Wallet] Request cancelled");
-          return;
-        }
-
-        // ✅ بررسی خطای خاص قفل ولت
-        const errorData = e?.response?.data;
-        const isWalletLocked = errorData?.error?.includes("already linked") || 
-                              errorData?.error?.includes("locked") ||
-                              errorData?.detail?.includes("already linked");
-
-        if (isWalletLocked) {
-          setWalletLinkedError(true);
-          setConnectError("🔒 This wallet is already linked to another Telegram account.");
-          console.log("🔒 [Wallet] Wallet linked to another account");
-        } else {
-          const errorMessage = errorData?.error ||
-                              errorData?.detail ||
-                              e?.message ||
-                              "Failed to connect wallet. Please try again.";
-          setConnectError(errorMessage);
-        }
-
-        setDebug((d) => ({
-          ...d,
-          connectStatus: "connect FAILED ❌",
-          connectError: errorData?.error || errorData?.detail || "",
-        }));
-
-        // تلاش برای دریافت اطلاعات ولت به هر حال
-        try {
-          console.log("🔄 [Wallet] Trying to fetch wallet data anyway...");
-          const r = await api.get(`/wallet/${address}/`);
-          console.log("✅ [Wallet] Wallet data (fallback):", r.data);
-
-          if (!cancelled) {
-            setWallet(r.data);
-          }
-        } catch (e2) {
-          console.log("❌ [Wallet] Fallback also failed:", e2);
-        }
-      } finally {
-        // ✅ در نهایت قفل اتصال را باز کن
-        if (!cancelled) {
-          isConnecting.current = false;
         }
       }
     }
 
-    connectAndLoadWallet();
+    if (!telegramId) {
+      telegramId = Number(Math.floor(Math.random() * 1000000000) + 100000000);
+      console.log("⚠️ [Wallet] Generated fallback telegram_id:", telegramId);
+    }
 
-    return () => {
-      console.log("🔚 [Wallet] Cleanup: cancelling");
-      cancelled = true;
-      isConnecting.current = false; // Cleanup هم قفل را باز کند
+    setDebug((d) => ({
+      ...d,
+      tgStartParam,
+      lsInviterCode,
+      sentInviterCode: inviter_code || "",
+      connectStatus: "Sending /connect ...",
+      connectError: "",
+    }));
+
+    const payload = {
+      wallet_address: address,
+      inviter_code: inviter_code || null,
+      is_telegram: isTelegram
     };
-  // ✅ وابستگی‌های useEffect را به حداقل رساندیم (saveUserData و loadUserData را حذف کردیم چون با useRef کنترل می‌شوند)
-  }, [address]);
+
+    if (telegramId && Number.isInteger(telegramId) && telegramId > 0) {
+      payload.telegram_id = telegramId;
+      payload.telegram_username = telegramUsername || null;
+    }
+
+    console.log("📤 [Wallet] Sending to /api/connect/:");
+    console.log("📤 [Wallet] Payload:", JSON.stringify(payload, null, 2));
+
+    try {
+      const response = await api.post("/connect/", payload);
+      console.log("✅ [Wallet] /connect/ response:", response.data);
+
+      if (response.data?.user?.wallet_locked) {
+        setWalletLocked(true);
+        console.log("🔒 [Wallet] Wallet is locked to this Telegram ID");
+      }
+
+      if (response.data?.user) {
+        const user = response.data.user;
+        saveUserData({
+          telegramId: user.telegram_id || telegramId,
+          telegramUsername: user.telegram_username || telegramUsername,
+          isTelegram: user.is_telegram || isTelegram,
+          walletAddress: address
+        });
+      }
+
+      setDebug((d) => ({
+        ...d,
+        connectStatus: "connect OK ✅",
+        connectError: "",
+      }));
+
+      console.log("🔄 [Wallet] Fetching wallet data...");
+      const r = await api.get(`/wallet/${address}/`);
+      console.log("✅ [Wallet] Wallet data:", r.data);
+
+      setWallet(r.data);
+
+    } catch (e) {
+      console.log("❌ [Wallet] Error in connectAndLoadWallet:");
+      
+      const errorData = e?.response?.data;
+      const isWalletLocked = errorData?.error?.includes("already linked") || 
+                            errorData?.error?.includes("locked") ||
+                            errorData?.detail?.includes("already linked");
+
+      if (isWalletLocked) {
+        setWalletLinkedError(true);
+        setConnectError("🔒 This wallet is already linked to another Telegram account.");
+        console.log("🔒 [Wallet] Wallet linked to another account");
+      } else {
+        const errorMessage = errorData?.error ||
+                            errorData?.detail ||
+                            e?.message ||
+                            "Failed to connect wallet. Please try again.";
+        setConnectError(errorMessage);
+      }
+
+      setDebug((d) => ({
+        ...d,
+        connectStatus: "connect FAILED ❌",
+        connectError: errorData?.error || errorData?.detail || "",
+      }));
+
+      // تلاش برای دریافت اطلاعات ولت به هر حال
+      try {
+        console.log("🔄 [Wallet] Trying to fetch wallet data anyway...");
+        const r = await api.get(`/wallet/${address}/`);
+        console.log("✅ [Wallet] Wallet data (fallback):", r.data);
+        setWallet(r.data);
+      } catch (e2) {
+        console.log("❌ [Wallet] Fallback also failed:", e2);
+      }
+    }
+  }, [address, loadUserData, saveUserData]);
+
+  // ✅ این useEffect کاملاً تمیز است و فقط و فقط به address وابسته است
+  // هر وقت address تغییر کرد یک بار اجرا می‌شود و تمام.
+  useEffect(() => {
+    console.log("🔍 [Wallet] useEffect triggered (address changed)");
+    connectAndLoadWallet();
+  }, [address, connectAndLoadWallet]);
 
   // تابع برای قطع ارتباط ولت
   const disconnectWallet = () => {
@@ -309,19 +257,20 @@ export default function Wallet() {
     clearInviterCode();
     
     // پاک کردن داده‌های کاربر
-    isSavingUserData.current = true;
     saveUserData({
       walletAddress: null,
       telegramId: null,
       telegramUsername: null,
       isTelegram: false
     });
-    isSavingUserData.current = false;
     
     setWallet(null);
     setWalletLocked(false);
     setConnectError("");
     setWalletLinkedError(false);
+    
+    // ✅ ریست کردن قفل اتصال تا اگر کاربر دوباره متصل شد، درخواست ارسال شود
+    hasConnected.current = false;
     
     // رفرش صفحه برای قطع ارتباط با ولت
     window.location.reload();
