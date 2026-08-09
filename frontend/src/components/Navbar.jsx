@@ -5,12 +5,10 @@ import { useWallet } from "../context/WalletContext";
 import "./Navbar.css";
 
 import Wallet from "../assets/wallet.png";
-import Task from "../assets/aboutus.png";
 import Stake from "../assets/stake.png";
 import Mine from "../assets/mine.png";
 import Friend from "../assets/friends.png";
 import Aboutus from "../assets/aboutus.png";
-
 
 const Navbar = () => {
   const tonWallet = useTonWallet();
@@ -20,7 +18,10 @@ const Navbar = () => {
   const isNavbarActive = isWalletConnected && isWalletValid;
 
   // تابع برای مدیریت کلیک روی آیتم‌های غیرفعال
-  const handleDisabledClick = (e, itemName) => {
+  const handleDisabledClick = (e, to) => {
+    // اگر به صفحه Wallets می‌روید، همیشه اجازه بده
+    if (to === '/') return; 
+    
     if (!isNavbarActive) {
       e.preventDefault();
       alert('⚠️ Please connect with your registered wallet first!');
@@ -29,50 +30,55 @@ const Navbar = () => {
 
   return (
     <nav className="navbar">
+      {/* ========== Mine ========== */}
       <NavLink 
         to="/Timer" 
         className={({ isActive }) => 
           `nav-item ${isActive ? 'active' : ''} ${!isNavbarActive ? 'disabled' : ''}`
         }
-        onClick={(e) => handleDisabledClick(e, 'Mine')}
+        onClick={(e) => handleDisabledClick(e, '/Timer')}
       >
         <img src={Mine} alt="Mine icon" />
         <span>Mine</span>
       </NavLink>
 
+      {/* ========== Stake ========== */}
       <NavLink 
         to="/stake" 
         className={({ isActive }) => 
           `nav-item ${isActive ? 'active' : ''} ${!isNavbarActive ? 'disabled' : ''}`
         }
-        onClick={(e) => handleDisabledClick(e, 'Stake')}
+        onClick={(e) => handleDisabledClick(e, '/stake')}
       >
         <img src={Stake} alt="Stake icon" />
         <span>Stake</span>
       </NavLink>
 
+      {/* ========== Friends ========== */}
       <NavLink 
         to="/referrals" 
         className={({ isActive }) => 
           `nav-item ${isActive ? 'active' : ''} ${!isNavbarActive ? 'disabled' : ''}`
         }
-        onClick={(e) => handleDisabledClick(e, 'Friends')}
+        onClick={(e) => handleDisabledClick(e, '/referrals')}
       >
         <img src={Friend} alt="Friends icon" />
         <span>Friends</span>
       </NavLink>
 
+      {/* ========== About Us ========== */}
       <NavLink 
         to="/Aboutus" 
         className={({ isActive }) => 
           `nav-item ${isActive ? 'active' : ''} ${!isNavbarActive ? 'disabled' : ''}`
         }
-        onClick={(e) => handleDisabledClick(e, 'About Us')}
+        onClick={(e) => handleDisabledClick(e, '/Aboutus')}
       >
         <img src={Aboutus} alt="Aboutus icon" />
         <span>About Us</span>
       </NavLink>
 
+      {/* ========== Wallets (همیشه فعال) ========== */}
       <NavLink 
         to="/" 
         className={({ isActive }) => 
