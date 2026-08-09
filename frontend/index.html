@@ -5,9 +5,7 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Crypto Capital Hub</title>
-    
     <meta name="robots" content="noindex, nofollow" />
-    <meta http-equiv="X-Frame-Options" content="DENY" />
     
     <style>
       * {
@@ -21,152 +19,15 @@
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       }
       
-      .telegram-error {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 100vh;
-        background: #0a0a1a;
-        color: #fff;
-        flex-direction: column;
-        text-align: center;
-        padding: 20px;
-      }
-      
-      .telegram-error h1 {
-        color: #e94560;
-        font-size: 2.5rem;
-        margin-bottom: 15px;
-      }
-      
-      .telegram-error .icon {
-        font-size: 4rem;
-        margin-bottom: 20px;
-      }
-      
-      .telegram-error p {
-        color: #888;
-        font-size: 1.1rem;
-        max-width: 400px;
-        line-height: 1.6;
-      }
-      
-      .telegram-error .sub-text {
-        color: #666;
-        font-size: 0.9rem;
-        margin-top: 10px;
-      }
-      
-      .telegram-error .telegram-btn {
-        margin-top: 25px;
-        padding: 12px 30px;
-        background: #e94560;
-        color: white;
-        border: none;
-        border-radius: 8px;
-        font-size: 1rem;
-        cursor: pointer;
-        text-decoration: none;
-        transition: background 0.3s;
-      }
-      
-      .telegram-error .telegram-btn:hover {
-        background: #c73e54;
-      }
-      
       #root {
         width: 100%;
         min-height: 100vh;
-        display: none; /* مخفی در ابتدا */
-      }
-      
-      #root.show {
         display: block;
       }
     </style>
   </head>
   <body>
-    <!-- صفحه خطا (اگر از تلگرام نباشد) -->
-    <!-- <div id="error-page">
-      <div class="telegram-error">
-        <div class="icon">⛔</div>
-        <h1>Access Denied</h1>
-        <p>This application is only available through Telegram mini-app.</p>
-        <p class="sub-text">Please open it from Telegram</p>
-        <a href="https://t.me/" target="_blank" class="telegram-btn">
-          📱 Open in Telegram
-        </a>
-      </div>
-    </div> -->
-    
-    <!-- محتوای اصلی -->
-    <!-- <div id="root"></div> -->
-    
-    <!-- اسکریپت Telegram WebApp -->
-    <!-- <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    
-    <script>
-      (function() {
-        // تابع بررسی تلگرام
-        function isTelegramWebApp() {
-          try {
-            const tg = window.Telegram?.WebApp;
-            if (!tg) return false;
-            
-            // بررسی بیشتر برای اطمینان
-            if (!tg.initDataUnsafe) return false;
-            if (!tg.initDataUnsafe?.user?.id) return false;
-            
-            return true;
-          } catch (e) {
-            return false;
-          }
-        }
-        
-        // تابع نمایش صفحه مناسب
-        function showApp() {
-          const errorPage = document.getElementById('error-page');
-          const root = document.getElementById('root');
-          
-          if (isTelegramWebApp()) {
-            // از تلگرام است → نمایش برنامه
-            if (errorPage) errorPage.style.display = 'none';
-            if (root) {
-              root.style.display = 'block';
-              root.classList.add('show');
-            }
-            
-            // راه‌اندازی Telegram WebApp
-            const tg = window.Telegram?.WebApp;
-            if (tg) {
-              tg.ready();
-              tg.expand();
-            }
-          } else {
-            // از تلگرام نیست → نمایش خطا
-            if (errorPage) errorPage.style.display = 'flex';
-            if (root) {
-              root.style.display = 'none';
-              root.classList.remove('show');
-            }
-            
-            // حذف محتوای اصلی
-            while (root && root.firstChild) {
-              root.removeChild(root.firstChild);
-            }
-          }
-        }
-        
-        // اجرا با تاخیرهای مختلف
-        setTimeout(showApp, 100);
-        setTimeout(showApp, 500);
-        setTimeout(showApp, 1000);
-        
-        // همچنین هر 2 ثانیه یکبار چک کن (برای امنیت بیشتر)
-        setInterval(showApp, 2000);
-      })();
-    </script> -->
-    
+    <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
