@@ -30,7 +30,7 @@ def get_or_create_user(wallet_address: str, telegram_id: int = None, is_telegram
     # if not is_telegram:
     #     raise ValueError("Only Telegram mini-app users are allowed")
 
-    # ✅ اگر telegram_id وجود نداشت، فقط با wallet_address کار کن
+    # ✅ اگر telegram_id وجود نداشت، فقط با wallet_address کار کن (برای reward_status و wallet_view)
     if not telegram_id:
         logger.warning("⚠️ No telegram_id, trying to find by wallet_address")
         user = AppUser.objects.filter(wallet_address=wallet_address).first()
@@ -59,7 +59,10 @@ def get_or_create_user(wallet_address: str, telegram_id: int = None, is_telegram
         if existing_user_by_telegram.wallet_locked:
             # اگر ولت قبلی با ولت جدید یکی نیست، خطا بده
             if existing_user_by_telegram.wallet_address != wallet_address:
-                raise ValueError(f"This Telegram ID is already linked to wallet: {existing_user_by_telegram.wallet_address[:10]}...")
+                raise ValueError(
+                    f"This Telegram ID is already linked to wallet: "
+                    f"{existing_user_by_telegram.wallet_address[:6]}...{existing_user_by_telegram.wallet_address[-4:]}"
+                )
         else:
             # اگر ولت قفل نشده باشد، ولت را به‌روز کن و قفلش کن
             if existing_user_by_telegram.wallet_address != wallet_address:

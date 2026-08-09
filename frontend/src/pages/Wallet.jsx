@@ -17,6 +17,7 @@ export default function Wallet() {
 
   const [wallet, setWallet] = useState(null);
   const [walletLocked, setWalletLocked] = useState(false);
+  const [connectError, setConnectError] = useState("");
 
   const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
   const [amount, setAmount] = useState("");
@@ -59,6 +60,7 @@ export default function Wallet() {
       console.log("⚠️ [Wallet] No address, clearing wallet");
       setWallet(null);
       setWalletLocked(false);
+      setConnectError("");
 
       setDebug((d) => ({
         ...d,
@@ -73,6 +75,7 @@ export default function Wallet() {
     async function connectAndLoadWallet() {
       try {
         console.log("🔄 [Wallet] Starting connectAndLoadWallet...");
+        setConnectError(""); // پاک کردن خطای قبلی
         
         const tgStartParam =
           window.Telegram?.WebApp?.initDataUnsafe?.start_param || "";
@@ -172,18 +175,25 @@ export default function Wallet() {
           return;
         }
 
-        const errText =
-          e?.response?.data?.error ||
-          e?.response?.data?.detail ||
-          JSON.stringify(e?.response?.data || {}) ||
-          String(e);
-        console.log("📊 [Wallet] Error text:", errText);
+        // ✅ نمایش خطا به کاربر
+        const errorMessage = e?.response?.data?.error ||
+                            e?.response?.data?.detail ||
+                            e?.message ||
+                            "Failed to connect wallet. Please try again.";
+        
+        console.log("📊 [Wallet] Error text:", errorMessage);
+        setConnectError(errorMessage);
 
         setDebug((d) => ({
           ...d,
           connectStatus: "connect FAILED ❌",
-          connectError: errText,
+          connectError: errorMessage,
         }));
+
+        // ✅ اگر خطای مربوط به قفل بودن ولت است، پیام خاص نمایش بده
+        if (errorMessage.includes("already linked") || errorMessage.includes("locked")) {
+          setConnectError("🔒 This wallet is already linked to another Telegram account. Please use your original wallet.");
+        }
 
         try {
           console.log("🔄 [Wallet] Trying to fetch wallet data anyway...");
@@ -319,6 +329,7 @@ export default function Wallet() {
     address,
     wallet: wallet,
     walletLocked,
+    connectError,
     isWithdrawOpen,
     amount,
     withdrawError,
@@ -337,6 +348,22 @@ export default function Wallet() {
         <div className="connect-button-wrapper">
           <TonConnectButton />
         </div>
+
+        {/* ========== نمایش خطای اتصال ========== */}
+        {connectError && (
+          <div className="wallet-error" style={{
+            color: '#ff6b6b',
+            background: 'rgba(255,0,0,0.1)',
+            padding: '12px 16px',
+            borderRadius: '8px',
+            marginTop: '12px',
+            border: '1px solid rgba(255,0,0,0.2)',
+            fontSize: '14px',
+            textAlign: 'center'
+          }}>
+            ⚠️ {connectError}
+          </div>
+        )}
 
         {/* Debug Box - کامنت شده */}
         {/* <div className="debug-box">
