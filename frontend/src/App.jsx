@@ -1,78 +1,121 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useEffect } from "react";
+import Navbar from "./components/Navbar";
 
-const WalletContext = createContext();
+import Wallet from "./pages/Wallet";
+import Referrals from "./pages/Referrals";
+import Purchase from "./pages/Purchase";
+import AboutUs from "./pages/Aboutus";
+import Timer from "./pages/Timer";
 
-export function WalletProvider({ children }) {
-  const [isWalletValid, setIsWalletValid] = useState(false);
-  const [walletAddress, setWalletAddress] = useState(null);
-  const [telegramId, setTelegramId] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+import useTgStartRedirect from "./hooks/useTgStartRedirect";
+import { useTonWallet } from "@tonconnect/ui-react";
+import { useWallet } from "./context/WalletContext";
 
-  // بررسی اعتبار ولت از localStorage
+
+function ProtectedRoute({ children }) {
+  const tonWallet = useTonWallet();
+  const { isWalletValid } = useWallet();
+
+  // اگر ولت وصل نیست یا ولت معتبر نیست
+  if (!tonWallet?.account?.address || !isWalletValid) {
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
+}
+
+
+function AppContent() {
+  useTgStartRedirect();
+  const tonWallet = useTonWallet();
+  const { isWalletValid, validateWallet, setIsWalletValid } = useWallet();
+  const address = tonWallet?.account?.address;
+
+  // بررسی ولت هر بار که تغییر می‌کند
   useEffect(() => {
-    const savedWallet = localStorage.getItem('valid_wallet');
-    const savedTelegram = localStorage.getItem('telegram_id');
-    
-    if (savedWallet && savedTelegram) {
-      setWalletAddress(savedWallet);
-      setTelegramId(parseInt(savedTelegram));
-      setIsWalletValid(true);
+    if (address) {
+      // دریافت telegramId از localStorage
+      const telegramId = localStorage.getItem('telegram_id');
+      const savedWallet = localStorage.getItem('valid_wallet');
+      
+      if (telegramId && savedWallet) {
+        // بررسی اینکه ولت فعلی با ولت ذخیره شده یکی است
+        if (address === savedWallet) {
+          validateWallet(address, parseInt(telegramId));
+          setIsWalletValid(true);
+        } else {
+          setIsWalletValid(false);
+        }
+      } else if (telegramId) {
+        // اگر ولت ذخیره نشده ولی telegramId وجود دارد
+        localStorage.setItem('valid_wallet', address);
+        validateWallet(address, parseInt(telegramId));
+        setIsWalletValid(true);
+      }
+    } else {
+      // اگر ولت قطع شده
+      setIsWalletValid(false);
     }
-    setIsLoading(false);
-  }, []);
-
-  const validateWallet = (address, tgId) => {
-    const savedWallet = localStorage.getItem('valid_wallet');
-    const savedTelegram = localStorage.getItem('telegram_id');
-    
-    // اگر ولت و تلگرام در localStorage ذخیره شده باشند
-    if (savedWallet && savedTelegram) {
-      const isValid = address === savedWallet && tgId === parseInt(savedTelegram);
-      setIsWalletValid(isValid);
-      return isValid;
-    }
-    
-    // اگر هنوز ذخیره نشده، ولت جدید را ذخیره کن
-    if (address && tgId) {
-      localStorage.setItem('valid_wallet', address);
-      localStorage.setItem('telegram_id', tgId);
-      setWalletAddress(address);
-      setTelegramId(tgId);
-      setIsWalletValid(true);
-      return true;
-    }
-    
-    setIsWalletValid(false);
-    return false;
-  };
-
-  const resetWallet = () => {
-    localStorage.removeItem('valid_wallet');
-    localStorage.removeItem('telegram_id');
-    setIsWalletValid(false);
-    setWalletAddress(null);
-    setTelegramId(null);
-  };
+  }, [address, validateWallet, setIsWalletValid]);
 
   return (
-    <WalletContext.Provider value={{
-      isWalletValid,
-      walletAddress,
-      telegramId,
-      isLoading,
-      validateWallet,
-      resetWallet,
-      setIsWalletValid
-    }}>
-      {children}
-    </WalletContext.Provider>
+    <div style={{ padding: 16 }}>
+      <Routes>
+        <Route path="/" element={<Wallet />} />
+
+        <Route
+          path="/referrals"
+          element={
+            <ProtectedRoute>
+              <Referrals />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/stake"
+          element={
+            <ProtectedRoute>
+              <Purchase />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/Aboutus"
+          element={
+            <ProtectedRoute>
+              <AboutUs />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/Timer"
+          element={
+            <ProtectedRoute>
+              <Timer />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="*"
+          element={<Navigate to="/" replace />}
+        />
+      </Routes>
+      <Navbar />
+    </div>
   );
 }
 
-export function useWallet() {
-  const context = useContext(WalletContext);
-  if (!context) {
-    throw new Error('useWallet must be used within a WalletProvider');
-  }
-  return context;
+
+// ✅ اینجا export default باید باشد
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppContent />
+    </BrowserRouter>
+  );
 }
