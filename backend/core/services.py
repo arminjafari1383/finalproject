@@ -22,49 +22,70 @@ REFERRAL_TOKEN_REWARD = Decimal("3")  # پاداش هر دعوت
 
 def get_or_create_user(wallet_address: str, telegram_id: int = None, is_telegram: bool = False) -> AppUser:
     """
-    دریافت یا ساخت کاربر جدید - نسخه سازگار با تست در مرورگر
+    دریافت یا ساخت کاربر جدید با قفل شدن ولت پس از اولین اتصال
     """
     logger.info(f"🔍 get_or_create_user: wallet={wallet_address}, telegram_id={telegram_id}, is_telegram={is_telegram}")
     
-    # ✅ برای تست در مرورگر، این خط را کامنت کنید
+    # برای تست در مرورگر، این خط را کامنت کنید
     # if not is_telegram:
     #     raise ValueError("Only Telegram mini-app users are allowed")
 
-    # اگر telegram_id وجود نداشت، از wallet_address استفاده کنید
+    # اگر telegram_id وجود نداشت، خطا بده
     if not telegram_id:
-        logger.warning("⚠️ No telegram_id, using wallet_address")
-        user, created = AppUser.objects.get_or_create(wallet_address=wallet_address)
-        if created:
-            Wallet.objects.create(user=user)
-            logger.info(f"✅ New user created with wallet: {wallet_address}")
-        return user
+        raise ValueError("Telegram ID is required")
     
-    # پیدا کردن کاربر با telegram_id
-    existing_user = AppUser.objects.filter(telegram_id=telegram_id).first()
-
-    if existing_user:
-        logger.info(f"✅ Existing user found: {existing_user.wallet_address}")
-        if existing_user.wallet_address != wallet_address:
-            # اگر ولت متفاوت است، ولت جدید را ذخیره کنید
-            existing_user.wallet_address = wallet_address
-            existing_user.save()
-            logger.info(f"🔄 Updated wallet address to: {wallet_address}")
-        return existing_user
+    # ✅ بررسی اینکه آیا این telegram_id قبلاً ثبت شده است
+    existing_user_by_telegram = AppUser.objects.filter(telegram_id=telegram_id).first()
     
-    # ایجاد کاربر جدید
-    user, created = AppUser.objects.get_or_create(
+    if existing_user_by_telegram:
+        logger.info(f"✅ User found by telegram_id: {existing_user_by_telegram.wallet_address}")
+        
+        # ✅ اگر ولت قفل شده باشد، اجازه تغییر ولت را نده
+        if existing_user_by_telegram.wallet_locked:
+            # اگر ولت قبلی با ولت جدید یکی نیست، خطا بده
+            if existing_user_by_telegram.wallet_address != wallet_address:
+                raise ValueError(f"This Telegram ID is already linked to wallet: {existing_user_by_telegram.wallet_address[:10]}...")
+        else:
+            # اگر ولت قفل نشده باشد، ولت را به‌روز کن و قفلش کن
+            if existing_user_by_telegram.wallet_address != wallet_address:
+                existing_user_by_telegram.wallet_address = wallet_address
+                existing_user_by_telegram.wallet_locked = True
+                existing_user_by_telegram.save()
+                logger.info(f"🔒 Wallet locked for user: {existing_user_by_telegram.wallet_address}")
+        
+        return existing_user_by_telegram
+    
+    # ✅ بررسی اینکه آیا این wallet_address قبلاً با telegram_id دیگری ثبت شده است
+    existing_user_by_wallet = AppUser.objects.filter(wallet_address=wallet_address).first()
+    
+    if existing_user_by_wallet:
+        logger.info(f"⚠️ Wallet address already registered with telegram_id: {existing_user_by_wallet.telegram_id}")
+        
+        # اگر ولت قبلاً ثبت شده ولی telegram_id ندارد، به‌روز کن
+        if not existing_user_by_wallet.telegram_id:
+            existing_user_by_wallet.telegram_id = telegram_id
+            existing_user_by_wallet.is_telegram_user = True
+            existing_user_by_wallet.telegram_verified = True
+            existing_user_by_wallet.wallet_locked = True
+            existing_user_by_wallet.save()
+            logger.info(f"🔒 Wallet locked for existing user: {existing_user_by_wallet.wallet_address}")
+            return existing_user_by_wallet
+        
+        # اگر ولت قبلاً با telegram_id دیگری ثبت شده، خطا بده
+        raise ValueError("This wallet is already linked to another Telegram account")
+    
+    # ✅ ایجاد کاربر جدید
+    user = AppUser.objects.create(
         wallet_address=wallet_address,
-        defaults={
-            'telegram_id': telegram_id,
-            'is_telegram_user': True,
-            'telegram_verified': True
-        }
+        telegram_id=telegram_id,
+        is_telegram_user=True,
+        telegram_verified=True,
+        wallet_locked=True
     )
-
-    if created:
-        Wallet.objects.create(user=user)
-        logger.info(f"✅ New user created: {telegram_id} - {wallet_address}")
-
+    
+    Wallet.objects.create(user=user)
+    logger.info(f"✅ New user created with locked wallet: {wallet_address}")
+    
     return user
 
 

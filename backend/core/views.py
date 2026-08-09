@@ -36,17 +36,20 @@ def connect_wallet(request):
 
     try:
         user = get_or_create_user(wallet_address, telegram_id, is_telegram)
+        
+        # ✅ اگر کاربر جدید است و کد رفرال دارد، اعمال کن
+        if inviter_code and not user.inviter_id:
+            apply_referral(inviter_code, user)
+            
     except ValueError as e:
         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-    if inviter_code:
-        apply_referral(inviter_code, user)
 
     return Response({
         "user": {
             "telegram_id": user.telegram_id,
             "wallet_address": user.wallet_address,
-            "referral_code": user.referral_code
+            "referral_code": user.referral_code,
+            "wallet_locked": user.wallet_locked  # ✅ ارسال وضعیت قفل
         }
     }, status=status.HTTP_200_OK)
 
@@ -82,7 +85,7 @@ def create_purchase(request):
     except:
         return Response({"error": "invalid ton_amount"}, status=400)
 
-    user = get_or_create_user(wallet_address)
+    user = get_or_create_user(wallet_address, telegram_id=None, is_telegram=False)
 
     try:
         p = register_purchase(user, ton_amount, str(ton_tx_hash))
@@ -99,7 +102,7 @@ def list_purchases(request):
     if not wallet_address:
         return Response({"error": "wallet param required"}, status=400)
 
-    user = get_or_create_user(wallet_address)
+    user = get_or_create_user(wallet_address, telegram_id=None, is_telegram=False)
     qs = user.purchases.order_by("-created_at")
     return Response(PurchaseSerializer(qs, many=True).data)
 
@@ -116,7 +119,7 @@ def request_withdraw(request):
     if amount < Decimal("60"):
         return Response({"error": "min withdraw is 60 ECG"}, status=status.HTTP_400_BAD_REQUEST)
 
-    user = get_or_create_user(wallet_address)
+    user = get_or_create_user(wallet_address, telegram_id=None, is_telegram=False)
     w = user.wallet
 
     if scope == "DOWNLINE_ONLY":
@@ -196,7 +199,7 @@ def referral_count(request):
     if not wallet_address:
         return Response({"error": "wallet_address required"}, status=status.HTTP_400_BAD_REQUEST)
 
-    user = get_or_create_user(wallet_address)
+    user = get_or_create_user(wallet_address, telegram_id=None, is_telegram=False)
     return Response({"count": user.invitees.count()}, status=status.HTTP_200_OK)
 
 
@@ -214,7 +217,7 @@ def reward_status(request):
     if not wallet_address:
         return Response({"error": "wallet_address required"}, status=status.HTTP_400_BAD_REQUEST)
 
-    user = get_or_create_user(wallet_address)
+    user = get_or_create_user(wallet_address, telegram_id=None, is_telegram=False)
     w = user.wallet
     now = timezone.now()
 
@@ -241,7 +244,7 @@ def tick(request):
     if not wallet_address:
         return Response({"error": "wallet_address required"}, status=status.HTTP_400_BAD_REQUEST)
 
-    user = get_or_create_user(wallet_address)
+    user = get_or_create_user(wallet_address, telegram_id=None, is_telegram=False)
     w = user.wallet
     now = timezone.now()
 

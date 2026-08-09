@@ -15,7 +15,8 @@ class AppUser(models.Model):
 
     is_telegram_user = models.BooleanField(default=False)
     telegram_verified = models.BooleanField(default=False)
-
+    wallet_locked = models.BooleanField(default=False)  # ✅ قفل شدن ولت
+    
     def save(self, *args, **kwargs):
         if not self.referral_code:
             self.referral_code = uuid.uuid4().hex[:10]
