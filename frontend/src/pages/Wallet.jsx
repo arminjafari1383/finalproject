@@ -6,9 +6,11 @@ import {
   captureInviterCode,
   clearInviterCode,
 } from "../utils/referral";
+import { useUserData } from "../hooks/useUserData";
 
 export default function Wallet() {
   const tonWallet = useTonWallet();
+  const { userData, saveUserData, loadUserData } = useUserData();
 
   const address = useMemo(
     () => tonWallet?.account?.address,
@@ -51,6 +53,18 @@ export default function Wallet() {
     }));
   }, []);
 
+  // ذخیره آدرس ولت در کوکی
+  useEffect(() => {
+    if (address) {
+      const currentData = loadUserData() || {};
+      saveUserData({
+        ...currentData,
+        walletAddress: address
+      });
+      console.log("💾 [Wallet] Wallet address saved to cookie:", address);
+    }
+  }, [address, saveUserData, loadUserData]);
+
   // Connect wallet and load wallet information
   useEffect(() => {
     console.log("🔍 [Wallet] useEffect - connectAndLoadWallet triggered");
@@ -75,7 +89,7 @@ export default function Wallet() {
     async function connectAndLoadWallet() {
       try {
         console.log("🔄 [Wallet] Starting connectAndLoadWallet...");
-        setConnectError(""); // پاک کردن خطای قبلی
+        setConnectError("");
         
         const tgStartParam =
           window.Telegram?.WebApp?.initDataUnsafe?.start_param || "";
@@ -88,26 +102,64 @@ export default function Wallet() {
         const inviter_code = captureInviterCode();
         console.log("📊 [Wallet] inviter_code from capture:", inviter_code);
 
-        // ✅ دریافت Telegram ID با مقدار پیش‌فرض برای مرورگر
-        let telegramId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id || null;
-        
-        // اگر در مرورگر هستیم و telegramId وجود ندارد، از localStorage استفاده کن
-        if (!telegramId) {
-          const savedTelegramId = localStorage.getItem('telegram_id');
-          if (savedTelegramId) {
-            telegramId = parseInt(savedTelegramId);
-            console.log("📊 [Wallet] telegramId from localStorage:", telegramId);
+        // ✅ دریافت Telegram ID از کوکی یا تلگرام
+        let telegramId = null;
+        let telegramUsername = null;
+        let isTelegram = false;
+
+        // ابتدا از کوکی بخوان
+        const savedData = loadUserData();
+        console.log("📂 [Wallet] Saved data from cookie:", savedData);
+
+        if (savedData?.telegramId && savedData.telegramId > 0) {
+          // استفاده از اطلاعات ذخیره شده در کوکی
+          telegramId = savedData.telegramId;
+          telegramUsername = savedData.telegramUsername || null;
+          isTelegram = savedData.isTelegram || false;
+          console.log("📂 [Wallet] Using telegram_id from cookie:", telegramId);
+        } else {
+          // اگر در کوکی نبود، از تلگرام بگیر
+          const tg = window.Telegram?.WebApp;
+          if (tg?.initDataUnsafe?.user) {
+            const user = tg.initDataUnsafe.user;
+            telegramId = user.id;
+            telegramUsername = user.username || null;
+            isTelegram = true;
+            console.log("✅ [Wallet] Using telegram_id from Telegram:", telegramId);
+            
+            // ذخیره در کوکی برای استفاده‌های بعدی
+            saveUserData({
+              telegramId: telegramId,
+              telegramUsername: telegramUsername,
+              isTelegram: true
+            });
           } else {
-            // برای تست، یک ID تصادفی بساز
-            telegramId = Math.floor(Math.random() * 1000000000) + 100000000;
-            localStorage.setItem('telegram_id', telegramId);
-            console.log("📊 [Wallet] telegramId generated:", telegramId);
+            // اگر در مرورگر هستیم، از آدرس ولت یک ID بساز
+            if (address) {
+              let hash = 0;
+              for (let i = 0; i < address.length; i++) {
+                const char = address.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash;
+              }
+              telegramId = Math.abs(hash) + 1000000000000;
+              telegramUsername = `browser_${address.slice(0, 8)}`;
+              isTelegram = false;
+              console.log("🌐 [Wallet] Generated browser telegram_id:", telegramId);
+              
+              // ذخیره در کوکی
+              saveUserData({
+                telegramId: telegramId,
+                telegramUsername: telegramUsername,
+                isTelegram: false,
+                walletAddress: address
+              });
+            }
           }
         }
-        
-        console.log("📊 [Wallet] telegramId:", telegramId);
-        console.log("📊 [Wallet] window.Telegram?.WebApp:", window.Telegram?.WebApp);
-        console.log("📊 [Wallet] initDataUnsafe:", window.Telegram?.WebApp?.initDataUnsafe);
+
+        console.log("📊 [Wallet] Final telegramId:", telegramId);
+        console.log("📊 [Wallet] Final isTelegram:", isTelegram);
 
         setDebug((d) => ({
           ...d,
@@ -123,7 +175,8 @@ export default function Wallet() {
           wallet_address: address,
           inviter_code: inviter_code || null,
           telegram_id: telegramId,
-          is_telegram: true
+          telegram_username: telegramUsername,
+          is_telegram: isTelegram
         };
         console.log("📤 [Wallet] Sending to /api/connect/:", payload);
 
@@ -142,9 +195,15 @@ export default function Wallet() {
           console.log("🔒 [Wallet] Wallet is locked to this Telegram ID");
         }
 
-        // ذخیره کردن telegram_id در localStorage برای استفاده‌های بعدی
-        if (response.data?.user?.telegram_id) {
-          localStorage.setItem('telegram_id', response.data.user.telegram_id);
+        // به‌روزرسانی کوکی با اطلاعات برگشتی از سرور
+        if (response.data?.user) {
+          const user = response.data.user;
+          saveUserData({
+            telegramId: user.telegram_id || telegramId,
+            telegramUsername: user.telegram_username || telegramUsername,
+            isTelegram: user.is_telegram || isTelegram,
+            walletAddress: address
+          });
         }
 
         setDebug((d) => ({
@@ -232,7 +291,7 @@ export default function Wallet() {
       console.log("🔚 [Wallet] Cleanup: cancelling");
       cancelled = true;
     };
-  }, [address]);
+  }, [address, loadUserData, saveUserData]);
 
   const resetReferral = () => {
     console.log("🔄 [Wallet] resetReferral called");
@@ -334,7 +393,8 @@ export default function Wallet() {
     amount,
     withdrawError,
     isWithdrawing,
-    debug
+    debug,
+    userData
   });
 
   return (
@@ -364,37 +424,6 @@ export default function Wallet() {
             ⚠️ {connectError}
           </div>
         )}
-
-        {/* Debug Box - کامنت شده */}
-        {/* <div className="debug-box">
-          <div className="debug-item">
-            <span className="debug-label">TG start_param:</span>
-            <span className="debug-value">{debug.tgStartParam || "-"}</span>
-          </div>
-          <div className="debug-item">
-            <span className="debug-label">LS inviter_code:</span>
-            <span className="debug-value">{debug.lsInviterCode || "-"}</span>
-          </div>
-          <div className="debug-item">
-            <span className="debug-label">SENT inviter_code:</span>
-            <span className="debug-value">{debug.sentInviterCode || "-"}</span>
-          </div>
-          <div className="debug-item">
-            <span className="debug-label">Status:</span>
-            <span className="debug-value status-value">{debug.connectStatus || "-"}</span>
-          </div>
-          {debug.connectError ? (
-            <div className="debug-error">
-              <span className="debug-label">Error:</span>
-              <span className="debug-value error-value">{debug.connectError}</span>
-            </div>
-          ) : null}
-          <div className="debug-reset">
-            <button onClick={resetReferral} className="debug-reset-button">
-              Reset Referral
-            </button>
-          </div>
-        </div> */}
 
         {address && (
           <div className="wallet-content">
