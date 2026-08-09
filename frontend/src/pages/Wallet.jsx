@@ -50,7 +50,7 @@ export default function Wallet() {
   const [connectError, setConnectError] = useState("");
   
   // ✅ نوع خطا را ذخیره می‌کنیم تا در UI نمایش دهیم
-  const [errorType, setErrorType] = useState("none"); // 'locked', 'bad_request', 'server_error', 'none'
+  const [errorType, setErrorType] = useState("none"); // 'locked', 'bad_request', 'server_error', 'network_error', 'none'
 
   const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
   const [amount, setAmount] = useState("");
@@ -232,27 +232,47 @@ export default function Wallet() {
     } catch (e) {
       console.log("❌ [Wallet] Error in connectAndLoadWallet:");
       
+      // ✅ لاگ‌گیری کامل از خطا برای دیباگ
+      console.log("🔍 [Wallet] Full Error Object:", e);
+      console.log("🔍 [Wallet] Error Message:", e.message);
+      console.log("🔍 [Wallet] Error Code:", e.code);
+      
+      if (e.response) {
+        console.log("🔍 [Wallet] Response Data:", e.response.data);
+        console.log("🔍 [Wallet] Response Status:", e.response.status);
+        console.log("🔍 [Wallet] Response Headers:", e.response.headers);
+      } else if (e.request) {
+        console.log("🔍 [Wallet] Request was made but no response received:", e.request);
+      } else {
+        console.log("🔍 [Wallet] Something happened in setting up the request:", e.message);
+      }
+
       const errorData = e?.response?.data;
       const statusCode = e?.response?.status;
+      const isNetworkError = e.message === 'Network Error' || e.code === 'ERR_NETWORK' || !e.response;
 
-      // ====== 1. تشخیص خطای قفل بودن ولت (Locked) ======
-      const isWalletLocked = errorData?.error?.includes("already linked") || 
-                            errorData?.error?.includes("locked") ||
-                            errorData?.detail?.includes("already linked");
-
-      if (isWalletLocked) {
+      // ====== 1. تشخیص خطای شبکه (Network Error) ======
+      if (isNetworkError) {
+        setErrorType("network_error");
+        setConnectError("🌐 Network Error! Please check your internet connection and try again.");
+        console.log("❌ [Wallet] Network Error detected. The server is unreachable.");
+      }
+      // ====== 2. تشخیص خطای قفل بودن ولت (Locked) ======
+      else if (errorData?.error?.includes("already linked") || 
+               errorData?.error?.includes("locked") ||
+               errorData?.detail?.includes("already linked")) {
         setErrorType("locked");
         setConnectError("🔒 This wallet is already linked to another Telegram account.");
         console.log("🔒 [Wallet] Wallet linked to another account");
       } 
-      // ====== 2. تشخیص خطای 400 (Bad Request) ======
+      // ====== 3. تشخیص خطای 400 (Bad Request) ======
       else if (statusCode === 400) {
         setErrorType("bad_request");
         const msg = errorData?.error || errorData?.detail || "The wallet address format is invalid.";
         setConnectError(`⚠️ Bad Request: ${msg}`);
         console.log("❌ [Wallet] Bad Request (400). Check your wallet address format.");
       } 
-      // ====== 3. سایر خطاهای سرور ======
+      // ====== 4. سایر خطاهای سرور ======
       else {
         setErrorType("server_error");
         const errorMessage = errorData?.error ||
@@ -268,8 +288,8 @@ export default function Wallet() {
         connectError: errorData?.error || errorData?.detail || "",
       }));
 
-      // تلاش برای دریافت اطلاعات ولت (فقط اگر خطای 400 نباشد)
-      if (statusCode !== 400) {
+      // تلاش برای دریافت اطلاعات ولت (فقط اگر خطای 400 یا Network نباشد)
+      if (statusCode !== 400 && !isNetworkError) {
         try {
           console.log("🔄 [Wallet] Trying to fetch wallet data anyway...");
           const r = await api.get(`/wallet/${address}/`);
@@ -302,6 +322,14 @@ export default function Wallet() {
     hasConnected.current = false;
     
     window.location.reload();
+  };
+
+  // تابع تلاش مجدد (Retry) برای خطای شبکه
+  const handleRetry = () => {
+    setConnectError("");
+    setErrorType("none");
+    hasConnected.current = false; // ریست کردن قفل
+    window.location.reload(); // رفرش کردن صفحه برای تلاش مجدد
   };
 
   const resetReferral = () => {
@@ -423,6 +451,30 @@ export default function Wallet() {
             {errorType === 'bad_request' && (
               <div style={{ marginTop: '12px', fontSize: '13px', color: '#888' }}>
                 Make sure you are using a valid TON wallet address.
+              </div>
+            )}
+
+            {/* اگر خطای شبکه (Network Error) بود، دکمه Retry را نشان بده */}
+            {errorType === 'network_error' && (
+              <div style={{ marginTop: '12px' }}>
+                <p style={{ fontSize: '13px', color: '#666', marginBottom: '10px' }}>
+                  The server is currently unreachable. Please check your internet connection.
+                </p>
+                <button
+                  onClick={handleRetry}
+                  style={{
+                    padding: '8px 20px',
+                    background: '#007bff',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '600'
+                  }}
+                >
+                  🔄 Retry Connection
+                </button>
               </div>
             )}
           </div>
