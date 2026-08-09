@@ -197,8 +197,27 @@ export default function Wallet() {
     console.log("📤 [Wallet] Sending to /api/connect/:");
     console.log("📤 [Wallet] Payload:", JSON.stringify(payload, null, 2));
 
+    // ============================================================
+    // ⏱️ شروع زمان‌بندی و لاگ‌های گسترده
+    // ============================================================
+    const startTime = Date.now();
+    console.group(`📡 [Request] /connect/ (Started at ${new Date().toISOString()})`);
+
     try {
+      console.log("📤 [Axios] Sending POST request...");
+      console.log("📤 [Axios] URL:", api.defaults.baseURL + "/connect/");
+      console.log("📤 [Axios] Payload:", payload);
+      
       const response = await api.post("/connect/", payload);
+      const endTime = Date.now();
+      console.log(`⏱️ [Timing] Request took ${endTime - startTime}ms`);
+
+      console.log("✅ [Axios] Response received!");
+      console.log("✅ [Axios] Status:", response.status);
+      console.log("✅ [Axios] Status Text:", response.statusText);
+      console.log("✅ [Axios] Full Response Headers:", response.headers);
+      console.log("✅ [Axios] Response Data:", response.data);
+
       console.log("✅ [Wallet] /connect/ response:", response.data);
 
       if (response.data?.user?.wallet_locked) {
@@ -223,29 +242,46 @@ export default function Wallet() {
       }));
 
       console.log("🔄 [Wallet] Fetching wallet data...");
+      console.log("🔄 [Axios] Fetching /wallet/${address}/...");
+      
       const r = await api.get(`/wallet/${address}/`);
+      console.log("✅ [Axios] Wallet Data Response:", r.data);
       console.log("✅ [Wallet] Wallet data:", r.data);
 
       setWallet(r.data);
       setErrorType("none"); // اتصال موفق
+      
+      console.groupEnd(); // پایان گروه لاگ
 
     } catch (e) {
+      const endTime = Date.now();
+      console.log(`⏱️ [Timing] Request failed after ${endTime - startTime}ms`);
+      console.groupEnd(); // پایان گروه لاگ
+
       console.log("❌ [Wallet] Error in connectAndLoadWallet:");
       
       // ✅ لاگ‌گیری کامل از خطا برای دیباگ
-      console.log("🔍 [Wallet] Full Error Object:", e);
+      console.log("🔍 [Wallet] FULL ERROR OBJECT START ----------------------------");
+      console.log("🔍 [Wallet] Error Name:", e.name);
       console.log("🔍 [Wallet] Error Message:", e.message);
       console.log("🔍 [Wallet] Error Code:", e.code);
+      console.log("🔍 [Wallet] Error Stack:", e.stack);
       
       if (e.response) {
-        console.log("🔍 [Wallet] Response Data:", e.response.data);
-        console.log("🔍 [Wallet] Response Status:", e.response.status);
+        console.log("🔍 [Wallet] ✅ A response was received from the server.");
+        console.log("🔍 [Wallet] Response Status Code:", e.response.status);
+        console.log("🔍 [Wallet] Response Status Text:", e.response.statusText);
         console.log("🔍 [Wallet] Response Headers:", e.response.headers);
+        console.log("🔍 [Wallet] Response Data:", e.response.data);
       } else if (e.request) {
-        console.log("🔍 [Wallet] Request was made but no response received:", e.request);
+        console.log("🔍 [Wallet] ⚠️ Request was made but NO response received.");
+        console.log("🔍 [Wallet] Request object:", e.request);
+        console.log("🔍 [Wallet] This usually means a Network Error (CORS or DNS).");
       } else {
-        console.log("🔍 [Wallet] Something happened in setting up the request:", e.message);
+        console.log("🔍 [Wallet] ❌ Something happened in setting up the request.");
+        console.log("🔍 [Wallet] Error message:", e.message);
       }
+      console.log("🔍 [Wallet] FULL ERROR OBJECT END ------------------------------");
 
       const errorData = e?.response?.data;
       const statusCode = e?.response?.status;
