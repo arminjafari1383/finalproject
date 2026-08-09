@@ -49,7 +49,7 @@ def connect_wallet(request):
             "telegram_id": user.telegram_id,
             "wallet_address": user.wallet_address,
             "referral_code": user.referral_code,
-            "wallet_locked": user.wallet_locked  # ✅ ارسال وضعیت قفل
+            "wallet_locked": user.wallet_locked
         }
     }, status=status.HTTP_200_OK)
 
@@ -58,9 +58,20 @@ def connect_wallet(request):
 def wallet_view(request, wallet_address):
     print(f"🔍 wallet_view called for: {wallet_address}")
     
+    # ✅ دریافت telegram_id از کوئری پارامتر
+    telegram_id = request.query_params.get("telegram_id")
+    is_telegram = request.query_params.get("is_telegram", "false").lower() == "true"
+    
+    print(f"📊 telegram_id: {telegram_id}, is_telegram: {is_telegram}")
+    
     try:
-        # ✅ برای تست در مرورگر، telegram_id و is_telegram را ارسال کنید
-        user = get_or_create_user(wallet_address, telegram_id=None, is_telegram=False)
+        # اگر telegram_id وجود داشت، با آن کاربر را پیدا کن
+        if telegram_id:
+            user = get_or_create_user(wallet_address, int(telegram_id), is_telegram)
+        else:
+            # اگر telegram_id وجود نداشت، فقط با wallet_address
+            user = get_or_create_user(wallet_address, telegram_id=None, is_telegram=False)
+            
         return Response(WalletSerializer(user.wallet).data, status=status.HTTP_200_OK)
     except Exception as e:
         print(f"❌ Error in wallet_view: {e}")
@@ -85,7 +96,14 @@ def create_purchase(request):
     except:
         return Response({"error": "invalid ton_amount"}, status=400)
 
-    user = get_or_create_user(wallet_address, telegram_id=None, is_telegram=False)
+    # ✅ دریافت telegram_id از کوئری پارامتر یا هدر
+    telegram_id = request.query_params.get("telegram_id") or request.headers.get("X-Telegram-Id")
+    is_telegram = request.query_params.get("is_telegram", "false").lower() == "true" or request.headers.get("X-Telegram") == "true"
+    
+    if telegram_id:
+        user = get_or_create_user(wallet_address, int(telegram_id), is_telegram)
+    else:
+        user = get_or_create_user(wallet_address, telegram_id=None, is_telegram=False)
 
     try:
         p = register_purchase(user, ton_amount, str(ton_tx_hash))
@@ -102,7 +120,15 @@ def list_purchases(request):
     if not wallet_address:
         return Response({"error": "wallet param required"}, status=400)
 
-    user = get_or_create_user(wallet_address, telegram_id=None, is_telegram=False)
+    # ✅ دریافت telegram_id از کوئری پارامتر
+    telegram_id = request.query_params.get("telegram_id")
+    is_telegram = request.query_params.get("is_telegram", "false").lower() == "true"
+    
+    if telegram_id:
+        user = get_or_create_user(wallet_address, int(telegram_id), is_telegram)
+    else:
+        user = get_or_create_user(wallet_address, telegram_id=None, is_telegram=False)
+    
     qs = user.purchases.order_by("-created_at")
     return Response(PurchaseSerializer(qs, many=True).data)
 
@@ -119,7 +145,15 @@ def request_withdraw(request):
     if amount < Decimal("60"):
         return Response({"error": "min withdraw is 60 ECG"}, status=status.HTTP_400_BAD_REQUEST)
 
-    user = get_or_create_user(wallet_address, telegram_id=None, is_telegram=False)
+    # ✅ دریافت telegram_id از هدر
+    telegram_id = request.headers.get("X-Telegram-Id")
+    is_telegram = request.headers.get("X-Telegram") == "true"
+    
+    if telegram_id:
+        user = get_or_create_user(wallet_address, int(telegram_id), is_telegram)
+    else:
+        user = get_or_create_user(wallet_address, telegram_id=None, is_telegram=False)
+    
     w = user.wallet
 
     if scope == "DOWNLINE_ONLY":
@@ -199,7 +233,15 @@ def referral_count(request):
     if not wallet_address:
         return Response({"error": "wallet_address required"}, status=status.HTTP_400_BAD_REQUEST)
 
-    user = get_or_create_user(wallet_address, telegram_id=None, is_telegram=False)
+    # ✅ دریافت telegram_id از کوئری پارامتر
+    telegram_id = request.query_params.get("telegram_id")
+    is_telegram = request.query_params.get("is_telegram", "false").lower() == "true"
+    
+    if telegram_id:
+        user = get_or_create_user(wallet_address, int(telegram_id), is_telegram)
+    else:
+        user = get_or_create_user(wallet_address, telegram_id=None, is_telegram=False)
+    
     return Response({"count": user.invitees.count()}, status=status.HTTP_200_OK)
 
 
@@ -217,7 +259,15 @@ def reward_status(request):
     if not wallet_address:
         return Response({"error": "wallet_address required"}, status=status.HTTP_400_BAD_REQUEST)
 
-    user = get_or_create_user(wallet_address, telegram_id=None, is_telegram=False)
+    # ✅ دریافت telegram_id از کوئری پارامتر
+    telegram_id = request.query_params.get("telegram_id")
+    is_telegram = request.query_params.get("is_telegram", "false").lower() == "true"
+    
+    if telegram_id:
+        user = get_or_create_user(wallet_address, int(telegram_id), is_telegram)
+    else:
+        user = get_or_create_user(wallet_address, telegram_id=None, is_telegram=False)
+    
     w = user.wallet
     now = timezone.now()
 
@@ -244,7 +294,15 @@ def tick(request):
     if not wallet_address:
         return Response({"error": "wallet_address required"}, status=status.HTTP_400_BAD_REQUEST)
 
-    user = get_or_create_user(wallet_address, telegram_id=None, is_telegram=False)
+    # ✅ دریافت telegram_id از هدر
+    telegram_id = request.headers.get("X-Telegram-Id")
+    is_telegram = request.headers.get("X-Telegram") == "true"
+    
+    if telegram_id:
+        user = get_or_create_user(wallet_address, int(telegram_id), is_telegram)
+    else:
+        user = get_or_create_user(wallet_address, telegram_id=None, is_telegram=False)
+    
     w = user.wallet
     now = timezone.now()
 
