@@ -16,8 +16,9 @@ export default function Referrals() {
   const [totalReferrals, setTotalReferrals] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [telegramId, setTelegramId] = useState(null);
+  const [telegramId, setTelegramId] = useState(null); // فقط عدد یا null
   const [telegramUsername, setTelegramUsername] = useState(null);
+  const [isTelegramWebApp, setIsTelegramWebApp] = useState(false);
 
   const SITE_URL = "https://aipolynet.com/";
 
@@ -33,20 +34,23 @@ export default function Referrals() {
       
       if (tg.initDataUnsafe?.user) {
         const user = tg.initDataUnsafe.user;
-        setTelegramId(user.id);
+        // فقط عدد صحیح (integer) ارسال می‌شود
+        setTelegramId(user.id); // این یک عدد است
         setTelegramUsername(user.username || null);
-        console.log("✅ [DEBUG] Telegram ID:", user.id);
+        setIsTelegramWebApp(true);
+        console.log("✅ [DEBUG] Telegram ID (number):", user.id);
         console.log("✅ [DEBUG] Telegram Username:", user.username);
       } else {
         console.log("⚠️ [DEBUG] No user data found in initDataUnsafe");
-        // اگر کاربر لاگین نکرده باشد، همچنان اجازه استفاده بدهیم
-        // اما با تابعیت محدودتر
-        setTelegramId('guest_' + Date.now());
+        // در تلگرام ولی لاگین نشده
+        setTelegramId(null);
+        setIsTelegramWebApp(true);
       }
     } else {
       console.log("⚠️ [DEBUG] Telegram WebApp NOT found - running in browser mode");
-      // در حالت مرورگر، یک ID موقت ایجاد می‌کنیم
-      setTelegramId('web_' + Date.now());
+      // در مرورگر، telegram_id را null می‌فرستیم
+      setTelegramId(null);
+      setIsTelegramWebApp(false);
     }
   }, []);
 
@@ -74,13 +78,23 @@ export default function Referrals() {
 
         const inviterCode = localStorage.getItem("inviter_code");
 
+        // ساخت payload با توجه به وضعیت تلگرام
         const payload = {
           wallet_address: address,
           inviter_code: inviterCode || null,
-          telegram_id: telegramId,
-          telegram_username: telegramUsername || null,
-          is_telegram: !!window.Telegram?.WebApp
+          is_telegram: isTelegramWebApp
         };
+
+        // فقط اگر در تلگرام هستیم و telegramId عددی داریم، اضافه می‌کنیم
+        if (isTelegramWebApp && telegramId) {
+          payload.telegram_id = telegramId; // عدد
+          payload.telegram_username = telegramUsername || null;
+        } else {
+          // در مرورگر یا تلگرام بدون لاگین، telegram_id را نمی‌فرستیم
+          // یا می‌توانیم null بفرستیم
+          payload.telegram_id = null;
+          payload.telegram_username = null;
+        }
 
         console.log("📤 [DEBUG] Sending payload:", payload);
 
@@ -99,6 +113,7 @@ export default function Referrals() {
         
       } catch (e) {
         if (cancelled) return;
+        console.error("❌ [DEBUG] Error in fetchData:", e);
         setError(
           e?.response?.data?.error ||
             e?.response?.data?.detail ||
@@ -112,15 +127,15 @@ export default function Referrals() {
       }
     }
 
-    // اگر telegramId وجود داشته باشد (حتی در حالت مرورگر)
-    if (telegramId) {
+    // فقط وقتی telegramId مشخص شد (حتی اگر null باشد) اجرا کن
+    if (telegramId !== undefined) {
       fetchData();
     }
 
     return () => {
       cancelled = true;
     };
-  }, [address, telegramId, telegramUsername]);
+  }, [address, telegramId, telegramUsername, isTelegramWebApp]);
 
   /* -------- Fetch referral levels -------- */
   useEffect(() => {
@@ -294,15 +309,11 @@ export default function Referrals() {
     return <div className="connect-warning">🔌 Please connect your wallet first.</div>;
   }
 
-  // اگر در حال بارگذاری هستیم
-  if (loading) {
-    return <div className="loading-spinner">Loading...</div>;
-  }
-
   return (
     <div className="referrals-container">
       <h2 className="ref-title">🎯 Referral Dashboard</h2>
 
+      {loading && <div className="loading-spinner">Loading...</div>}
       {error && <div className="error-message">❌ {error}</div>}
 
       {myCode ? (
@@ -357,10 +368,10 @@ export default function Referrals() {
 
             {/* نمایش وضعیت تلگرام */}
             <div className="telegram-status">
-              {window.Telegram?.WebApp ? (
+              {isTelegramWebApp ? (
                 <span className="status-active">✅ Connected to Telegram</span>
               ) : (
-                <span className="status-inactive">🌐 Browser Mode - Some features may be limited</span>
+                <span className="status-inactive">🌐 Browser Mode</span>
               )}
             </div>
 
