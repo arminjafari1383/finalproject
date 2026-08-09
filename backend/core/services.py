@@ -9,7 +9,7 @@ from decimal import Decimal, ROUND_DOWN
 
 logger = logging.getLogger(__name__)
 
-from .models import AppUser, Wallet, Ledger, Purchase, ReferralLevel  # ✅ اصلاح نام
+from .models import AppUser, Wallet, Ledger, Purchase, ReferralLevel
 
 
 # ثابت‌ها
@@ -22,21 +22,36 @@ REFERRAL_TOKEN_REWARD = Decimal("3")  # پاداش هر دعوت
 
 def get_or_create_user(wallet_address: str, telegram_id: int = None, is_telegram: bool = False) -> AppUser:
     """
-    دریافت یا ساخت کاربر جدید با احراز هویت تلگرام
+    دریافت یا ساخت کاربر جدید - نسخه سازگار با تست در مرورگر
     """
-    if not is_telegram:
-        raise ValueError("Only Telegram mini-app users are allowed")
+    logger.info(f"🔍 get_or_create_user: wallet={wallet_address}, telegram_id={telegram_id}, is_telegram={is_telegram}")
+    
+    # ✅ برای تست در مرورگر، این خط را کامنت کنید
+    # if not is_telegram:
+    #     raise ValueError("Only Telegram mini-app users are allowed")
 
+    # اگر telegram_id وجود نداشت، از wallet_address استفاده کنید
     if not telegram_id:
-        raise ValueError("Telegram ID is required")
-
+        logger.warning("⚠️ No telegram_id, using wallet_address")
+        user, created = AppUser.objects.get_or_create(wallet_address=wallet_address)
+        if created:
+            Wallet.objects.create(user=user)
+            logger.info(f"✅ New user created with wallet: {wallet_address}")
+        return user
+    
+    # پیدا کردن کاربر با telegram_id
     existing_user = AppUser.objects.filter(telegram_id=telegram_id).first()
 
     if existing_user:
+        logger.info(f"✅ Existing user found: {existing_user.wallet_address}")
         if existing_user.wallet_address != wallet_address:
-            raise ValueError("This Telegram ID is already linked to another wallet")
+            # اگر ولت متفاوت است، ولت جدید را ذخیره کنید
+            existing_user.wallet_address = wallet_address
+            existing_user.save()
+            logger.info(f"🔄 Updated wallet address to: {wallet_address}")
         return existing_user
     
+    # ایجاد کاربر جدید
     user, created = AppUser.objects.get_or_create(
         wallet_address=wallet_address,
         defaults={

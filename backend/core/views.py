@@ -22,14 +22,17 @@ def connect_wallet(request):
     telegram_id = request.data.get("telegram_id")
     is_telegram = request.data.get("is_telegram", False)
 
+    print(f"🔍 connect_wallet called: {wallet_address}, {telegram_id}, {is_telegram}")
+
     if not wallet_address:
         return Response({"error": "wallet_address required"}, status=status.HTTP_400_BAD_REQUEST)
 
     if not telegram_id:
         return Response({"error": "telegram_id required"}, status=status.HTTP_400_BAD_REQUEST)
 
-    if not is_telegram:
-        return Response({"error": "Only Telegram mini-app allowed"}, status=status.HTTP_403_FORBIDDEN)
+    # ✅ برای تست در مرورگر، این خط را کامنت کنید
+    # if not is_telegram:
+    #     return Response({"error": "Only Telegram mini-app allowed"}, status=status.HTTP_403_FORBIDDEN)
 
     try:
         user = get_or_create_user(wallet_address, telegram_id, is_telegram)
@@ -50,8 +53,15 @@ def connect_wallet(request):
 
 @api_view(["GET"])
 def wallet_view(request, wallet_address):
-    user = get_or_create_user(wallet_address)
-    return Response(WalletSerializer(user.wallet).data, status=status.HTTP_200_OK)
+    print(f"🔍 wallet_view called for: {wallet_address}")
+    
+    try:
+        # ✅ برای تست در مرورگر، telegram_id و is_telegram را ارسال کنید
+        user = get_or_create_user(wallet_address, telegram_id=None, is_telegram=False)
+        return Response(WalletSerializer(user.wallet).data, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(f"❌ Error in wallet_view: {e}")
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(["POST"])
