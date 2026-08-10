@@ -458,7 +458,6 @@ def create_purchase_usdt(request):
     usdt_amount = request.data.get("usdt_amount")
     usdt_tx_hash = request.data.get("usdt_tx_hash")
 
-    # ✅ اصلاح شده
     if not wallet_address or not usdt_amount or not usdt_tx_hash:
         return Response({"error": "missing fields"}, status=400)
 
@@ -519,7 +518,6 @@ def create_purchase_bnb(request):
     bnb_amount = request.data.get("bnb_amount")
     bnb_tx_hash = request.data.get("bnb_tx_hash")
 
-    # ✅ اصلاح شده
     if not wallet_address or not bnb_amount or not bnb_tx_hash:
         return Response({"error": "missing fields"}, status=400)
 
