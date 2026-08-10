@@ -1,3 +1,4 @@
+import logging
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
@@ -22,20 +23,30 @@ from django.conf import settings
 import os
 import requests
 
+# =======================
+# تنظیمات لاگینگ
+# =======================
+logger = logging.getLogger(__name__)
+
 
 @api_view(["POST"])
 def connect_wallet(request):
+    logger.info("=" * 60)
+    logger.info("🔍 CONNECT_WALLET CALLED")
+    logger.info(f"📥 Data: {request.data}")
+    logger.info(f"📥 Headers: {request.headers}")
+    
     wallet_address = request.data.get("wallet_address")
     inviter_code = request.data.get("inviter_code")
     telegram_id = request.data.get("telegram_id")
     is_telegram = request.data.get("is_telegram", False)
 
-    print(f"🔍 connect_wallet called: {wallet_address}, {telegram_id}, {is_telegram}")
-
     if not wallet_address:
+        logger.error("❌ wallet_address required")
         return Response({"error": "wallet_address required"}, status=status.HTTP_400_BAD_REQUEST)
 
     if not telegram_id:
+        logger.error("❌ telegram_id required")
         return Response({"error": "telegram_id required"}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
@@ -45,8 +56,12 @@ def connect_wallet(request):
             apply_referral(inviter_code, user)
             
     except ValueError as e:
+        logger.error(f"❌ ValueError: {e}")
         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+    logger.info(f"✅ User connected: {user.wallet_address}")
+    logger.info("=" * 60)
+    
     return Response({
         "user": {
             "telegram_id": user.telegram_id,
@@ -59,12 +74,13 @@ def connect_wallet(request):
 
 @api_view(["GET"])
 def wallet_view(request, wallet_address):
-    print(f"🔍 wallet_view called for: {wallet_address}")
+    logger.info("=" * 60)
+    logger.info(f"🔍 WALLET_VIEW called for: {wallet_address}")
     
     telegram_id = request.query_params.get("telegram_id")
     is_telegram = request.query_params.get("is_telegram", "false").lower() == "true"
     
-    print(f"📊 telegram_id: {telegram_id}, is_telegram: {is_telegram}")
+    logger.info(f"📊 telegram_id: {telegram_id}, is_telegram: {is_telegram}")
     
     try:
         if telegram_id:
@@ -72,21 +88,25 @@ def wallet_view(request, wallet_address):
         else:
             user = get_or_create_user(wallet_address, telegram_id=None, is_telegram=False)
             
+        logger.info(f"✅ Wallet data returned for: {user.wallet_address}")
         return Response(WalletSerializer(user.wallet).data, status=status.HTTP_200_OK)
     except Exception as e:
-        print(f"❌ Error in wallet_view: {e}")
+        logger.error(f"❌ Error in wallet_view: {e}")
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(["POST"])
 def create_purchase(request):
-    print("DATA:", request.data)
+    logger.info("=" * 60)
+    logger.info("💰 CREATE_PURCHASE CALLED")
+    logger.info(f"📥 Data: {request.data}")
 
     wallet_address = request.data.get("wallet_address")
     ton_amount = request.data.get("ton_amount")
     ton_tx_hash = request.data.get("ton_tx_hash")
 
     if wallet_address is None or ton_amount is None or ton_tx_hash is None:
+        logger.error("❌ Missing fields")
         return Response({"error": "missing fields"}, status=400)
 
     try:
@@ -94,6 +114,7 @@ def create_purchase(request):
         if ton_amount <= 0:
             raise ValueError()
     except:
+        logger.error("❌ Invalid ton_amount")
         return Response({"error": "invalid ton_amount"}, status=400)
 
     telegram_id = request.query_params.get("telegram_id") or request.headers.get("X-Telegram-Id")
@@ -106,8 +127,9 @@ def create_purchase(request):
 
     try:
         p = register_purchase(user, ton_amount, str(ton_tx_hash))
+        logger.info(f"✅ Purchase created: {p.invoice_no}")
     except Exception as e:
-        print("REGISTER ERROR:", e)
+        logger.error(f"❌ REGISTER ERROR: {e}")
         return Response({"error": str(e)}, status=400)
 
     return Response(PurchaseSerializer(p).data, status=201)
@@ -133,14 +155,19 @@ def list_purchases(request):
 
 @api_view(["POST"])
 def request_withdraw(request):
+    logger.info("=" * 60)
+    logger.info("💸 REQUEST_WITHDRAW CALLED")
+    
     wallet_address = request.data.get("wallet_address")
     scope = request.data.get("scope")
     amount = Decimal(str(request.data.get("amount", "0")))
 
     if not all([wallet_address, scope]):
+        logger.error("❌ wallet_address, scope required")
         return Response({"error": "wallet_address, scope required"}, status=status.HTTP_400_BAD_REQUEST)
 
     if amount < Decimal("60"):
+        logger.error(f"❌ Amount too small: {amount}")
         return Response({"error": "min withdraw is 60 ECG"}, status=status.HTTP_400_BAD_REQUEST)
 
     telegram_id = request.headers.get("X-Telegram-Id")
@@ -155,11 +182,14 @@ def request_withdraw(request):
 
     if scope == "DOWNLINE_ONLY":
         if amount > w.downline_profit_instant:
+            logger.error(f"❌ Insufficient downline balance")
             return Response({"error": "insufficient downline instant balance"}, status=status.HTTP_400_BAD_REQUEST)
     elif scope == "ALL_WITHDRAWABLE":
         if amount > w.withdrawable_total():
+            logger.error(f"❌ Insufficient withdrawable total")
             return Response({"error": "insufficient withdrawable total"}, status=status.HTTP_400_BAD_REQUEST)
     else:
+        logger.error(f"❌ Invalid scope: {scope}")
         return Response({"error": "invalid scope"}, status=status.HTTP_400_BAD_REQUEST)
 
     ton_amount = ecg_to_ton(amount)
@@ -188,6 +218,7 @@ def request_withdraw(request):
         req.status = "FAILED"
         req.fail_reason = str(e)[:500]
         req.save(update_fields=["status", "fail_reason"])
+        logger.error(f"❌ TON transfer failed: {e}")
         return Response({"error": "ton transfer failed", "detail": req.fail_reason}, status=status.HTTP_502_BAD_GATEWAY)
 
     if scope == "DOWNLINE_ONLY":
@@ -218,6 +249,7 @@ def request_withdraw(request):
     req.tx_hash = f"seqno:{data.get('sent_seqno')}"
     req.save(update_fields=["status", "tx_hash"])
 
+    logger.info(f"✅ Withdraw successful: {req.id}")
     return Response(
         {"id": req.id, "status": req.status, "ton_amount": str(ton_amount), "destination_wallet": dest},
         status=status.HTTP_201_CREATED
@@ -251,14 +283,18 @@ COOLDOWN = timedelta(hours=24)
 
 @api_view(["GET"])
 def reward_status(request):
+    logger.info("=" * 60)
+    logger.info("⏰ REWARD_STATUS CALLED")
+    
     wallet_address = request.query_params.get("wallet_address")
     if not wallet_address:
+        logger.error("❌ wallet_address required")
         return Response({"error": "wallet_address required"}, status=status.HTTP_400_BAD_REQUEST)
 
     telegram_id = request.query_params.get("telegram_id")
     is_telegram = request.query_params.get("is_telegram", "false").lower() == "true"
     
-    print(f"📊 reward_status - wallet: {wallet_address}, telegram_id: {telegram_id}")
+    logger.info(f"📊 wallet: {wallet_address}, telegram_id: {telegram_id}")
     
     if telegram_id:
         user = get_or_create_user(wallet_address, int(telegram_id), is_telegram)
@@ -275,6 +311,9 @@ def reward_status(request):
     else:
         seconds_remaining = max(0, int((next_at - now).total_seconds()))
 
+    logger.info(f"✅ Reward status returned: {seconds_remaining}s remaining")
+    logger.info("=" * 60)
+    
     return Response({
         "status": "ok",
         "seconds_remaining": seconds_remaining,
@@ -287,55 +326,78 @@ def reward_status(request):
 
 @api_view(["POST"])
 def tick(request):
+    logger.info("=" * 60)
+    logger.info("🔔 TICK FUNCTION CALLED")
+    logger.info(f"📥 Request method: {request.method}")
+    logger.info(f"📥 Request data: {request.data}")
+    logger.info(f"📥 Request headers: {dict(request.headers)}")
+    
     wallet_address = request.data.get("wallet_address")
     if not wallet_address:
+        logger.error("❌ wallet_address required")
         return Response({"error": "wallet_address required"}, status=status.HTTP_400_BAD_REQUEST)
 
     telegram_id = request.headers.get("X-Telegram-Id") or request.data.get("telegram_id")
     is_telegram = request.headers.get("X-Telegram") == "true" or request.data.get("is_telegram", False)
     
-    print(f"📊 tick - wallet: {wallet_address}, telegram_id: {telegram_id}")
+    logger.info(f"📊 wallet: {wallet_address}, telegram_id: {telegram_id}")
     
-    if telegram_id:
-        user = get_or_create_user(wallet_address, int(telegram_id), is_telegram)
-    else:
-        user = get_or_create_user(wallet_address, telegram_id=None, is_telegram=False)
-    
-    w = user.wallet
-    now = timezone.now()
+    try:
+        if telegram_id:
+            user = get_or_create_user(wallet_address, int(telegram_id), is_telegram)
+        else:
+            user = get_or_create_user(wallet_address, telegram_id=None, is_telegram=False)
+        
+        if not user:
+            logger.error("❌ User not found")
+            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+        w = user.wallet
+        now = timezone.now()
 
-    next_at = user.next_daily_claim_at
+        next_at = user.next_daily_claim_at
 
-    if next_at and next_at > now:
-        seconds_remaining = int((next_at - now).total_seconds())
+        if next_at and next_at > now:
+            seconds_remaining = int((next_at - now).total_seconds())
+            logger.info(f"⏳ Too early! {seconds_remaining}s remaining")
+            return Response({
+                "status": "too_early",
+                "message": "Please wait for the timer to finish.",
+                "seconds_remaining": seconds_remaining,
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        logger.info(f"💰 Adding reward: {DAILY_REWARD} ECG")
+        w.daily_reward_unlocked = w.daily_reward_unlocked + DAILY_REWARD
+        w.save(update_fields=["daily_reward_unlocked"])
+
+        Ledger.objects.create(
+            user=user,
+            typ="DAILY_UNLOCK",
+            amount=DAILY_REWARD,
+            meta={"source": "timer"}
+        )
+
+        user.next_daily_claim_at = now + COOLDOWN
+        user.save(update_fields=["next_daily_claim_at"])
+
+        logger.info(f"✅ Reward claimed! Next claim at: {user.next_daily_claim_at}")
+        logger.info("=" * 60)
+
         return Response({
-            "status": "too_early",
-            "message": "Please wait for the timer to finish.",
-            "seconds_remaining": seconds_remaining,
-        }, status=status.HTTP_400_BAD_REQUEST)
-
-    w.daily_reward_unlocked = w.daily_reward_unlocked + DAILY_REWARD
-    w.save(update_fields=["daily_reward_unlocked"])
-
-    Ledger.objects.create(
-        user=user,
-        typ="DAILY_UNLOCK",
-        amount=DAILY_REWARD,
-        meta={"source": "timer"}
-    )
-
-    user.next_daily_claim_at = now + COOLDOWN
-    user.save(update_fields=["next_daily_claim_at"])
-
-    return Response({
-        "status": "rewarded",
-        "message": "1 ECG added",
-        "balance_ecg": str(w.withdrawable_total()),
-        "total_rewards": str(w.withdrawable_total()),
-        "referral_points": str(w.referral_bonus),
-        "rewards_count": user.ledgers.filter(typ="DAILY_UNLOCK").count(),
-        "seconds_remaining": int(COOLDOWN.total_seconds()),
-    }, status=status.HTTP_200_OK)
+            "status": "rewarded",
+            "message": "1 ECG added",
+            "balance_ecg": str(w.withdrawable_total()),
+            "total_rewards": str(w.withdrawable_total()),
+            "referral_points": str(w.referral_bonus),
+            "rewards_count": user.ledgers.filter(typ="DAILY_UNLOCK").count(),
+            "seconds_remaining": int(COOLDOWN.total_seconds()),
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"❌ Error in tick: {e}")
+        import traceback
+        traceback.print_exc()
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 # =======================
@@ -454,11 +516,16 @@ def generate_test_data():
 
 @api_view(["POST"])
 def create_purchase_usdt(request):
+    logger.info("=" * 60)
+    logger.info("💰 CREATE_PURCHASE_USDT CALLED")
+    logger.info(f"📥 Data: {request.data}")
+    
     wallet_address = request.data.get("wallet_address")
     usdt_amount = request.data.get("usdt_amount")
     usdt_tx_hash = request.data.get("usdt_tx_hash")
 
     if not wallet_address or not usdt_amount or not usdt_tx_hash:
+        logger.error("❌ Missing fields")
         return Response({"error": "missing fields"}, status=400)
 
     try:
@@ -466,13 +533,16 @@ def create_purchase_usdt(request):
         if usdt_amount <= 0:
             raise ValueError()
     except:
+        logger.error("❌ Invalid usdt_amount")
         return Response({"error": "invalid usdt_amount"}, status=400)
 
     user = get_or_create_user(wallet_address, None, False)
 
     try:
         p = register_purchase_usdt(user, usdt_amount, str(usdt_tx_hash))
+        logger.info(f"✅ USDT Purchase created: {p.invoice_no}")
     except Exception as e:
+        logger.error(f"❌ Error: {e}")
         return Response({"error": str(e)}, status=400)
 
     return Response({
@@ -514,11 +584,16 @@ def list_purchases_usdt(request):
 
 @api_view(["POST"])
 def create_purchase_bnb(request):
+    logger.info("=" * 60)
+    logger.info("💰 CREATE_PURCHASE_BNB CALLED")
+    logger.info(f"📥 Data: {request.data}")
+    
     wallet_address = request.data.get("wallet_address")
     bnb_amount = request.data.get("bnb_amount")
     bnb_tx_hash = request.data.get("bnb_tx_hash")
 
     if not wallet_address or not bnb_amount or not bnb_tx_hash:
+        logger.error("❌ Missing fields")
         return Response({"error": "missing fields"}, status=400)
 
     try:
@@ -526,13 +601,16 @@ def create_purchase_bnb(request):
         if bnb_amount <= 0:
             raise ValueError()
     except:
+        logger.error("❌ Invalid bnb_amount")
         return Response({"error": "invalid bnb_amount"}, status=400)
 
     user = get_or_create_user(wallet_address, None, False)
 
     try:
         p = register_purchase_bnb(user, bnb_amount, str(bnb_tx_hash))
+        logger.info(f"✅ BNB Purchase created: {p.invoice_no}")
     except Exception as e:
+        logger.error(f"❌ Error: {e}")
         return Response({"error": str(e)}, status=400)
 
     return Response({
