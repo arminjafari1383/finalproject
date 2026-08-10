@@ -60,7 +60,7 @@ export default function TimerPage() {
 
       const data = res.data;
 
-      // ✅ اینجا دقیق می‌فهمی status چی هست
+      // ✅ بررسی status
       if (data?.status === "ok") {
         const sec = data.seconds_remaining ?? 0;
 
@@ -78,9 +78,28 @@ export default function TimerPage() {
           stopTimer();
         }
       } else {
-        // ✅ لاگ دقیق علت Invalid response
-        console.warn("[Timer] Invalid server response. Expected {status:'ok'} but got:", data);
-        setMessage("❌ Invalid server response.");
+        // ✅ اگر status "ok" نبود، از داده‌های موجود استفاده کن
+        console.warn("[Timer] Unexpected response format:", data);
+        
+        // سعی کن از data موجود استفاده کنی
+        if (data) {
+          const sec = data.seconds_remaining ?? 0;
+          setRemaining(sec);
+          setBalance(data.balance_ecg || data.withdrawable_total || "0");
+          setTotalRewards(data.total_rewards || data.withdrawable_total || "0");
+          setReferralBonus(data.referral_points || data.referral_bonus || "0");
+          setRewardCount(data.rewards_count || 0);
+
+          if (sec > 0) {
+            setMessage("⏳ Timer is running...");
+            startTimer();
+          } else {
+            setMessage("✅ Ready to claim daily reward!");
+            stopTimer();
+          }
+        } else {
+          setMessage("❌ Invalid server response.");
+        }
       }
     } catch (e) {
       console.error("[Timer] fetchStatus ERROR:", e);
@@ -167,27 +186,48 @@ export default function TimerPage() {
         <img src={Logo} alt="AI POLIFY Logo" />
       </div>
 
-<svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" className="lk">
-        {/* ... (کد SVG شما از فایل اصلی) ... */}
-         <defs>
+      <svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" className="lk">
+        <defs>
           <linearGradient id="frontEdgeGrad" x1="0" y1="100" x2="0" y2="320" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#00e1ff" /><stop offset="100%" stopColor="#001833" />
+            <stop offset="0%" stopColor="#00e1ff" />
+            <stop offset="100%" stopColor="#001833" />
           </linearGradient>
           <filter id="frontEdgeShadow" x="-5%" y="-5%" width="110%" height="110%">
-            <feGaussianBlur in="SourceAlpha" stdDeviation="2" result="blur" /> <feOffset dx="0" dy="1" result="offsetBlur" /> <feFlood floodColor="#001833" floodOpacity="0.5" /> <feComposite in2="offsetBlur" operator="in" result="shadow" />
-            <feMerge> <feMergeNode in="shadow" /> <feMergeNode in="SourceGraphic" /> </feMerge>
+            <feGaussianBlur in="SourceAlpha" stdDeviation="2" result="blur" />
+            <feOffset dx="0" dy="1" result="offsetBlur" />
+            <feFlood floodColor="#001833" floodOpacity="0.5" />
+            <feComposite in2="offsetBlur" operator="in" result="shadow" />
+            <feMerge>
+              <feMergeNode in="shadow" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
           </filter>
-          <clipPath id="boxClip"><rect x="60" y="100" width="280" height="220" rx="10" ry="10" /></clipPath>
-          <filter id="centerBloom" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur in="SourceGraphic" stdDeviation="22" /></filter>
-          <mask id="mask-blades"><rect width="100%" height="100%" fill="white" /> <circle cx="200" cy="210" r="40" fill="black" /></mask>
+          <clipPath id="boxClip">
+            <rect x="60" y="100" width="280" height="220" rx="10" ry="10" />
+          </clipPath>
+          <filter id="centerBloom" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="22" />
+          </filter>
+          <mask id="mask-blades">
+            <rect width="100%" height="100%" fill="white" />
+            <circle cx="200" cy="210" r="40" fill="black" />
+          </mask>
         </defs>
         <path d="M80 80 L320 80 L340 100 L60 100 Z" fill="none" stroke="#00e1ff" strokeWidth="4" />
         <rect x="60" y="100" width="280" height="220" rx="10" ry="10" fill="none" stroke="url(#frontEdgeGrad)" strokeWidth="4" filter="url(#frontEdgeShadow)" />
-        <circle cx="80" cy="120" r="5" fill="#00e1ff" /><circle cx="320" cy="120" r="5" fill="#00e1ff" /><circle cx="80" cy="300" r="5" fill="#00e1ff" /><circle cx="320" cy="300" r="5" fill="#00e1ff" />
-        <rect x="130" y="320" width="40" height="10" rx="2" fill="none" stroke="#00e1ff" strokeWidth="3" /><rect x="230" y="320" width="40" height="10" rx="2" fill="none" stroke="#00e1ff" strokeWidth="3" />
+        <circle cx="80" cy="120" r="5" fill="#00e1ff" />
+        <circle cx="320" cy="120" r="5" fill="#00e1ff" />
+        <circle cx="80" cy="300" r="5" fill="#00e1ff" />
+        <circle cx="320" cy="300" r="5" fill="#00e1ff" />
+        <rect x="130" y="320" width="40" height="10" rx="2" fill="none" stroke="#00e1ff" strokeWidth="3" />
+        <rect x="230" y="320" width="40" height="10" rx="2" fill="none" stroke="#00e1ff" strokeWidth="3" />
         <g clipPath="url(#boxClip)">
-          <g filter="url(#centerBloom)"><circle cx="200" cy="210" r="46" fill="#00e1ff" opacity="0.25" /></g>
-          <g filter="url(#centerBloom)"><circle cx="200" cy="210" r="90" fill="#00e1ff" opacity="0.08" /></g>
+          <g filter="url(#centerBloom)">
+            <circle cx="200" cy="210" r="46" fill="#00e1ff" opacity="0.25" />
+          </g>
+          <g filter="url(#centerBloom)">
+            <circle cx="200" cy="210" r="90" fill="#00e1ff" opacity="0.08" />
+          </g>
         </g>
         <image className="fan-blades" href={Blade} x="100" y="110" width="200" height="200" mask="url(#mask-blades)" />
         <circle cx="200" cy="210" r="40" fill="#1a1448" stroke="#00e1ff" strokeWidth="3" />
