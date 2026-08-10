@@ -10,21 +10,17 @@ export default function Purchase() {
   const address = useMemo(() => tonWallet?.account?.address, [tonWallet]);
   const [tonConnectUI] = useTonConnectUI();
 
-  // State برای هر ارز
+  // ✅ فقط TON ورودی
   const [tonAmount, setTonAmount] = useState("1");
-  const [usdtAmount, setUsdtAmount] = useState("1");
-  const [bnbAmount, setBnbAmount] = useState("0.1");
+  
+  // ✅ انتخاب خروجی: ECG یا USDT
+  const [selectedOutput, setSelectedOutput] = useState("ECG"); // "ECG" یا "USDT"
   
   const [invoices, setInvoices] = useState([]);
-  const [usdtInvoices, setUsdtInvoices] = useState([]);
-  const [bnbInvoices, setBnbInvoices] = useState([]);
-  
   const [successMessage, setSuccessMessage] = useState("");
-  const [activeTab, setActiveTab] = useState("ton");
   const [loading, setLoading] = useState(false);
 
   const [tonPrice, setTonPrice] = useState(null);
-  const [bnbPrice, setBnbPrice] = useState(null);
   const [priceError, setPriceError] = useState("");
 
   const ECG_PER_USDT = 312;
@@ -36,6 +32,7 @@ export default function Purchase() {
       invoice_no: "TEST-001",
       ton_amount: "10",
       ecg_value: "5000",
+      usdt_value: "16.02", // 5000 / 312 = 16.02
       self_profit_5: "250",
       principal_unlock_at: "2026-12-01",
       self_profit_unlock_at: "2026-12-05",
@@ -50,22 +47,21 @@ export default function Purchase() {
     setTimeout(() => setSuccessMessage(""), 4000);
   }
 
-  // دریافت قیمت‌ها
+  // دریافت قیمت TON
   useEffect(() => {
     let cancelled = false;
 
     async function fetchPrices() {
       try {
         const res = await fetch(
-          "https://api.coingecko.com/api/v3/simple/price?ids=the-open-network,binancecoin&vs_currencies=usd"
+          "https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd"
         );
         const data = await res.json();
         if (!cancelled) {
           setTonPrice(data?.["the-open-network"]?.usd ?? null);
-          setBnbPrice(data?.["binancecoin"]?.usd ?? null);
         }
       } catch {
-        if (!cancelled) setPriceError("Failed to fetch prices.");
+        if (!cancelled) setPriceError("Failed to fetch TON price.");
       }
     }
 
@@ -73,23 +69,13 @@ export default function Purchase() {
     return () => (cancelled = true);
   }, []);
 
-  // بارگذاری همه فاکتورها
-  async function loadAllInvoices() {
+  // بارگذاری فاکتورها
+  async function loadInvoices() {
     if (!address) return;
     try {
       setLoading(true);
-      
-      // TON
-      const tonRes = await api.get(`/purchase/list/?wallet=${address}`);
-      setInvoices(tonRes.data || []);
-      
-      // USDT
-      const usdtRes = await api.get(`/purchase/usdt/list/?wallet=${address}`);
-      setUsdtInvoices(usdtRes.data || []);
-      
-      // BNB
-      const bnbRes = await api.get(`/purchase/bnb/list/?wallet=${address}`);
-      setBnbInvoices(bnbRes.data || []);
+      const res = await api.get(`/purchase/list/?wallet=${address}`);
+      setInvoices(res.data || []);
     } catch (e) {
       console.error("load invoices error", e);
     } finally {
@@ -98,28 +84,25 @@ export default function Purchase() {
   }
 
   useEffect(() => {
-    loadAllInvoices();
+    loadInvoices();
   }, [address]);
 
-  // محاسبات هر ارز
-  const equivalentECG = useMemo(() => {
-    if (activeTab === "ton") {
-      const amt = Number(tonAmount);
-      if (!tonPrice || !amt || amt <= 0) return "0.00";
-      return (amt * tonPrice * ECG_PER_USDT).toFixed(2);
+  // محاسبه خروجی
+  const outputValue = useMemo(() => {
+    const amt = Number(tonAmount);
+    if (!tonPrice || !amt || amt <= 0) return "0.00";
+    
+    const ecgValue = amt * tonPrice * ECG_PER_USDT;
+    
+    if (selectedOutput === "ECG") {
+      return ecgValue.toFixed(2);
+    } else {
+      // USDT: ECG / 312
+      return (ecgValue / ECG_PER_USDT).toFixed(2);
     }
-    if (activeTab === "usdt") {
-      const amt = Number(usdtAmount);
-      if (!amt || amt <= 0) return "0.00";
-      return (amt * ECG_PER_USDT).toFixed(2);
-    }
-    if (activeTab === "bnb") {
-      const amt = Number(bnbAmount);
-      if (!bnbPrice || !amt || amt <= 0) return "0.00";
-      return (amt * bnbPrice * ECG_PER_USDT).toFixed(2);
-    }
-    return "0.00";
-  }, [activeTab, tonAmount, usdtAmount, bnbAmount, tonPrice, bnbPrice]);
+  }, [tonAmount, tonPrice, selectedOutput]);
+
+  const outputLabel = selectedOutput === "ECG" ? "ECG" : "USDT";
 
   // تابع پرداخت
   async function payAndRegister() {
@@ -128,77 +111,32 @@ export default function Purchase() {
     setLoading(true);
 
     try {
-      let amount, endpoint, payload;
-
-      if (activeTab === "ton") {
-        amount = Number(tonAmount);
-        if (!amount || amount <= 0) {
-          alert("Invalid TON amount.");
-          setLoading(false);
-          return;
-        }
-        
-        const nano = BigInt(Math.floor(amount * 1e9));
-        const tx = buildTonTransaction(nano);
-        await tonConnectUI.sendTransaction(tx);
-        
-        const txHash = prompt("Enter TX Hash:");
-        if (!txHash) {
-          setLoading(false);
-          return;
-        }
-        
-        endpoint = "/purchase/create/";
-        payload = {
-          wallet_address: address,
-          ton_amount: tonAmount,
-          ton_tx_hash: txHash,
-        };
-      } else if (activeTab === "usdt") {
-        amount = Number(usdtAmount);
-        if (!amount || amount <= 0) {
-          alert("Invalid USDT amount.");
-          setLoading(false);
-          return;
-        }
-        
-        const txHash = prompt("Enter USDT TX Hash:");
-        if (!txHash) {
-          setLoading(false);
-          return;
-        }
-        
-        endpoint = "/purchase/usdt/create/";
-        payload = {
-          wallet_address: address,
-          usdt_amount: usdtAmount,
-          usdt_tx_hash: txHash,
-        };
-      } else if (activeTab === "bnb") {
-        amount = Number(bnbAmount);
-        if (!amount || amount <= 0) {
-          alert("Invalid BNB amount.");
-          setLoading(false);
-          return;
-        }
-        
-        const txHash = prompt("Enter BNB TX Hash:");
-        if (!txHash) {
-          setLoading(false);
-          return;
-        }
-        
-        endpoint = "/purchase/bnb/create/";
-        payload = {
-          wallet_address: address,
-          bnb_amount: bnbAmount,
-          bnb_tx_hash: txHash,
-        };
+      const amount = Number(tonAmount);
+      if (!amount || amount <= 0) {
+        alert("Invalid TON amount.");
+        setLoading(false);
+        return;
       }
+      
+      const nano = BigInt(Math.floor(amount * 1e9));
+      const tx = buildTonTransaction(nano);
+      await tonConnectUI.sendTransaction(tx);
+      
+      const txHash = prompt("Enter TX Hash:");
+      if (!txHash) {
+        setLoading(false);
+        return;
+      }
+      
+      const payload = {
+        wallet_address: address,
+        ton_amount: tonAmount,
+        ton_tx_hash: txHash,
+      };
 
-      await api.post(endpoint, payload);
-      await loadAllInvoices();
-      showSuccess(`✅ ${activeTab.toUpperCase()} stake successful! You received ${equivalentECG} ECG`);
+      await api.post("/purchase/create/", payload);
+      await loadInvoices();
+      showSuccess(`✅ Stake successful! You received ${outputValue} ${outputLabel}`);
     } catch (error) {
       console.error("Payment error:", error);
       alert(`❌ Payment failed: ${error.response?.data?.error || error.message}`);
@@ -214,37 +152,16 @@ export default function Purchase() {
     setLoading(true);
     
     try {
-      let endpoint, payload;
-      
-      if (activeTab === "ton") {
-        endpoint = "/purchase/create/";
-        payload = {
-          wallet_address: address,
-          ton_amount: tonAmount,
-          ton_tx_hash: "TEST_TX_" + Date.now(),
-          is_test: true,
-        };
-      } else if (activeTab === "usdt") {
-        endpoint = "/purchase/usdt/create/";
-        payload = {
-          wallet_address: address,
-          usdt_amount: usdtAmount,
-          usdt_tx_hash: "TEST_USDT_" + Date.now(),
-          is_test: true,
-        };
-      } else if (activeTab === "bnb") {
-        endpoint = "/purchase/bnb/create/";
-        payload = {
-          wallet_address: address,
-          bnb_amount: bnbAmount,
-          bnb_tx_hash: "TEST_BNB_" + Date.now(),
-          is_test: true,
-        };
-      }
+      const payload = {
+        wallet_address: address,
+        ton_amount: tonAmount,
+        ton_tx_hash: "TEST_TX_" + Date.now(),
+        is_test: true,
+      };
 
-      await api.post(endpoint, payload);
-      await loadAllInvoices();
-      showSuccess(`🧪 Test ${activeTab.toUpperCase()} stake successful!`);
+      await api.post("/purchase/create/", payload);
+      await loadInvoices();
+      showSuccess(`🧪 Test stake successful! You received ${outputValue} ${outputLabel}`);
     } catch (error) {
       console.error("Test stake error:", error);
       alert(`❌ Test failed: ${error.response?.data?.error || error.message}`);
@@ -253,13 +170,11 @@ export default function Purchase() {
     }
   }
 
-  // ترکیب همه فاکتورها
+  // ترکیب فاکتورها
   const allInvoices = useMemo(() => {
     const tonList = invoices.map(i => ({ ...i, currency: "TON" }));
-    const usdtList = usdtInvoices.map(i => ({ ...i, currency: "USDT" }));
-    const bnbList = bnbInvoices.map(i => ({ ...i, currency: "BNB" }));
-    return [mockTestInvoice, ...tonList, ...usdtList, ...bnbList];
-  }, [mockTestInvoice, invoices, usdtInvoices, bnbInvoices]);
+    return [mockTestInvoice, ...tonList];
+  }, [mockTestInvoice, invoices]);
 
   // Row Component
   function Row({ label, value }) {
@@ -296,71 +211,122 @@ export default function Purchase() {
               <img src={logo} alt="chart" className="logo-img" />
             </div>
 
-            {/* ====== Tab Switcher ====== */}
-            <div className="tabs-container">
-              <button
-                className={`tab-button tab-ton ${activeTab === "ton" ? "tab-active" : ""}`}
-                onClick={() => setActiveTab("ton")}
-                disabled={loading}
-              >
-                ⚡ TON
-              </button>
-              <button
-                className={`tab-button tab-usdt ${activeTab === "usdt" ? "tab-active" : ""}`}
-                onClick={() => setActiveTab("usdt")}
-                disabled={loading}
-              >
-                💵 USDT
-              </button>
-              <button
-                className={`tab-button tab-bnb ${activeTab === "bnb" ? "tab-active" : ""}`}
-                onClick={() => setActiveTab("bnb")}
-                disabled={loading}
-              >
-                🔶 BNB
-              </button>
-            </div>
-
             {/* ====== Price Display ====== */}
-            {activeTab === "ton" && tonPrice && (
+            {tonPrice && (
               <div className="price-box dark-subcard">
                 TON Price: <b>${tonPrice}</b> USD
               </div>
             )}
-            {activeTab === "bnb" && bnbPrice && (
-              <div className="price-box dark-subcard">
-                BNB Price: <b>${bnbPrice}</b> USD
-              </div>
-            )}
-            {activeTab === "usdt" && (
-              <div className="price-box dark-subcard">
-                USDT Price: <b>$1.00</b> USD
-              </div>
-            )}
             {priceError && <div className="error-text">{priceError}</div>}
 
-            {/* ====== Input Fields ====== */}
-            <p className="label-text">You Pay ({activeTab.toUpperCase()})</p>
+            {/* ====== Input TON ====== */}
+            <p className="label-text">You Pay (TON)</p>
             <input
               className="input-box dark-input"
               type="number"
-              value={activeTab === "ton" ? tonAmount : activeTab === "usdt" ? usdtAmount : bnbAmount}
-              onChange={(e) => {
-                const val = e.target.value;
-                if (activeTab === "ton") setTonAmount(val);
-                else if (activeTab === "usdt") setUsdtAmount(val);
-                else setBnbAmount(val);
-              }}
+              value={tonAmount}
+              onChange={(e) => setTonAmount(e.target.value)}
               min="0"
-              step={activeTab === "bnb" ? "0.01" : "0.1"}
+              step="0.1"
               disabled={loading}
             />
 
-            <p className="label-text">You Receive (ECG)</p>
-            <input className="input-box dark-input" readOnly value={equivalentECG} />
+            {/* ====== انتخاب خروجی ====== */}
+            <div className="output-selector">
+              <p className="output-label">💰 Select Output Currency:</p>
+              <div className="output-buttons">
+                <button
+                  className={`output-btn ${selectedOutput === "ECG" ? "active-ecg" : ""}`}
+                  onClick={() => setSelectedOutput("ECG")}
+                  disabled={loading}
+                >
+                  ⚡ ECG
+                </button>
+                <button
+                  className={`output-btn ${selectedOutput === "USDT" ? "active-usdt" : ""}`}
+                  onClick={() => setSelectedOutput("USDT")}
+                  disabled={loading}
+                >
+                  💵 USDT
+                </button>
+              </div>
+            </div>
+
+            {/* ====== دو باکس خروجی مجزا ====== */}
+            <div className="output-boxes">
+              {/* باکس ECG */}
+              <div className={`output-box ecg-box ${selectedOutput === "ECG" ? "box-active" : "box-inactive"}`}>
+                <div className="box-header">
+                  <span className="box-icon">⚡</span>
+                  <div>
+                    <span className="box-title">ECG</span>
+                    <span className="box-subtitle">You Receive</span>
+                  </div>
+                </div>
+                <div className="box-content">
+                  <div className="box-row">
+                    <span className="box-label">Amount:</span>
+                    <span className="box-value">
+                      {selectedOutput === "ECG" ? outputValue : 
+                        (Number(tonAmount) * tonPrice * ECG_PER_USDT).toFixed(2)} ECG
+                    </span>
+                  </div>
+                  <div className="box-row">
+                    <span className="box-label">≈ USD:</span>
+                    <span className="box-value">
+                      ${(Number(tonAmount) * tonPrice).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="box-row">
+                    <span className="box-label">5% Profit:</span>
+                    <span className="box-value">
+                      {selectedOutput === "ECG" ? 
+                        ((Number(tonAmount) * tonPrice * ECG_PER_USDT) * 0.05).toFixed(2) :
+                        ((Number(tonAmount) * tonPrice) * 0.05).toFixed(2)
+                      } {outputLabel}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* باکس USDT */}
+              <div className={`output-box usdt-box ${selectedOutput === "USDT" ? "box-active" : "box-inactive"}`}>
+                <div className="box-header">
+                  <span className="box-icon">💵</span>
+                  <div>
+                    <span className="box-title">USDT</span>
+                    <span className="box-subtitle">You Receive</span>
+                  </div>
+                </div>
+                <div className="box-content">
+                  <div className="box-row">
+                    <span className="box-label">Amount:</span>
+                    <span className="box-value">
+                      {selectedOutput === "USDT" ? outputValue :
+                        ((Number(tonAmount) * tonPrice * ECG_PER_USDT) / ECG_PER_USDT).toFixed(2)} USDT
+                    </span>
+                  </div>
+                  <div className="box-row">
+                    <span className="box-label">≈ USD:</span>
+                    <span className="box-value">
+                      ${(Number(tonAmount) * tonPrice).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="box-row">
+                    <span className="box-label">5% Profit:</span>
+                    <span className="box-value">
+                      {selectedOutput === "USDT" ? 
+                        ((Number(tonAmount) * tonPrice) * 0.05).toFixed(2) :
+                        ((Number(tonAmount) * tonPrice * ECG_PER_USDT) * 0.05).toFixed(2)
+                      } {outputLabel}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
 
             <button onClick={payAndRegister} className="convert-btn" disabled={loading}>
-              {loading ? "Processing..." : `Stake ${activeTab.toUpperCase()}`}
+              {loading ? "Processing..." : `Stake TON → ${outputLabel}`}
             </button>
 
             {/* ====== Test Button ====== */}
@@ -369,7 +335,7 @@ export default function Purchase() {
               className="test-btn"
               disabled={loading}
             >
-              🧪 Test {activeTab.toUpperCase()} Stake
+              🧪 Test Stake
             </button>
           </div>
 
@@ -387,24 +353,11 @@ export default function Purchase() {
                 const isTest = item.ton_tx_hash?.startsWith("TEST_");
                 const currency = item.currency || "TON";
                 
-                const amount = item.ton_amount || item.usdt_amount || item.bnb_amount || "-";
-                const txHash = item.ton_tx_hash || item.usdt_tx_hash || item.bnb_tx_hash || "-";
-                
-                const colorMap = {
-                  TON: "#22c55e",
-                  USDT: "#26a17b",
-                  BNB: "#f3ba2f"
-                };
-                const bgMap = {
-                  TON: "rgba(34,197,94,0.12)",
-                  USDT: "rgba(38,161,123,0.12)",
-                  BNB: "rgba(243,186,47,0.12)"
-                };
-
-                const currencyClass = currency.toLowerCase();
+                const amount = item.ton_amount || "-";
+                const txHash = item.ton_tx_hash || "-";
 
                 return (
-                  <div key={item.id} className={`invoice-card currency-${currencyClass}`}>
+                  <div key={item.id} className="invoice-card currency-ton">
                     <div className="invoice-header">
                       <div className="invoice-number">
                         <span className="invoice-label">Invoice {currency}</span>
@@ -417,8 +370,9 @@ export default function Purchase() {
                     </div>
 
                     <div className="invoice-body">
-                      <Row label={`${currency} Amount`} value={amount} />
+                      <Row label="TON Amount" value={amount} />
                       <Row label="ECG Value" value={item.ecg_value} />
+                      <Row label="USDT Value" value={(Number(item.ecg_value) / ECG_PER_USDT).toFixed(2)} />
                       <Row label="5% Profit" value={item.self_profit_5} />
                       <Row label="Principal Unlock" value={item.principal_unlock_at} />
                       <Row label="Profit Unlock" value={item.self_profit_unlock_at} />
