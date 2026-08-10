@@ -53,8 +53,8 @@ export default function Referrals() {
 
   const SITE_URL = "https://aipolynet.com/";
   
-  // ✅ نام کاربری ربات تلگرام
-  const BOT_USERNAME = "aipolynet_bot"; // نام ربات خود را وارد کنید
+  // ✅ اسم بات (پشت هم بدون خط تیره)
+  const BOT_USERNAME = "aipolynetbot";
 
   // ==========================================
   // Telegram Detection
@@ -281,49 +281,54 @@ export default function Referrals() {
   }
 
   // ==========================================
-  // 🔥 Referral Link - باز کردن در تلگرام
+  // Referral Link - Website
   // ==========================================
 
   const referralLink = myCode ? `${SITE_URL}?ref=${encodeURIComponent(myCode)}` : "";
 
   // ==========================================
-  // 🔥 Open Referral Link - باز کردن لینک در تلگرام
+  // 🔥 لینک مینی‌اپ (برای باز کردن در تلگرام)
+  // ==========================================
+
+  const getMiniAppLink = () => {
+    if (!myCode) return "";
+    return `https://t.me/${BOT_USERNAME}/app?startapp=ref_${myCode}`;
+  };
+
+  // ==========================================
+  // 🔥 Open Referral Link - باز کردن مینی‌اپ
   // ==========================================
 
   function openReferralLink() {
-    if (!referralLink || !myCode) return;
+    if (!myCode) return;
     
-    // ✅ لینک مستقیم به ربات تلگرام با پارامتر start
-    const telegramLink = `https://t.me/${BOT_USERNAME}?start=ref_${myCode}`;
-    
+    const miniAppLink = getMiniAppLink();
     const tg = window.Telegram?.WebApp;
     
     if (tg?.openTelegramLink) {
-      tg.openTelegramLink(telegramLink);
+      tg.openTelegramLink(miniAppLink);
     } else {
-      // اگر در مرورگر هستیم، لینک رو باز کن
-      window.open(telegramLink, "_blank");
+      window.open(miniAppLink, "_blank");
     }
   }
 
   // ==========================================
-  // 🔥 Share Telegram - اشتراک‌گذاری در تلگرام
+  // 🔥 Share Telegram - اشتراک‌گذاری مینی‌اپ
   // ==========================================
 
   function shareOnTelegram() {
-    if (!referralLink || !myCode) return;
+    if (!myCode) return;
 
-    // ✅ لینک مستقیم به ربات تلگرام با پارامتر start
-    const telegramLink = `https://t.me/${BOT_USERNAME}?start=ref_${myCode}`;
+    const miniAppLink = getMiniAppLink();
     
     const message = 
       `🎯 Join me on AI PolyNet!\n\n` +
       `🚀 Use my referral link to get started:\n` +
-      `${telegramLink}\n\n` +
+      `${miniAppLink}\n\n` +
       `💎 Don't miss out on the rewards!`;
 
     const tg = window.Telegram?.WebApp;
-    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(telegramLink)}&text=${encodeURIComponent(message)}`;
+    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(miniAppLink)}&text=${encodeURIComponent(message)}`;
 
     if (tg) {
       try {
@@ -453,7 +458,7 @@ export default function Referrals() {
               <input value={referralLink} readOnly className="link-input" />
 
               <button onClick={openReferralLink} disabled={!referralLink} className="btn-open">
-                🌐 Open
+                🌐 Open Mini App
               </button>
 
               <button onClick={copyReferralLink} disabled={!referralLink} className="btn-copy">
@@ -498,8 +503,7 @@ export default function Referrals() {
                 ================================================== */}
 
             <div className="info-note">
-              💡 This link is a <b>website</b> link. Your friend can open it and then press <b>OPEN APP</b> in
-              Telegram.
+              💡 This link is a <b>Mini App</b> link. Your friend can open it directly in Telegram.
             </div>
           </div>
 
