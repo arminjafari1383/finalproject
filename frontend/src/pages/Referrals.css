@@ -1,5 +1,5 @@
 /* ============================================================
-   REFERRALS - ULTIMATE GLASS DESIGN
+   REFERRALS - ULTIMATE GLASS DESIGN (MOBILE OPTIMIZED)
    ============================================================ */
 
 * {
@@ -11,7 +11,7 @@
   max-width: 1200px;
   min-height: 100vh;
   margin: 0 auto;
-  padding: 24px;
+  padding: 16px;
   color: #ffffff;
   background:
     radial-gradient(circle at 10% 10%, rgba(59, 130, 246, 0.08), transparent 30%),
@@ -24,12 +24,27 @@
    ============================================================ */
 
 .ref-title {
-  margin: 0 0 24px;
+  margin: 0 0 20px;
   text-align: center;
   color: #dbeafe;
-  font-size: 30px;
+  font-size: 24px;
   font-weight: 800;
   letter-spacing: -0.5px;
+}
+
+/* ============================================================
+   CONNECT WARNING
+   ============================================================ */
+
+.connect-warning {
+  text-align: center;
+  padding: 30px 20px;
+  font-size: 16px;
+  color: #ffd700;
+  background: rgba(255, 215, 0, 0.05);
+  border-radius: 14px;
+  border: 1px solid rgba(255, 215, 0, 0.1);
+  backdrop-filter: blur(10px);
 }
 
 /* ============================================================
@@ -39,49 +54,47 @@
 .referral-link-section {
   position: relative;
   overflow: hidden;
-  margin-bottom: 28px;
-  padding: 24px;
-  border-radius: 22px;
+  margin-bottom: 20px;
+  padding: 18px 16px;
+  border-radius: 18px;
   background: rgba(255, 255, 255, 0.04);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow:
-    0 20px 60px rgba(0, 0, 0, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3);
 }
 
 .referral-link-section::before {
   content: "";
   position: absolute;
-  top: -100px;
-  right: -100px;
-  width: 250px;
-  height: 250px;
+  top: -80px;
+  right: -80px;
+  width: 180px;
+  height: 180px;
   border-radius: 50%;
   background: rgba(59, 130, 246, 0.08);
-  filter: blur(50px);
+  filter: blur(40px);
   pointer-events: none;
 }
 
 .referral-link-section::after {
   content: "";
   position: absolute;
-  bottom: -80px;
-  left: -80px;
-  width: 200px;
-  height: 200px;
+  bottom: -60px;
+  left: -60px;
+  width: 150px;
+  height: 150px;
   border-radius: 50%;
   background: rgba(34, 197, 94, 0.05);
-  filter: blur(40px);
+  filter: blur(30px);
   pointer-events: none;
 }
 
 .referral-link-label {
   position: relative;
-  margin: 0 0 14px;
+  margin: 0 0 10px;
   color: #94a3b8;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.5px;
 }
@@ -89,7 +102,7 @@
 .link-actions {
   position: relative;
   display: flex;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
   flex-wrap: wrap;
 }
@@ -97,16 +110,16 @@
 .link-input {
   flex: 1;
   min-width: 0;
-  height: 46px;
-  padding: 0 15px;
-  border-radius: 12px;
+  height: 42px;
+  padding: 0 12px;
+  border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   color: #e2e8f0;
   font-family: monospace;
-  font-size: 13px;
+  font-size: 12px;
   transition: 0.25s ease;
 }
 
@@ -116,24 +129,24 @@
   box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.08);
 }
 
-/* ====== GLASS BUTTONS ====== */
+/* ====== GLASS BUTTONS - SMALLER ====== */
 .btn-open,
 .btn-copy,
 .btn-share-telegram {
-  height: 46px;
-  padding: 0 20px;
+  height: 42px;
+  padding: 0 14px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   color: #ffffff;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.3s ease;
   white-space: nowrap;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .btn-open:hover,
@@ -141,7 +154,7 @@
 .btn-share-telegram:hover {
   transform: translateY(-2px);
   background: rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
 }
 
 .btn-open {
@@ -167,198 +180,13 @@
 .btn-share-telegram {
   border-color: rgba(34, 158, 217, 0.25);
   background: linear-gradient(135deg, rgba(34, 158, 217, 0.15), rgba(22, 133, 217, 0.08));
-  box-shadow: 0 8px 25px rgba(34, 158, 217, 0.08);
+  box-shadow: 0 6px 20px rgba(34, 158, 217, 0.08);
 }
 
 .btn-share-telegram:hover {
   border-color: rgba(34, 158, 217, 0.5);
   background: linear-gradient(135deg, rgba(34, 158, 217, 0.25), rgba(22, 133, 217, 0.15));
-  box-shadow: 0 12px 30px rgba(34, 158, 217, 0.15);
-}
-
-/* ============================================================
-   OUTPUT BOXES - GLASS CARDS
-   ============================================================ */
-
-.output-boxes {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 18px;
-  width: 100%;
-  margin: 20px 0 25px;
-}
-
-/* ====== GLASS BOX BASE ====== */
-.output-box {
-  position: relative;
-  padding: 22px 20px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.15),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  overflow: hidden;
-}
-
-/* ====== GLOW EFFECTS ====== */
-.output-box::before {
-  content: "";
-  position: absolute;
-  top: -60px;
-  right: -60px;
-  width: 180px;
-  height: 180px;
-  border-radius: 50%;
-  filter: blur(40px);
-  opacity: 0.3;
-  transition: opacity 0.5s ease;
-  pointer-events: none;
-}
-
-.output-box.ecg-box::before {
-  background: rgba(34, 197, 94, 0.15);
-}
-
-.output-box.usdt-box::before {
-  background: rgba(96, 165, 250, 0.15);
-}
-
-.output-box:hover::before {
-  opacity: 0.6;
-}
-
-/* ====== ACTIVE STATE ====== */
-.output-box.box-active {
-  border-color: rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.05);
-  transform: translateY(-4px);
-  box-shadow:
-    0 20px 50px rgba(0, 0, 0, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
-}
-
-.output-box.ecg-box.box-active {
-  border-color: rgba(34, 197, 94, 0.25);
-  box-shadow:
-    0 20px 50px rgba(34, 197, 94, 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
-}
-
-.output-box.usdt-box.box-active {
-  border-color: rgba(96, 165, 250, 0.25);
-  box-shadow:
-    0 20px 50px rgba(96, 165, 250, 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
-}
-
-/* ====== BOX HEADER ====== */
-.box-header {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.box-icon {
-  width: 46px;
-  height: 46px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 14px;
-  font-size: 20px;
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.ecg-box .box-icon {
-  background: rgba(34, 197, 94, 0.08);
-  border-color: rgba(34, 197, 94, 0.1);
-}
-
-.usdt-box .box-icon {
-  background: rgba(96, 165, 250, 0.08);
-  border-color: rgba(96, 165, 250, 0.1);
-}
-
-.box-title {
-  font-size: 16px;
-  font-weight: 700;
-  color: #ffffff;
-  letter-spacing: 0.3px;
-}
-
-.box-subtitle {
-  font-size: 11px;
-  color: #64748b;
-  font-weight: 400;
-  margin-top: 1px;
-}
-
-/* ====== BOX CONTENT ====== */
-.box-content {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.box-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 7px 10px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.03);
-  transition: background 0.25s ease;
-}
-
-.box-row:hover {
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.box-label {
-  font-size: 12px;
-  color: #94a3b8;
-  font-weight: 500;
-}
-
-.box-value {
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.ecg-box .box-value {
-  color: #4ade80;
-}
-
-.usdt-box .box-value {
-  color: #60a5fa;
-}
-
-/* ====== NETWORK ROW ====== */
-.payment-network {
-  margin-top: 4px;
-  border-top: 1px solid rgba(255, 255, 255, 0.04);
-  padding-top: 8px;
-}
-
-.network-value {
-  background: rgba(255, 255, 255, 0.05);
-  padding: 2px 12px;
-  border-radius: 20px;
-  font-size: 11px;
-  font-weight: 600;
-  color: #93bbfc !important;
-  border: 1px solid rgba(255, 255, 255, 0.04);
+  box-shadow: 0 10px 25px rgba(34, 158, 217, 0.15);
 }
 
 /* ============================================================
@@ -368,16 +196,16 @@
 .stats-box {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  margin: 20px 0;
+  gap: 10px;
+  margin: 16px 0;
 }
 
 .stat-item {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 16px 18px;
-  border-radius: 15px;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.03);
   backdrop-filter: blur(15px);
   -webkit-backdrop-filter: blur(15px);
@@ -393,26 +221,71 @@
 
 .stat-label {
   color: #64748b;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.7px;
+  letter-spacing: 0.5px;
   text-transform: uppercase;
 }
 
 .stat-value {
   color: #facc15;
-  font-size: 26px;
+  font-size: 22px;
   font-weight: 900;
 }
 
 /* ============================================================
-   LEVELS SECTION - GLASS
+   TELEGRAM STATUS
+   ============================================================ */
+
+.telegram-status {
+  margin: 12px 0;
+}
+
+.status-active,
+.status-inactive {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.status-active {
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.18);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.status-inactive {
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.18);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+/* ============================================================
+   INFO NOTE
+   ============================================================ */
+
+.info-note {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-left: 3px solid #3b82f6;
+  border-radius: 8px;
+  background: rgba(59, 130, 246, 0.05);
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+/* ============================================================
+   LEVELS SECTION - GLASS (موبایل بهینه)
    ============================================================ */
 
 .levels-section {
-  margin-top: 24px;
-  padding: 22px;
-  border-radius: 20px;
+  margin-top: 20px;
+  padding: 16px 14px;
+  border-radius: 16px;
   background: rgba(255, 255, 255, 0.02);
   backdrop-filter: blur(15px);
   -webkit-backdrop-filter: blur(15px);
@@ -420,23 +293,23 @@
 }
 
 .levels-section h3 {
-  margin: 0 0 20px;
-  color: #e94560;
-  font-size: 20px;
+  margin: 0 0 16px;
+  color: #60a5fa; /* ✅ آبی یخی */
+  font-size: 17px;
   text-align: center;
   letter-spacing: 0.5px;
 }
 
 .levels-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
 }
 
-/* ====== LEVEL CARD ====== */
+/* ====== LEVEL CARD - کوچکتر برای موبایل ====== */
 .level-card {
-  padding: 14px;
-  border-radius: 14px;
+  padding: 10px 12px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.03);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
@@ -445,10 +318,10 @@
 }
 
 .level-card:hover {
-  border-color: rgba(233, 69, 96, 0.3);
-  transform: translateY(-3px);
+  border-color: rgba(96, 165, 250, 0.3);
+  transform: translateY(-2px);
   background: rgba(255, 255, 255, 0.05);
-  box-shadow: 0 12px 30px rgba(233, 69, 96, 0.06);
+  box-shadow: 0 8px 20px rgba(96, 165, 250, 0.06);
 }
 
 .level-table {
@@ -459,54 +332,55 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .level-header h4 {
   margin: 0;
   color: #facc15;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 700;
 }
 
 .level-count {
-  padding: 3px 10px;
+  padding: 2px 8px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.04);
   color: #64748b;
-  font-size: 11px;
+  font-size: 9px;
   font-weight: 600;
 }
 
-/* ====== TABLE ====== */
+/* ====== TABLE - کوچکتر برای موبایل ====== */
 .table-wrapper {
   overflow-x: auto;
-  border-radius: 8px;
+  border-radius: 6px;
 }
 
 .level-table table {
   width: 100%;
-  min-width: 500px;
+  min-width: 350px;
   border-collapse: collapse;
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .level-table th {
-  padding: 8px 10px;
+  padding: 5px 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   background: rgba(255, 255, 255, 0.03);
   color: #64748b;
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 700;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
   text-align: left;
   text-transform: uppercase;
 }
 
 .level-table td {
-  padding: 7px 10px;
+  padding: 5px 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.03);
   color: #cbd5e1;
+  font-size: 9px;
 }
 
 .level-table tr:hover td {
@@ -516,36 +390,41 @@
 .telegram-id {
   color: #facc15;
   font-family: monospace;
+  font-size: 8px;
 }
 
 .wallet-address {
   color: #60a5fa;
   font-family: monospace;
+  font-size: 8px;
 }
 
 .investment-cell {
   color: #38bdf8;
   font-weight: 700;
+  font-size: 9px;
 }
 
 .profit-cell {
   color: #4ade80;
   font-weight: 700;
+  font-size: 9px;
 }
 
 .empty-message,
 .no-data {
-  padding: 20px !important;
+  padding: 15px !important;
   color: #475569;
   text-align: center;
   font-style: italic;
+  font-size: 9px;
 }
 
 .show-more {
-  padding-top: 8px;
+  padding-top: 6px;
   border-top: 1px solid rgba(255, 255, 255, 0.04);
   color: #64748b;
-  font-size: 11px;
+  font-size: 9px;
   text-align: center;
 }
 
@@ -554,19 +433,19 @@
    ============================================================ */
 
 .test-actions {
-  margin-top: 22px;
+  margin-top: 16px;
   text-align: center;
 }
 
 .btn-test {
-  padding: 12px 28px;
+  padding: 10px 22px;
   border: 1px solid rgba(118, 75, 162, 0.25);
-  border-radius: 12px;
+  border-radius: 10px;
   background: rgba(118, 75, 162, 0.08);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   color: #a78bfa;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
   cursor: pointer;
   transition: all 0.3s ease;
@@ -575,7 +454,7 @@
 .btn-test:hover {
   background: rgba(118, 75, 162, 0.15);
   transform: translateY(-2px);
-  box-shadow: 0 10px 30px rgba(118, 75, 162, 0.1);
+  box-shadow: 0 8px 20px rgba(118, 75, 162, 0.1);
 }
 
 .btn-test:disabled {
@@ -584,24 +463,117 @@
 }
 
 /* ============================================================
-   RESPONSIVE
+   TEST TABLE SECTION
+   ============================================================ */
+
+.test-table-section {
+  margin-top: 16px;
+  padding: 16px 14px;
+  border: 1px solid rgba(118, 75, 162, 0.3);
+  border-radius: 14px;
+  background: rgba(10, 10, 26, 0.9);
+  backdrop-filter: blur(15px);
+  animation: slideDown 0.4s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.test-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.test-header h3 {
+  margin: 0;
+  color: #a78bfa;
+  font-size: 15px;
+}
+
+.btn-close {
+  padding: 5px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #94a3b8;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-close:hover {
+  background: rgba(255, 0, 0, 0.1);
+  color: #ff6b6b;
+  border-color: rgba(255, 0, 0, 0.2);
+}
+
+.test-card {
+  border-color: rgba(118, 75, 162, 0.4) !important;
+}
+
+.test-note {
+  margin-top: 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(118, 75, 162, 0.08);
+  color: #64748b;
+  font-size: 10px;
+  text-align: center;
+}
+
+/* ============================================================
+   LOADING / ERROR
+   ============================================================ */
+
+.loading-spinner {
+  padding: 20px;
+  color: #64748b;
+  font-size: 13px;
+  text-align: center;
+}
+
+.error-message {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.08);
+  color: #f87171;
+  font-size: 13px;
+}
+
+/* ============================================================
+   RESPONSIVE - MOBILE
    ============================================================ */
 
 @media (max-width: 768px) {
   .referrals-container {
-    padding: 15px;
+    padding: 12px;
   }
 
   .ref-title {
-    font-size: 25px;
+    font-size: 20px;
+    margin-bottom: 16px;
   }
 
   .referral-link-section {
-    padding: 18px;
+    padding: 14px 12px;
+    border-radius: 14px;
   }
 
   .link-actions {
     flex-direction: column;
+    gap: 6px;
   }
 
   .link-input,
@@ -609,61 +581,9 @@
   .btn-copy,
   .btn-share-telegram {
     width: 100%;
-  }
-
-  .output-boxes {
-    grid-template-columns: 1fr;
-    gap: 14px;
-  }
-
-  .output-box {
-    padding: 18px 16px;
-  }
-
-  .stats-box {
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-  }
-
-  .levels-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .levels-section {
-    padding: 15px;
-  }
-}
-
-@media (max-width: 480px) {
-  .referrals-container {
-    padding: 10px;
-  }
-
-  .ref-title {
-    font-size: 20px;
-    margin-bottom: 18px;
-  }
-
-  .referral-link-section {
-    padding: 14px;
-    border-radius: 17px;
-  }
-
-  .output-boxes {
-    gap: 12px;
-  }
-
-  .output-box {
-    padding: 14px 12px;
-    border-radius: 15px;
-  }
-
-  .box-title {
-    font-size: 14px;
-  }
-
-  .box-value {
-    font-size: 12px;
+    height: 38px;
+    font-size: 11px;
+    padding: 0 12px;
   }
 
   .stats-box {
@@ -672,50 +592,195 @@
   }
 
   .stat-item {
-    padding: 12px 14px;
+    padding: 10px 12px;
   }
 
   .stat-value {
-    font-size: 20px;
+    font-size: 18px;
   }
 
   .levels-section {
-    padding: 12px;
+    padding: 12px 10px;
+    border-radius: 12px;
   }
 
-  .level-table table {
-    min-width: 350px;
-    font-size: 10px;
+  .levels-section h3 {
+    font-size: 15px;
+    margin-bottom: 12px;
   }
 
-  .level-table th,
-  .level-table td {
-    padding: 4px 6px;
-  }
-
-  .wallet-address,
-  .telegram-id {
-    font-size: 8px;
-  }
-
-  .btn-test {
-    padding: 10px 20px;
-    font-size: 12px;
-  }
-}
-
-@media (max-width: 360px) {
-  .stats-box {
+  .levels-grid {
     grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .level-card {
+    padding: 8px 10px;
+    border-radius: 10px;
   }
 
   .level-table table {
-    min-width: 300px;
+    min-width: 280px;
     font-size: 9px;
   }
 
-  .level-table th,
+  .level-table th {
+    font-size: 7px;
+    padding: 4px 6px;
+  }
+
   .level-table td {
+    font-size: 8px;
+    padding: 4px 6px;
+  }
+
+  .telegram-id,
+  .wallet-address {
+    font-size: 7px;
+  }
+
+  .investment-cell,
+  .profit-cell {
+    font-size: 8px;
+  }
+
+  .level-header h4 {
+    font-size: 11px;
+  }
+
+  .level-count {
+    font-size: 8px;
+    padding: 2px 6px;
+  }
+
+  .empty-message,
+  .no-data {
+    padding: 10px !important;
+    font-size: 8px;
+  }
+
+  .show-more {
+    font-size: 8px;
+  }
+
+  .test-actions {
+    margin-top: 12px;
+  }
+
+  .btn-test {
+    padding: 8px 18px;
+    font-size: 11px;
+  }
+
+  .test-table-section {
+    padding: 12px 10px;
+    border-radius: 10px;
+  }
+
+  .test-header h3 {
+    font-size: 13px;
+  }
+
+  .btn-close {
+    font-size: 10px;
+    padding: 4px 10px;
+  }
+
+  .test-note {
+    font-size: 9px;
+    padding: 6px 8px;
+  }
+
+  .telegram-status {
+    margin: 10px 0;
+  }
+
+  .status-active,
+  .status-inactive {
+    font-size: 10px;
+    padding: 4px 10px;
+  }
+
+  .info-note {
+    font-size: 10px;
+    padding: 8px 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .referrals-container {
+    padding: 8px;
+  }
+
+  .ref-title {
+    font-size: 18px;
+    margin-bottom: 12px;
+  }
+
+  .referral-link-section {
+    padding: 12px 10px;
+    border-radius: 12px;
+  }
+
+  .stats-box {
+    gap: 6px;
+  }
+
+  .stat-item {
+    padding: 8px 10px;
+  }
+
+  .stat-label {
+    font-size: 8px;
+  }
+
+  .stat-value {
+    font-size: 16px;
+  }
+
+  .levels-section h3 {
+    font-size: 13px;
+  }
+
+  .level-table table {
+    min-width: 240px;
+    font-size: 8px;
+  }
+
+  .level-table th {
+    font-size: 6px;
     padding: 3px 4px;
+  }
+
+  .level-table td {
+    font-size: 7px;
+    padding: 3px 4px;
+  }
+
+  .telegram-id,
+  .wallet-address {
+    font-size: 6px;
+  }
+
+  .investment-cell,
+  .profit-cell {
+    font-size: 7px;
+  }
+
+  .level-header h4 {
+    font-size: 10px;
+  }
+
+  .level-count {
+    font-size: 7px;
+  }
+
+  .btn-test {
+    padding: 6px 14px;
+    font-size: 10px;
+  }
+
+  .test-header h3 {
+    font-size: 11px;
   }
 }
