@@ -1,3 +1,7 @@
+/* ============================================================
+   WALLET - ULTIMATE GLASS DESIGN
+   ============================================================ */
+
 /* =========================
    Reset & Base
 ========================= */
@@ -11,7 +15,7 @@ html, body {
   width: 100%;
   margin: 0;
   padding: 0;
-  background: linear-gradient(135deg, #0a0f2c, #0f1d3b, #112b4a);
+  background: #070b16;
   overflow-x: hidden;
 }
 
@@ -25,82 +29,486 @@ html, body {
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  background: linear-gradient(135deg, #0a0f2c, #0f1d3b, #112b4a);
-  padding: 0.5rem;
-  padding-top: 1rem;
-  padding-bottom: 80px;
+  background:
+    radial-gradient(circle at 20% 10%, rgba(59, 130, 246, 0.08), transparent 40%),
+    radial-gradient(circle at 80% 90%, rgba(34, 197, 94, 0.05), transparent 40%),
+    #070b16;
+  padding: 1rem;
+  padding-top: 2rem;
+  padding-bottom: 90px;
 }
 
 /* =========================
-   Wallet Box
+   Wallet Box - Glass Card
 ========================= */
 
 .wallet-box {
   width: 100%;
-  max-width: 420px;
-  padding: 1.5rem;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(25px);
-  border-radius: 22px;
+  max-width: 440px;
+  padding: 2rem 1.8rem;
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 28px;
   color: white;
   text-align: center;
-  box-shadow: 0 0 30px rgba(0, 0, 50, 0.3);
-  margin: 0 auto;
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  position: relative;
+  overflow: hidden;
+  animation: fadeIn 0.6s ease-out;
+}
+
+/* Glow Effect */
+.wallet-box::before {
+  content: '';
+  position: absolute;
+  top: -120px;
+  right: -120px;
+  width: 300px;
+  height: 300px;
+  border-radius: 50%;
+  background: rgba(59, 130, 246, 0.06);
+  filter: blur(60px);
+  pointer-events: none;
+}
+
+.wallet-box::after {
+  content: '';
+  position: absolute;
+  bottom: -100px;
+  left: -100px;
+  width: 250px;
+  height: 250px;
+  border-radius: 50%;
+  background: rgba(34, 197, 94, 0.04);
+  filter: blur(50px);
+  pointer-events: none;
 }
 
 .wallet-title {
+  position: relative;
   font-size: 1.8rem;
   font-weight: 800;
-  margin-bottom: 1rem;
-  color: #a3c5ff;
-  text-shadow: 0 0 10px rgba(0, 90, 255, 0.6);
+  margin-bottom: 0.8rem;
+  background: linear-gradient(135deg, #60a5fa, #93bbfc);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -0.5px;
+}
+
+.wallet-title::after {
+  content: '';
+  display: block;
+  width: 60px;
+  height: 3px;
+  margin: 10px auto 0;
+  background: linear-gradient(90deg, transparent, #60a5fa, transparent);
+  border-radius: 2px;
 }
 
 /* =========================
-   Connect Button - Small Logo
+   Connect Button - Glass Style
 ========================= */
 
 .connect-button-wrapper {
+  position: relative;
   width: 100%;
   display: flex;
   justify-content: center;
-  margin: 8px 0;
+  margin: 12px 0;
 }
 
 .connect-button-wrapper button {
   width: 100% !important;
-  max-width: 280px !important;
-  padding: 8px 16px !important;
-  font-size: 13px !important;
-  font-weight: 500 !important;
-  min-height: 36px !important;
-  border-radius: 10px !important;
-  background: rgba(255, 255, 255, 0.1) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  color: white !important;
-  transition: all 0.3s ease !important;
+  max-width: 320px !important;
+  padding: 12px 24px !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  min-height: 48px !important;
+  border-radius: 16px !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #e2e8f0 !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  gap: 6px !important;
+  gap: 10px !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1) !important;
 }
 
-/* کوچک کردن لوگو مثلثی */
 .connect-button-wrapper button svg {
-  width: 16px !important;
-  height: 16px !important;
+  width: 20px !important;
+  height: 20px !important;
   flex-shrink: 0 !important;
+  opacity: 0.8;
 }
 
 .connect-button-wrapper button:hover {
-  background: rgba(255, 255, 255, 0.15) !important;
-  border-color: rgba(255, 255, 255, 0.25) !important;
-  transform: translateY(-1px) !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(96, 165, 250, 0.3) !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 8px 30px rgba(96, 165, 250, 0.1) !important;
 }
 
 .connect-button-wrapper button:active {
-  transform: scale(0.98) !important;
+  transform: scale(0.97) !important;
+}
+
+/* =========================
+   Error Messages
+========================= */
+
+.wallet-error {
+  position: relative;
+  margin-top: 16px;
+  padding: 18px 20px;
+  border-radius: 16px;
+  border: 1px solid rgba(239, 68, 68, 0.15);
+  background: rgba(239, 68, 68, 0.06);
+  backdrop-filter: blur(10px);
+  font-size: 14px;
+  text-align: center;
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.wallet-error .error-icon {
+  font-size: 28px;
+  margin-bottom: 6px;
+}
+
+.wallet-error .error-title {
+  font-weight: 700;
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+
+.wallet-error .error-desc {
+  font-size: 13px;
+  color: #94a3b8;
+  line-height: 1.5;
+}
+
+/* =========================
+   Wallet Content
+========================= */
+
+.wallet-content {
+  position: relative;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.wallet-content h3 {
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.balance {
+  font-size: 2.8rem;
+  font-weight: 900;
+  background: linear-gradient(135deg, #4ade80, #22c55e);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  padding: 8px 0;
+  word-break: break-all;
+  text-shadow: none;
+}
+
+/* =========================
+   Wallet Locked Badge
+========================= */
+
+.wallet-locked-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 6px 16px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #4ade80;
+  background: rgba(34, 197, 94, 0.08);
+  border: 1px solid rgba(34, 197, 94, 0.12);
+}
+
+/* =========================
+   Withdraw Button
+========================= */
+
+.withdraw-btn {
+  margin-top: 20px;
+  width: 100%;
+  padding: 14px;
+  border-radius: 16px;
+  font-size: 16px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: white;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 8px 30px rgba(34, 197, 94, 0.2);
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.withdraw-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.1), transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.withdraw-btn:hover:not(:disabled) {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 40px rgba(34, 197, 94, 0.3);
+}
+
+.withdraw-btn:hover:not(:disabled)::before {
+  opacity: 1;
+}
+
+.withdraw-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.withdraw-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* =========================
+   Disconnect Button
+========================= */
+
+.disconnect-btn {
+  margin-top: 14px;
+  padding: 8px 20px;
+  background: transparent;
+  color: #64748b;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.3s ease;
+}
+
+.disconnect-btn:hover {
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.2);
+  background: rgba(239, 68, 68, 0.05);
+}
+
+/* =========================
+   Modal - Glass Design
+========================= */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 16px;
+  animation: fadeIn 0.25s ease;
+}
+
+.modal {
+  width: min(420px, 92vw);
+  max-width: 100%;
+  background: rgba(20, 30, 50, 0.95);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 24px;
+  padding: 28px 24px;
+  box-shadow: 0 40px 100px rgba(0, 0, 0, 0.5);
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: modalSlideUp 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes modalSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.modal-close {
+  border: none;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 10px;
+  font-size: 20px;
+  cursor: pointer;
+  color: #64748b;
+  padding: 4px 12px;
+  transition: all 0.3s ease;
+}
+
+.modal-close:hover:not(:disabled) {
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.08);
+  transform: rotate(90deg);
+}
+
+.modal-close:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.modal-body {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.modal-body label {
+  font-weight: 600;
+  font-size: 13px;
+  color: #94a3b8;
+  text-align: left;
+  letter-spacing: 0.3px;
+}
+
+.modal-body input {
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 16px;
+  font-weight: 600;
+  color: #e2e8f0;
+  transition: all 0.3s ease;
+  width: 100%;
+}
+
+.modal-body input:focus {
+  outline: none;
+  border-color: rgba(96, 165, 250, 0.3);
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.05);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.modal-body input::placeholder {
+  color: #475569;
+}
+
+.modal-body input:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.error-text {
+  color: #f87171;
+  font-size: 13px;
+  padding: 6px 0;
+  text-align: left;
+}
+
+.modal-footer {
+  margin-top: 22px;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.btn-primary,
+.btn-secondary {
+  padding: 12px 28px;
+  border-radius: 14px;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  transition: all 0.3s ease;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: white;
+  box-shadow: 0 8px 25px rgba(59, 130, 246, 0.2);
+}
+
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 35px rgba(59, 130, 246, 0.3);
+}
+
+.btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.04);
+  color: #94a3b8;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+}
+
+.btn-secondary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 /* =========================
@@ -114,10 +522,11 @@ html, body {
   text-align: left;
   font-size: 11px;
   background: rgba(0, 0, 0, 0.35);
-  padding: 10px 12px;
-  border-radius: 12px;
-  margin-top: 15px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(10px);
+  padding: 12px 14px;
+  border-radius: 14px;
+  margin-top: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 .debug-item {
@@ -126,7 +535,7 @@ html, body {
   align-items: center;
   padding: 4px 0;
   gap: 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
 }
 
 .debug-item:last-of-type {
@@ -134,7 +543,7 @@ html, body {
 }
 
 .debug-label {
-  color: #8899bb;
+  color: #64748b;
   font-weight: 500;
   font-size: 10px;
   white-space: nowrap;
@@ -143,7 +552,7 @@ html, body {
 }
 
 .debug-value {
-  color: #a8c6ff;
+  color: #93bbfc;
   font-family: 'Courier New', monospace;
   font-size: 10px;
   text-align: right;
@@ -155,14 +564,14 @@ html, body {
 }
 
 .status-value {
-  color: #4dff91;
+  color: #4ade80;
   font-weight: 600;
 }
 
 .debug-error {
-  color: #ff6b6b;
+  color: #f87171;
   padding: 5px 0 2px 0;
-  border-top: 1px solid rgba(255, 0, 0, 0.12);
+  border-top: 1px solid rgba(239, 68, 68, 0.08);
   margin-top: 4px;
   display: flex;
   justify-content: space-between;
@@ -171,29 +580,29 @@ html, body {
 }
 
 .debug-error .debug-label {
-  color: #ff6b6b;
+  color: #f87171;
   min-width: 75px;
   flex-shrink: 0;
 }
 
 .debug-error .error-value {
-  color: #ff6b6b;
+  color: #f87171;
   max-width: 55%;
 }
 
 .debug-reset {
   margin-top: 10px;
   text-align: center;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
   padding-top: 10px;
 }
 
 .debug-reset-button {
-  background: rgba(255, 60, 60, 0.12);
-  border: 1px solid rgba(255, 60, 60, 0.2);
-  color: #ff6b6b;
+  background: rgba(239, 68, 68, 0.06);
+  border: 1px solid rgba(239, 68, 68, 0.1);
+  color: #f87171;
   padding: 6px 20px;
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
   font-size: 11px;
   transition: all 0.2s;
@@ -202,8 +611,8 @@ html, body {
 }
 
 .debug-reset-button:hover {
-  background: rgba(255, 60, 60, 0.25);
-  border-color: rgba(255, 60, 60, 0.4);
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.2);
 }
 
 .debug-reset-button:active {
@@ -211,338 +620,137 @@ html, body {
 }
 
 /* =========================
-   Wallet Content
+   Loading
 ========================= */
 
-.wallet-content {
-  margin-top: 20px;
-  padding-top: 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.wallet-content h3 {
-  color: #b8d5ff;
-  font-size: 13px;
-  font-weight: 400;
-  margin-bottom: 6px;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-}
-
-.balance {
-  font-size: 2.5rem;
-  font-weight: 700;
-  color: #4dff91;
-  text-shadow: 0 0 20px rgba(77, 255, 145, 0.3);
-  padding: 10px 0;
-  word-break: break-all;
-}
-
 .loading-text {
-  color: #a8c6ff;
+  color: #94a3b8;
   font-size: 14px;
   padding: 25px 0;
   animation: pulse 1.5s ease-in-out infinite;
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 0.6; }
+  0%, 100% { opacity: 0.4; }
   50% { opacity: 1; }
 }
 
 /* =========================
-   Withdraw Button
+   Animations
 ========================= */
 
-.withdraw-btn {
-  margin-top: 20px;
-  width: 100%;
-  padding: 14px;
-  border-radius: 14px;
-  font-size: 17px;
-  font-weight: 600;
-  background: linear-gradient(135deg, #4dff91, #24d96f);
-  color: #0a0f2c;
-  border: none;
-  cursor: pointer;
-  box-shadow: 0 0 30px rgba(36, 255, 111, 0.3);
-  transition: 0.25s;
-}
-
-.withdraw-btn:hover {
-  transform: scale(1.02);
-  box-shadow: 0 0 40px rgba(36, 255, 111, 0.5);
-}
-
-.withdraw-btn:active {
-  transform: scale(0.98);
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* =========================
-   Modal
+   Scrollbar
 ========================= */
 
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-  padding: 16px;
-  backdrop-filter: blur(8px);
+::-webkit-scrollbar {
+  width: 4px;
 }
 
-.modal {
-  width: min(420px, 92vw);
-  max-width: 100%;
-  background: #ffffff;
-  border-radius: 16px;
-  padding: 20px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-  max-height: 90vh;
-  overflow-y: auto;
-}
-
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #e0e0e0;
-}
-
-.modal-header h3 {
-  margin: 0;
-  font-size: 18px;
-  color: #0a0f2c;
-}
-
-.modal-close {
-  border: none;
+::-webkit-scrollbar-track {
   background: transparent;
-  font-size: 24px;
-  cursor: pointer;
-  color: #666;
-  padding: 0 8px;
-  transition: 0.2s;
 }
 
-.modal-close:hover {
-  color: #000;
-  transform: rotate(90deg);
+::-webkit-scrollbar-thumb {
+  background: rgba(96, 165, 250, 0.3);
+  border-radius: 4px;
 }
 
-.modal-close:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(96, 165, 250, 0.5);
 }
 
-.modal-body {
-  margin-top: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
 
-.modal-body label {
-  font-weight: 500;
-  font-size: 14px;
-  color: #333;
-}
-
-.modal-body input {
-  padding: 12px 14px;
-  border: 2px solid #ddd;
-  border-radius: 10px;
-  font-size: 16px;
-  transition: 0.2s;
-  width: 100%;
-}
-
-.modal-body input:focus {
-  outline: none;
-  border-color: #4dff91;
-  box-shadow: 0 0 0 3px rgba(77, 255, 145, 0.2);
-}
-
-.modal-body input:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.error-text {
-  color: #c62828;
-  font-size: 13px;
-  padding: 6px 0;
-}
-
-.modal-footer {
-  margin-top: 20px;
-  display: flex;
-  gap: 10px;
-  justify-content: flex-end;
-  padding-top: 16px;
-  border-top: 1px solid #e0e0e0;
-}
-
-.btn-primary,
-.btn-secondary {
-  padding: 10px 20px;
-  border-radius: 10px;
-  border: none;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  transition: 0.2s;
-}
-
-.btn-primary {
-  background: #0a0f2c;
-  color: white;
-}
-
-.btn-primary:hover {
-  background: #1a2555;
-  transform: scale(1.02);
-}
-
-.btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.btn-secondary {
-  background: #f0f0f0;
-  color: #333;
-}
-
-.btn-secondary:hover {
-  background: #e0e0e0;
-}
-
-.btn-secondary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* =========================
-   Fix برای کلاس‌های TonConnect
-========================= */
-
-.go54158285,
-.go1423325091,
-.go526437840,
-.go3349661836,
-.go884629673,
-.go3205121330 {
-  display: none !important;
-}
-
-/* =========================
-   Mobile Responsive
-========================= */
-
-@media (max-width: 480px) {
+@media (max-width: 768px) {
   .wallet-page-container {
-    padding: 6px;
-    padding-top: 12px;
-    padding-bottom: 70px;
+    padding: 0.8rem;
+    padding-top: 1.5rem;
+    padding-bottom: 80px;
   }
 
   .wallet-box {
-    padding: 14px;
-    border-radius: 16px;
+    padding: 1.5rem;
+    border-radius: 22px;
   }
 
   .wallet-title {
-    font-size: 1.4rem;
-    margin-bottom: 0.8rem;
+    font-size: 1.5rem;
   }
 
-  /* دکمه کانکت در موبایل */
-  .connect-button-wrapper {
-    margin: 6px 0;
+  .balance {
+    font-size: 2.2rem;
   }
 
   .connect-button-wrapper button {
     max-width: 100% !important;
-    padding: 6px 14px !important;
-    font-size: 12px !important;
-    min-height: 32px !important;
-    border-radius: 8px !important;
+    padding: 10px 20px !important;
+    font-size: 13px !important;
+    min-height: 42px !important;
   }
 
-  .connect-button-wrapper button svg {
-    width: 14px !important;
-    height: 14px !important;
+  .modal {
+    padding: 22px 18px;
+  }
+}
+
+@media (max-width: 480px) {
+  .wallet-page-container {
+    padding: 0.5rem;
+    padding-top: 1rem;
+    padding-bottom: 70px;
   }
 
-  /* دیباگ باکس در موبایل */
-  .debug-box {
-    font-size: 10px;
-    padding: 8px 10px;
-    margin-top: 12px;
+  .wallet-box {
+    padding: 1.2rem 1rem;
+    border-radius: 18px;
   }
 
-  .debug-item {
-    padding: 3px 0;
-    gap: 6px;
+  .wallet-title {
+    font-size: 1.3rem;
   }
 
-  .debug-label {
-    font-size: 9px;
-    min-width: 65px;
-  }
-
-  .debug-value {
-    font-size: 9px;
-    max-width: 50%;
-  }
-
-  .debug-error {
-    padding: 4px 0 2px 0;
-    gap: 6px;
-  }
-
-  .debug-error .debug-label {
-    font-size: 9px;
-    min-width: 65px;
-  }
-
-  .debug-error .error-value {
-    font-size: 9px;
-    max-width: 50%;
-  }
-
-  .debug-reset-button {
-    font-size: 10px;
-    padding: 5px 16px;
-  }
-
-  /* محتوای والت */
   .balance {
-    font-size: 2rem;
+    font-size: 1.8rem;
   }
 
   .wallet-content h3 {
-    font-size: 12px;
+    font-size: 10px;
+  }
+
+  .connect-button-wrapper button {
+    padding: 8px 16px !important;
+    font-size: 12px !important;
+    min-height: 38px !important;
+    border-radius: 12px !important;
+  }
+
+  .connect-button-wrapper button svg {
+    width: 16px !important;
+    height: 16px !important;
   }
 
   .withdraw-btn {
-    font-size: 15px;
+    font-size: 14px;
     padding: 12px;
-    margin-top: 16px;
   }
 
-  /* مودال */
   .modal {
-    width: 95vw;
-    padding: 14px;
-    margin: 10px;
-    max-height: 85vh;
+    padding: 18px 14px;
+    border-radius: 18px;
   }
 
   .modal-header h3 {
@@ -551,7 +759,7 @@ html, body {
 
   .modal-body input {
     font-size: 14px;
-    padding: 10px 12px;
+    padding: 10px 14px;
   }
 
   .modal-footer {
@@ -573,93 +781,65 @@ html, body {
     order: 1;
   }
 
+  .wallet-error {
+    padding: 14px 16px;
+    font-size: 13px;
+  }
+
+  .debug-box {
+    font-size: 10px;
+    padding: 8px 10px;
+  }
+
+  .debug-label {
+    font-size: 9px;
+    min-width: 60px;
+  }
+
+  .debug-value {
+    font-size: 9px;
+    max-width: 50%;
+  }
+
   .loading-text {
     font-size: 13px;
     padding: 18px 0;
   }
 }
 
-/* =========================
-   Very Small Devices (A36)
-========================= */
-
 @media (max-width: 360px) {
-  .wallet-page-container {
-    padding: 4px;
-    padding-top: 8px;
-    padding-bottom: 60px;
-  }
-
   .wallet-box {
-    padding: 10px;
-    border-radius: 12px;
+    padding: 0.8rem 0.8rem;
+    border-radius: 14px;
   }
 
   .wallet-title {
-    font-size: 1.2rem;
-    margin-bottom: 0.6rem;
-  }
-
-  .connect-button-wrapper button {
-    padding: 5px 12px !important;
-    font-size: 11px !important;
-    min-height: 28px !important;
-    border-radius: 6px !important;
-  }
-
-  .connect-button-wrapper button svg {
-    width: 12px !important;
-    height: 12px !important;
-  }
-
-  .debug-box {
-    font-size: 9px;
-    padding: 6px 8px;
-    margin-top: 10px;
-  }
-
-  .debug-label {
-    font-size: 8px;
-    min-width: 55px;
-  }
-
-  .debug-value {
-    font-size: 8px;
-    max-width: 45%;
-  }
-
-  .debug-error .debug-label {
-    font-size: 8px;
-    min-width: 55px;
-  }
-
-  .debug-error .error-value {
-    font-size: 8px;
-    max-width: 45%;
-  }
-
-  .debug-reset-button {
-    font-size: 9px;
-    padding: 4px 12px;
+    font-size: 1.1rem;
   }
 
   .balance {
-    font-size: 1.6rem;
-    padding: 6px 0;
+    font-size: 1.5rem;
   }
 
-  .wallet-content h3 {
-    font-size: 11px;
+  .connect-button-wrapper button {
+    padding: 6px 12px !important;
+    font-size: 11px !important;
+    min-height: 32px !important;
+    border-radius: 10px !important;
+  }
+
+  .connect-button-wrapper button svg {
+    width: 14px !important;
+    height: 14px !important;
   }
 
   .withdraw-btn {
     font-size: 13px;
     padding: 10px;
-    margin-top: 12px;
   }
 
   .modal {
-    padding: 10px;
+    padding: 14px 10px;
   }
 
   .modal-header h3 {
@@ -668,76 +848,19 @@ html, body {
 
   .modal-body input {
     font-size: 13px;
-    padding: 8px 10px;
-  }
-
-  .modal-footer button {
-    padding: 10px;
-    font-size: 13px;
+    padding: 8px 12px;
   }
 }
 
 /* =========================
-   Tablet & Desktop
+   Fix برای کلاس‌های TonConnect
 ========================= */
 
-@media (min-width: 768px) {
-  .wallet-page-container {
-    padding: 2rem;
-    align-items: center;
-  }
-
-  .wallet-box {
-    max-width: 420px;
-    padding: 2rem;
-  }
-
-  .connect-button-wrapper button {
-    max-width: 280px !important;
-  }
-}
-
-/* =========================
-   Animations
-========================= */
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.wallet-box {
-  animation: fadeIn 0.5s ease-out;
-}
-
-.modal {
-  animation: fadeIn 0.3s ease-out;
-}
-
-/* =========================
-   Scrollbar
-========================= */
-
-::-webkit-scrollbar {
-  width: 4px;
-}
-
-::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 10px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 10px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
+.go54158285,
+.go1423325091,
+.go526437840,
+.go3349661836,
+.go884629673,
+.go3205121330 {
+  display: none !important;
 }

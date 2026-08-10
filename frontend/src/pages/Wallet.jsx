@@ -55,34 +55,8 @@ export default function Wallet() {
   const [withdrawError, setWithdrawError] = useState("");
   const [isWithdrawing, setIsWithdrawing] = useState(false);
 
-  const [debug, setDebug] = useState({
-    tgStartParam: "",
-    lsInviterCode: "",
-    sentInviterCode: "",
-    connectStatus: "",
-    connectError: "",
-  });
-
-  // =============================================
-  // ⭐ سیستم لاگ‌گیری روی صفحه (Screen Logger)
-  // =============================================
-  const [logs, setLogs] = useState([]);
-  
-  const addLog = (message, type = 'info') => {
-    const timestamp = new Date().toLocaleTimeString();
-    setLogs(prev => [...prev, { timestamp, message, type }]);
-    // همچنین در کنسول هم چاپ می‌شود
-    if (type === 'error') console.error(`[${timestamp}] ${message}`);
-    else if (type === 'success') console.log(`✅ [${timestamp}] ${message}`);
-    else console.log(`[${timestamp}] ${message}`);
-  };
-
-  const clearLogs = () => setLogs([]);
-  // =============================================
-
   // دریافت کد دعوت در اولین لود
   useEffect(() => {
-    addLog("🔍 Capturing referral code...");
     const code = captureInviterCode();
     
     setDebug((d) => ({
@@ -105,18 +79,18 @@ export default function Wallet() {
         ...currentData,
         walletAddress: address
       });
-      addLog(`💾 Wallet address saved: ${address.slice(0, 8)}...`);
+      console.log(`💾 Wallet address saved: ${address.slice(0, 8)}...`);
     }
   }, [address]);
 
   // ✅ تابع اصلی اتصال به سرور
   const connectAndLoadWallet = useCallback(async () => {
     if (hasConnected.current || !address) {
-        addLog("⛔️ Skipping connect (already connected or no address)", 'info');
+        console.log("⛔️ Skipping connect (already connected or no address)");
         return;
     }
 
-    addLog("🔄 Starting connectAndLoadWallet...", 'info');
+    console.log("🔄 Starting connectAndLoadWallet...");
     hasConnected.current = true;
     setConnectError("");
     setErrorType("none");
@@ -138,7 +112,7 @@ export default function Wallet() {
       telegramId = Number(savedData.telegramId);
       telegramUsername = savedData.telegramUsername || null;
       isTelegram = savedData.isTelegram || false;
-      addLog(`📂 Using telegram_id from localStorage: ${telegramId}`);
+      console.log(`📂 Using telegram_id from localStorage: ${telegramId}`);
     } else {
       const tg = window.Telegram?.WebApp;
       if (tg?.initDataUnsafe?.user) {
@@ -146,7 +120,7 @@ export default function Wallet() {
         telegramId = Number(user.id);
         telegramUsername = user.username || null;
         isTelegram = true;
-        addLog(`✅ Using telegram_id from Telegram: ${telegramId}`);
+        console.log(`✅ Using telegram_id from Telegram: ${telegramId}`);
         
         saveUserDataToStorage({
           telegramId: telegramId,
@@ -164,7 +138,7 @@ export default function Wallet() {
           telegramId = Number(Math.abs(hash) + 1000000000000);
           telegramUsername = `browser_${address.slice(0, 8)}`;
           isTelegram = false;
-          addLog(`🌐 Generated browser telegram_id: ${telegramId}`);
+          console.log(`🌐 Generated browser telegram_id: ${telegramId}`);
           
           saveUserDataToStorage({
             telegramId: telegramId,
@@ -178,7 +152,7 @@ export default function Wallet() {
 
     if (!telegramId) {
       telegramId = Number(Math.floor(Math.random() * 1000000000) + 100000000);
-      addLog(`⚠️ Generated fallback telegram_id: ${telegramId}`);
+      console.log(`⚠️ Generated fallback telegram_id: ${telegramId}`);
     }
 
     setDebug((d) => ({
@@ -201,17 +175,17 @@ export default function Wallet() {
       payload.telegram_username = telegramUsername || null;
     }
 
-    addLog(`📤 Sending payload to /api/connect/`, 'info');
-    addLog(`📤 Payload: ${JSON.stringify(payload, null, 2)}`);
+    console.log(`📤 Sending payload to /api/connect/`);
+    console.log(`📤 Payload: ${JSON.stringify(payload, null, 2)}`);
 
     try {
       const response = await api.post("/connect/", payload);
-      addLog(`✅ /connect/ response received`, 'success');
-      addLog(`✅ Status: ${response.status}`);
+      console.log(`✅ /connect/ response received`);
+      console.log(`✅ Status: ${response.status}`);
 
       if (response.data?.user?.wallet_locked) {
         setWalletLocked(true);
-        addLog(`🔒 Wallet is locked to this Telegram ID`, 'info');
+        console.log(`🔒 Wallet is locked to this Telegram ID`);
       }
 
       if (response.data?.user) {
@@ -222,7 +196,7 @@ export default function Wallet() {
           isTelegram: user.is_telegram || isTelegram,
           walletAddress: address
         });
-        addLog(`📝 User data saved to localStorage`, 'success');
+        console.log(`📝 User data saved to localStorage`);
       }
 
       setDebug((d) => ({
@@ -231,26 +205,26 @@ export default function Wallet() {
         connectError: "",
       }));
 
-      addLog(`🔄 Fetching wallet data...`, 'info');
+      console.log(`🔄 Fetching wallet data...`);
       const r = await api.get(`/wallet/${address}/`);
-      addLog(`✅ Wallet data received`, 'success');
+      console.log(`✅ Wallet data received`);
 
       setWallet(r.data);
       setErrorType("none");
-      addLog(`✅ Connection completed successfully!`, 'success');
+      console.log(`✅ Connection completed successfully!`);
 
     } catch (e) {
-      addLog(`❌ Error in connectAndLoadWallet`, 'error');
-      addLog(`❌ Error Message: ${e.message}`, 'error');
+      console.log(`❌ Error in connectAndLoadWallet`);
+      console.log(`❌ Error Message: ${e.message}`);
       
       if (e.response) {
-        addLog(`❌ Status Code: ${e.response.status}`, 'error');
-        addLog(`❌ Response Data: ${JSON.stringify(e.response.data)}`, 'error');
+        console.log(`❌ Status Code: ${e.response.status}`);
+        console.log(`❌ Response Data: ${JSON.stringify(e.response.data)}`);
       } else if (e.request) {
-        addLog(`⚠️ Request made but NO response received (Network Error / CORS)`, 'error');
-        addLog(`⚠️ This is likely a CORS or DNS issue.`, 'error');
+        console.log(`⚠️ Request made but NO response received (Network Error / CORS)`);
+        console.log(`⚠️ This is likely a CORS or DNS issue.`);
       } else {
-        addLog(`❌ Request setup error: ${e.message}`, 'error');
+        console.log(`❌ Request setup error: ${e.message}`);
       }
 
       const errorData = e?.response?.data;
@@ -260,23 +234,23 @@ export default function Wallet() {
       if (isNetworkError) {
         setErrorType("network_error");
         setConnectError("🌐 Network Error! Please check your internet connection.");
-        addLog(`🌐 Network Error detected. Server unreachable.`, 'error');
+        console.log(`🌐 Network Error detected. Server unreachable.`);
       } else if (errorData?.error?.includes("already linked") || 
                  errorData?.error?.includes("locked") ||
                  errorData?.detail?.includes("already linked")) {
         setErrorType("locked");
         setConnectError("🔒 This wallet is already linked to another Telegram account.");
-        addLog(`🔒 Wallet linked to another account`, 'error');
+        console.log(`🔒 Wallet linked to another account`);
       } else if (statusCode === 400) {
         setErrorType("bad_request");
         const msg = errorData?.error || errorData?.detail || "Invalid wallet address format.";
         setConnectError(`⚠️ Bad Request: ${msg}`);
-        addLog(`⚠️ Bad Request: ${msg}`, 'error');
+        console.log(`⚠️ Bad Request: ${msg}`);
       } else {
         setErrorType("server_error");
         const errorMessage = errorData?.error || errorData?.detail || e?.message || "Server error.";
         setConnectError(`❌ Server Error: ${errorMessage}`);
-        addLog(`❌ Server Error: ${errorMessage}`, 'error');
+        console.log(`❌ Server Error: ${errorMessage}`);
       }
 
       setDebug((d) => ({
@@ -287,19 +261,19 @@ export default function Wallet() {
 
       if (statusCode !== 400 && !isNetworkError) {
         try {
-          addLog(`🔄 Trying to fetch wallet data anyway...`, 'info');
+          console.log(`🔄 Trying to fetch wallet data anyway...`);
           const r = await api.get(`/wallet/${address}/`);
           setWallet(r.data);
-          addLog(`✅ Wallet data (fallback) received`, 'success');
+          console.log(`✅ Wallet data (fallback) received`);
         } catch (e2) {
-          addLog(`❌ Fallback also failed: ${e2.message}`, 'error');
+          console.log(`❌ Fallback also failed: ${e2.message}`);
         }
       }
     }
   }, [address]);
 
   useEffect(() => {
-    addLog(`🔍 Address changed: ${address ? 'Wallet connected' : 'No wallet'}`);
+    console.log(`🔍 Address changed: ${address ? 'Wallet connected' : 'No wallet'}`);
     connectAndLoadWallet();
   }, [connectAndLoadWallet]);
 
@@ -314,7 +288,7 @@ export default function Wallet() {
     setConnectError("");
     setErrorType("none");
     hasConnected.current = false;
-    addLog(`🔌 Wallet disconnected`, 'info');
+    console.log(`🔌 Wallet disconnected`);
     
     window.location.reload();
   };
@@ -323,7 +297,7 @@ export default function Wallet() {
     setConnectError("");
     setErrorType("none");
     hasConnected.current = false;
-    addLog(`🔄 Retrying connection...`, 'info');
+    console.log(`🔄 Retrying connection...`);
     window.location.reload();
   };
 
@@ -365,10 +339,10 @@ export default function Wallet() {
       const r = await api.get(`/wallet/${address}/`);
       setWallet(r.data);
       setIsWithdrawOpen(false);
-      addLog(`✅ Withdraw completed`, 'success');
+      console.log(`✅ Withdraw completed`);
     } catch (e) {
       setWithdrawError(e?.response?.data?.error || e?.response?.data?.detail || "Withdrawal failed.");
-      addLog(`❌ Withdraw failed: ${e.message}`, 'error');
+      console.log(`❌ Withdraw failed: ${e.message}`);
     } finally {
       setIsWithdrawing(false);
     }
@@ -511,42 +485,6 @@ export default function Wallet() {
           </div>
         </div>
       )}
-
-      {/* ================================================== */}
-      {/* ⭐ پنل نمایش لاگ‌ها روی صفحه (فقط برای دیباگ) */}
-      {/* ================================================== */}
-      <div style={{
-        position: 'fixed',
-        bottom: '80px',
-        left: '10px',
-        right: '10px',
-        backgroundColor: 'rgba(0, 0, 0, 0.85)',
-        color: '#fff',
-        padding: '12px',
-        borderRadius: '10px',
-        maxHeight: '250px',
-        overflowY: 'auto',
-        fontSize: '11px',
-        fontFamily: 'monospace',
-        zIndex: 9999,
-        boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-        border: '1px solid #333'
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', borderBottom: '1px solid #444', paddingBottom: '6px' }}>
-          <span style={{ fontWeight: 'bold', color: '#4fc3f7' }}>📋 Debug Logs</span>
-          <button onClick={clearLogs} style={{ background: 'transparent', border: 'none', color: '#ff6b6b', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>Clear</button>
-        </div>
-        {logs.length === 0 && <div style={{ color: '#777' }}>No logs yet. Connect your wallet...</div>}
-        {logs.map((log, idx) => (
-          <div key={idx} style={{
-            padding: '2px 0',
-            color: log.type === 'error' ? '#ff6b6b' : log.type === 'success' ? '#69db7c' : '#e0e0e0',
-            borderBottom: '1px solid #222'
-          }}>
-            <span style={{ color: '#888' }}>[{log.timestamp}]</span> {log.message}
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
