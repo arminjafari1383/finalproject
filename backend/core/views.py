@@ -326,23 +326,32 @@ def reward_status(request):
 
 @api_view(["POST"])
 def tick(request):
+    """
+    دریافت پاداش روزانه (1 ECG)
+    """
     logger.info("=" * 60)
     logger.info("🔔 TICK FUNCTION CALLED")
     logger.info(f"📥 Request method: {request.method}")
     logger.info(f"📥 Request data: {request.data}")
     logger.info(f"📥 Request headers: {dict(request.headers)}")
     
+    # دریافت wallet_address
     wallet_address = request.data.get("wallet_address")
     if not wallet_address:
         logger.error("❌ wallet_address required")
-        return Response({"error": "wallet_address required"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {"error": "wallet_address required"}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
+    # دریافت telegram_id
     telegram_id = request.headers.get("X-Telegram-Id") or request.data.get("telegram_id")
     is_telegram = request.headers.get("X-Telegram") == "true" or request.data.get("is_telegram", False)
     
     logger.info(f"📊 wallet: {wallet_address}, telegram_id: {telegram_id}")
     
     try:
+        # دریافت یا ساخت کاربر
         if telegram_id:
             user = get_or_create_user(wallet_address, int(telegram_id), is_telegram)
         else:
@@ -350,26 +359,31 @@ def tick(request):
         
         if not user:
             logger.error("❌ User not found")
-            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "User not found"}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
         
         w = user.wallet
         now = timezone.now()
-
         next_at = user.next_daily_claim_at
 
+        # بررسی اینکه زمان گذشته یا نه
         if next_at and next_at > now:
             seconds_remaining = int((next_at - now).total_seconds())
             logger.info(f"⏳ Too early! {seconds_remaining}s remaining")
             return Response({
                 "status": "too_early",
-                "message": "Please wait for the timer to finish.",
+                "message": f"Please wait {seconds_remaining} seconds",
                 "seconds_remaining": seconds_remaining,
             }, status=status.HTTP_400_BAD_REQUEST)
 
+        # اعمال پاداش روزانه
         logger.info(f"💰 Adding reward: {DAILY_REWARD} ECG")
         w.daily_reward_unlocked = w.daily_reward_unlocked + DAILY_REWARD
         w.save(update_fields=["daily_reward_unlocked"])
 
+        # ثبت در Ledger
         Ledger.objects.create(
             user=user,
             typ="DAILY_UNLOCK",
@@ -377,15 +391,17 @@ def tick(request):
             meta={"source": "timer"}
         )
 
+        # تنظیم زمان بعدی
         user.next_daily_claim_at = now + COOLDOWN
         user.save(update_fields=["next_daily_claim_at"])
 
         logger.info(f"✅ Reward claimed! Next claim at: {user.next_daily_claim_at}")
         logger.info("=" * 60)
 
+        # پاسخ موفق
         return Response({
             "status": "rewarded",
-            "message": "1 ECG added",
+            "message": "1 ECG added to your wallet",
             "balance_ecg": str(w.withdrawable_total()),
             "total_rewards": str(w.withdrawable_total()),
             "referral_points": str(w.referral_bonus),
@@ -397,7 +413,33 @@ def tick(request):
         logger.error(f"❌ Error in tick: {e}")
         import traceback
         traceback.print_exc()
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(
+            {"error": str(e)}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+# =======================
+# Test Endpoint
+# =======================
+
+@api_view(["GET", "POST"])
+def test_tick(request):
+    """
+    تست ساده برای بررسی ارتباط
+    """
+    logger.info("=" * 60)
+    logger.info("🧪 TEST_TICK CALLED")
+    logger.info(f"Method: {request.method}")
+    logger.info(f"Data: {request.data}")
+    logger.info("=" * 60)
+    
+    return Response({
+        "status": "ok",
+        "message": "Test endpoint working!",
+        "method": request.method,
+        "data": request.data
+    }, status=status.HTTP_200_OK)
 
 
 # =======================

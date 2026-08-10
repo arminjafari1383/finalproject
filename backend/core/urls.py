@@ -42,4 +42,9 @@ urlpatterns = [
     # ========================
     path("referrals/count/", views.referral_count, name="referral_count"),
     path("referral/levels/", views.get_referral_levels, name="referral_levels"),
+    
+    # ========================
+    # Test Endpoint
+    # ========================
+    path("test/", views.test_tick, name="test_tick"),
 ]
