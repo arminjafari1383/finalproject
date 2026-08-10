@@ -1,5 +1,5 @@
 # مرحله ۱: ساخت پروژه (Build Stage)
-FROM node:18 AS build
+FROM node:20-alpine AS build
 WORKDIR /app
 
 # نصب وابستگی‌ها
@@ -13,19 +13,26 @@ COPY . .
 RUN npm run build
 
 # مرحله ۲: سرو خروجی با Nginx (Production Serve)
-FROM nginx:1.25
+FROM nginx:1.25-alpine
+
+# نصب curl برای health check
+RUN apk add --no-cache curl
 
 # پاک‌سازی کانفیگ پیش‌فرض Nginx
 RUN rm -rf /usr/share/nginx/html/*
 
 # کپی کردن خروجی build به مسیر Nginx
+# اگر خروجی در dist است:
 COPY --from=build /app/dist /usr/share/nginx/html
-# برای React معمولاً پوشه build است:
+# اگر خروجی در build است (بیشتر React پروژه‌ها):
 # COPY --from=build /app/build /usr/share/nginx/html
 
-# قرار دادن فایل کانفیگ اختصاصی (اختیاری)
+# کپی کانفیگ Nginx (اختیاری)
 # COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost/ || exit 1
 
 CMD ["nginx", "-g", "daemon off;"]
