@@ -52,6 +52,9 @@ export default function Referrals() {
   const [isTelegramWebApp, setIsTelegramWebApp] = useState(false);
 
   const SITE_URL = "https://aipolynet.com/";
+  
+  // ✅ نام کاربری ربات تلگرام
+  const BOT_USERNAME = "aipolynet_bot"; // نام ربات خود را وارد کنید
 
   // ==========================================
   // Telegram Detection
@@ -278,28 +281,49 @@ export default function Referrals() {
   }
 
   // ==========================================
-  // Referral Link
+  // 🔥 Referral Link - باز کردن در تلگرام
   // ==========================================
 
   const referralLink = myCode ? `${SITE_URL}?ref=${encodeURIComponent(myCode)}` : "";
 
   // ==========================================
-  // Share Telegram
+  // 🔥 Open Referral Link - باز کردن لینک در تلگرام
+  // ==========================================
+
+  function openReferralLink() {
+    if (!referralLink || !myCode) return;
+    
+    // ✅ لینک مستقیم به ربات تلگرام با پارامتر start
+    const telegramLink = `https://t.me/${BOT_USERNAME}?start=ref_${myCode}`;
+    
+    const tg = window.Telegram?.WebApp;
+    
+    if (tg?.openTelegramLink) {
+      tg.openTelegramLink(telegramLink);
+    } else {
+      // اگر در مرورگر هستیم، لینک رو باز کن
+      window.open(telegramLink, "_blank");
+    }
+  }
+
+  // ==========================================
+  // 🔥 Share Telegram - اشتراک‌گذاری در تلگرام
   // ==========================================
 
   function shareOnTelegram() {
-    if (!referralLink) return;
+    if (!referralLink || !myCode) return;
 
-    const message =
+    // ✅ لینک مستقیم به ربات تلگرام با پارامتر start
+    const telegramLink = `https://t.me/${BOT_USERNAME}?start=ref_${myCode}`;
+    
+    const message = 
       `🎯 Join me on AI PolyNet!\n\n` +
       `🚀 Use my referral link to get started:\n` +
-      `${referralLink}\n\n` +
+      `${telegramLink}\n\n` +
       `💎 Don't miss out on the rewards!`;
 
     const tg = window.Telegram?.WebApp;
-    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent(
-      message
-    )}`;
+    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(telegramLink)}&text=${encodeURIComponent(message)}`;
 
     if (tg) {
       try {
@@ -309,20 +333,6 @@ export default function Referrals() {
       }
     } else {
       window.open(shareUrl, "_blank");
-    }
-  }
-
-  // ==========================================
-  // Open Referral Link
-  // ==========================================
-
-  function openReferralLink() {
-    if (!referralLink) return;
-    const tg = window.Telegram?.WebApp;
-    if (tg?.openTelegramLink) {
-      tg.openTelegramLink(referralLink);
-    } else {
-      window.open(referralLink, "_blank");
     }
   }
 
