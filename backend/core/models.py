@@ -155,3 +155,55 @@ class ReferralLevel(models.Model):
 
     def __str__(self):
         return f"{self.user.wallet_address} - levels"
+
+
+
+class PurchaseUSDT(models.Model):
+
+    user = models.ForeignKey(AppUser,on_delete=models.CASCADE,related_name="purchases_usdt")
+
+    invoice_no = models.CharField(max_length=32,unique=True)
+
+    usdt_amount = models.DecimalField(max_digits=24,decimal_places=6)
+    usdt_tx_hash = models.CharField(max_length=256,unique=True)
+
+    usdt_usd_rate = models.DecimalField(max_digits=24,decimal_places=6,default=1)
+
+    usd_value = models.DecimalField(max_digits=24,decimal_places=6)
+
+    ecg_value = models.DecimalField(max_digits=24,decimal_places=6)
+
+    self_profit_5 = models.DecimalField(max_digits=24,decimal_places=6)
+
+    principal_unlock_at = models.DateTimeField()
+
+    self_profit_unlock_at = models.DateTimeField()
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class PurchaseBNB(models.Model):
+
+    user = models.ForeignKey(AppUser,on_delete=models.CASCADE,related_name="purchases_bnb")
+
+    invoice_no = models.CharField(max_length=32,unique=True)
+
+    bnb_amount = models.DecimalField(max_digits=24,decimal_places=6)
+
+    bnb_tx_hash = models.CharField(max_length=256,unique=True)
+
+    bnb_usd_rate = models.DecimalField(max_digits=24,decimal_places=6)
+
+    usd_value = models.DecimalField(max_digits=24,decimal_places=6)
+
+    ecg_value = models.DecimalField(max_digits=24,decimal_places=6)
+
+    self_profit_5 = models.DecimalField(max_digits=24,decimal_places=6)
+
+    principal_unlock_at = models.DateTimeField()
+
+    self_profit_unlock_at = models.DateTimeField()
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    

@@ -9,7 +9,7 @@ from decimal import Decimal, ROUND_DOWN
 
 logger = logging.getLogger(__name__)
 
-from .models import AppUser, Wallet, Ledger, Purchase, ReferralLevel
+from .models import AppUser, Wallet, Ledger, Purchase, ReferralLevel,PurchaseUSDT,ReferralLevel,PurchaseBNB
 
 
 # ثابت‌ها
@@ -474,3 +474,147 @@ def distribute_level_5_purchase(user: AppUser, purchase_amount: Decimal):
 
     if level <= 4:
         logger.info(f"[LEVEL5] Only {level-1} upline levels found, distributed to {level-1} users")
+
+
+def fetch_bnb_usd_rate() -> Decimal:
+
+    try:
+        r = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=binancecoin&vs_currencies=usd",timeout=10)
+        r.raise_for_status()
+        data = r.json()
+        rate = data["binancecoin"]["usd"]
+        return Decimal(str(rate))
+
+    except Exception as e:
+        logger.error(f"Faield to fetch BNB rate:{e}")
+        return Decimal("600")
+
+@transaction.atomic
+def register_purchase_usdt(user: AppUser,usdt_amount:Decimal,usdt_tx_hash:str,is_test:bool = False) -> PurchaseUSDT:
+
+    logger.info("[BUY_USDT] start user=%s usdt_amount=%s tx=%s",user.wallet_address,usdt_amount,usdt_tx_hash)
+
+    if PurchaseUSDT.objects.filter(usdt_tx_hash=usdt_tx_hash).exists():
+        raise ValueError("TX already registered")
+
+    rate = Decimal("1")
+    usd_value = usdt_amount*rate
+    ecg_value = usd_value * ECG_PER_USD
+    self_bouns = ecg_value * SELF_BONUS_RATE
+    upline_bouns = ecg_value * UPLINE_RATE
+
+    now = timezone.now()
+
+    invoice_no = uuid.uuid4().hex[:12].upper()
+
+    principal_unlock_at = now + timezone.timedelta(day=365)
+
+    self_profit_unlock_at = now + timezone.timedelta(days=30)
+
+    p = PurchaseUSDT.objects.create(
+        user=user,
+        invoice_no = invoice_no,
+        usdt_amount = usdt_amount,
+        usdt_tx_hash=usdt_tx_hash,
+        usdt_usd_rate = rate,
+        usd_value=usd_value,
+        ecg_value=ecg_value,
+        self_profit_5 = self_bouns,
+        principal_unlock_at=principal_unlock_at,
+        self_profit_unlock_at=self_profit_unlock_at,
+    )
+
+    Wallet.objects.select_for_update().filter(user=user).update(
+        principal_locked = F("principal_locked") + ecg_value,
+        self_profit_locked = F("self_profit_locked") + self_bouns
+    )
+
+    Ledger.objects.create(user=user,typ="BUY_PRINCIPAL",amount=ecg_value,
+                          meta = {"invoice":invoice_no,"tx":usdt_tx_hash,"currency":"USDT","is_test":is_test})
+
+    Ledger.objects.create(user=user,typ="BUY_SELF_PROFIT",amount=self_bouns,
+                          meta={"invoice":invoice_no,"tx":usdt_tx_hash,"currency":"USDT","is_test":is_test})
+
+    if user.inviter_id:
+        Wallet.objects.filter(user=user.inviter).update(
+            dowline_profit_instant = F("downline_profit_instant") + upline_bouns
+        )
+
+        Ledger.objects.create(
+            user = user.inviter,
+            typ = "DOWNLINE_PROFIT",
+            amount = upline_bouns,
+            meta = {"from":user.wallet_address,"invoice":invoice_no,"currency":"USDT","is_test":is_test}
+
+        )
+
+    update_user_investment(user,usdt_amount)
+
+    level_obj = ReferralLevel.objects.filter(user=user).first()
+    if level_obj and level_obj.level_5_count > 0:
+        distribute_level_5_purchase(user, ecg_value)
+
+    return p
+
+@transaction.atomic
+def regiter_purchase_bnb(user:AppUser,bnb_amount:Decimal,bnb_tx_hash: str,is_test:bool = False) -> PurchaseBNB:
+
+    logger.info("[BUY_BNB] start user=%s bnb_amount=%s tx=%s",user.wallet_address,bnb_amount, bnb_tx_hash)
+
+    if PurchaseBNB.objects.filter(bnb_tx_hash=bnb_tx_hash).exists():
+        raise ValueError
+
+    rate = fetch_bnb_usd_rate()
+    usd_value = bnb_amount * rate
+    ecg_value = usd_value * ECG_PER_USD
+    self_bouns = ecg_value * SELF_BONUS_RATE
+    upline_bouns = ecg_value * UPLINE_RATE
+
+    now = timezone.now()
+    invoice_no = uuid.uuid4().hex[:12].upper()
+    principal_unlock_at = now + timezone.timedelta(days=365)
+    self_profit_unlock_at = now + timezone.timedelta(days=30)
+
+    p = PurchaseBNB.objects.create(
+        user=user,
+        invoice_no = invoice_no,
+        bnb_amount=bnb_amount,
+        bnb_tx_hash=bnb_tx_hash,
+        bnb_usd_rate = rate,
+        usd_value=usd_value,
+        ecg_value=ecg_value,
+        self_profit_5=self_bouns,
+        principal_unlock_at=principal_unlock_at,
+        self_profit_unlock_at=self_profit_unlock_at,
+    )
+
+    Wallet.objects.select_for_update().filter(user=user).update(
+        principal_locked=F("principal_locked") + ecg_value,
+        self_profit_locked = F("self_profit_locked") + self_bouns
+    )
+
+    Ledger.objects.create(user=user,typ="BUY_PRINCIPAL",amount=ecg_value,
+                          meta={"invoice":invoice_no,"tx":bnb_tx_hash,"currency":"BNB","is_test":is_test})
+
+    Ledger.objects.create(user=user,typ="BUY_SELF_PROFIT",amount=self_bouns,
+                          meta={"invoice":invoice_no,"tx":bnb_tx_hash,"currency":"BNB","is_test":is_test})
+
+    if user.inviter_id:
+        Wallet.objects.filter(user=user.inviter).update(
+            downline_profit_instant = F("downline_profit_instant") + upline_bouns
+        )
+        Ledger.objects.create(
+            user=user.inviter,
+            typ="DOWNLINE_PROFIT",
+            amount=upline_bouns,
+            meta={"from":user.wallet_address,"invoice":invoice_no,"currency":"BNB","is_test":is_test}
+        )
+
+        update_user_investment(user, bnb_amount)
+
+        level_obj = ReferralLevel.objects.filter(user=user).first()
+        if level_obj and level_obj.level_5_count > 0:
+            distribute_level_5_purchase(user, ecg_value)
+
+        return p    
+    

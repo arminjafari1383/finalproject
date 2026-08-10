@@ -4,7 +4,7 @@ from rest_framework import status
 from decimal import Decimal
 from datetime import timedelta
 from django.utils import timezone
-from .services import get_or_create_user, apply_referral, register_purchase, ecg_to_ton
+from .services import get_or_create_user, apply_referral, register_purchase, ecg_to_ton,register_purchase_usdt,regiter_purchase_bnb
 from .models import (
     AppUser, Wallet, Ledger, Purchase, 
     WithdrawRequest, ReferralLevel
@@ -469,3 +469,126 @@ def generate_test_data_with_columns():
 def generate_test_data():
     """سازگاری با کدهای قبلی"""
     return generate_test_data_with_columns()
+
+
+@api_view(["POST"])
+def create_purchase_usdt(request):
+    wallet_address = request.data.get("wallet_address")
+    usdt_amount = request.data.get("usdt_amount")
+    usdt_tx_hash = request.data.get("usdt_tx_hash")
+
+    if not all(wallet_address,usdt_amount,usdt_tx_hash):
+        return Response({"error":"missing fields"},status=400)
+
+    try:
+        usdt_amount = Decimal(str(usdt_amount))
+        if usdt_amount <= 0:
+            raise ValueError
+
+    except:
+        return Response({"error":"invalid usdt_amount"},status=400)
+
+    user = get_or_create_user(wallet_address,None,False)
+
+    try:
+        p = register_purchase_usdt(user,usdt_amount,str(usdt_tx_hash))
+
+    except Exception as e:
+        return Response({"error":str(e)},status=400)
+
+
+    return Response({
+        "id":p.id,
+        "invoice_no":p.invoice_no,
+        "usdt_amount":str(p.usdt_amount),
+        "ecg_value":str(p.ecg_value),
+        "self_profit_5":str(p.self_profit_5),
+        "principal_unlock_at":p.principal_unlock_at,
+        "self_profit_unlock_at":p.self_profit_unlock_at,
+    },status=201)
+
+
+@api_view(["POST"])
+def create_purchase_bnb(request):
+
+    wallet_address = request.data.get("wallet_address")
+    bnb_amount = request.data.get("bnb_amount")
+    bnb_tx_hash = request.data.get("bnb_tx_hash")
+
+    if not all([wallet_address,bnb_amount,bnb_tx_hash]):
+        return Response({"error":"missing fields"},status=400)
+
+    try:
+        bnb_amount = Decimal(str(bnb_amount))
+        if bnb_amount <= 0:
+            raise ValueError()
+
+    except:
+        return Response({"error":"invalid bnb_amount"},status=400)
+
+    user = get_or_create_user(wallet_address,None,False)
+
+    try:
+        p = regiter_purchase_bnb(user,bnb_amount,str(bnb_tx_hash))
+
+    except Exception as e:
+
+        return Response({"error":str(e)}, status=400)
+
+
+    return Response({
+        "id":p.id,
+        "invoice_no":p.invoice_no,
+        "bnb_amount":str(p.bnb_amount),
+        "ecg_value":str(p.ecg_value),
+        "self_profit_5":str(p.self_profit_5),
+        "principal_unlock_at":p.principal_unlock_at,
+        "self_profit_unlock_at":p.self_profit_unlock_at,
+    },status=201)
+
+
+@api_view(["GET"])
+def list_purchases_usdt(request):
+    wallet_address = request.query_params.get("wallet")
+
+    if not wallet_address:
+        return Response({"error":"wallet param required"}, status=400)
+
+    user = get_or_create_user(wallet_address,None,False)
+    qs = user.purchases_usdt.all().order_by("-created_at")
+
+    return Response([{
+        "id":p.id,
+        "invoice_no":p.invoice_no,
+        "usdt_amount":str(p.usdt_amount),
+        "ecg_value":str(p.ecg_value),
+        "self_profit_5":str(p.self_profit_5),
+        "principal_unlock_at":p.principal_unlock_at,
+        "self_profit_unlock_at":p.self_profit_unlock_at,
+        "usdt_tx_hash":p.usdt_tx_hash,
+    }for p in qs])
+
+
+@api_view(["GET"])
+def list_purchases_bnb(request):
+
+    wallet_address = request.query_params.get("wallet")
+    if not wallet_address:
+        return Response({"error":"wallet param required"},status=400)
+
+    user = get_or_create_user(wallet_address,None,False)
+
+    qs = user.purchases_bnb.all().order_by("-created_at")
+
+
+    return Response([{
+        "id":p.id,
+        "invoice_no":p.invoice_no,
+        "bnb_amount":str(p.bnb_amount),
+        "ecg_value":str(p.ecg_value),
+        "self_profit_5":str(p.self_profit_5),
+        "principal_unlock_at":p.principal_unlock_at,
+        "self_profit_unlock_at":p.self_profit_unlock_at,
+        "bnb_tx_hash":p.bnb_tx_hash,
+        
+    } for p in qs])
