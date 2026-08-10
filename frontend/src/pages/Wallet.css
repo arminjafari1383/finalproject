@@ -1,5 +1,5 @@
 /* ============================================================
-   WALLET - ULTIMATE GLASS DESIGN
+   WALLET - ULTIMATE GLASS DESIGN (DARK BLUE BACKGROUND)
    ============================================================ */
 
 /* =========================
@@ -15,12 +15,12 @@ html, body {
   width: 100%;
   margin: 0;
   padding: 0;
-  background: #070b16;
+  background: #060d1a;
   overflow-x: hidden;
 }
 
 /* =========================
-   Main Container
+   Main Container - Dark Blue Background
 ========================= */
 
 .wallet-page-container {
@@ -29,10 +29,10 @@ html, body {
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  background:
-    radial-gradient(circle at 20% 10%, rgba(59, 130, 246, 0.08), transparent 40%),
-    radial-gradient(circle at 80% 90%, rgba(34, 197, 94, 0.05), transparent 40%),
-    #070b16;
+  background: 
+    radial-gradient(circle at 20% 10%, rgba(25, 50, 100, 0.3), transparent 50%),
+    radial-gradient(circle at 80% 90%, rgba(15, 30, 70, 0.2), transparent 50%),
+    linear-gradient(180deg, #060d1a 0%, #0a1a33 30%, #0d1f3d 60%, #09152b 100%);
   padding: 1rem;
   padding-top: 2rem;
   padding-bottom: 90px;
@@ -54,14 +54,14 @@ html, body {
   color: white;
   text-align: center;
   box-shadow:
-    0 30px 80px rgba(0, 0, 0, 0.4),
+    0 30px 80px rgba(0, 0, 0, 0.5),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
   position: relative;
   overflow: hidden;
   animation: fadeIn 0.6s ease-out;
 }
 
-/* Glow Effect */
+/* Glow Effect - Blue */
 .wallet-box::before {
   content: '';
   position: absolute;
@@ -70,7 +70,7 @@ html, body {
   width: 300px;
   height: 300px;
   border-radius: 50%;
-  background: rgba(59, 130, 246, 0.06);
+  background: rgba(30, 80, 180, 0.08);
   filter: blur(60px);
   pointer-events: none;
 }
@@ -83,7 +83,7 @@ html, body {
   width: 250px;
   height: 250px;
   border-radius: 50%;
-  background: rgba(34, 197, 94, 0.04);
+  background: rgba(20, 60, 140, 0.06);
   filter: blur(50px);
   pointer-events: none;
 }
@@ -98,6 +98,7 @@ html, body {
   -webkit-text-fill-color: transparent;
   background-clip: text;
   letter-spacing: -0.5px;
+  text-shadow: 0 0 40px rgba(96, 165, 250, 0.1);
 }
 
 .wallet-title::after {
@@ -140,7 +141,7 @@ html, body {
   gap: 10px !important;
   backdrop-filter: blur(10px) !important;
   -webkit-backdrop-filter: blur(10px) !important;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2) !important;
 }
 
 .connect-button-wrapper button svg {
@@ -271,7 +272,7 @@ html, body {
   color: white;
   border: none;
   cursor: pointer;
-  box-shadow: 0 8px 30px rgba(34, 197, 94, 0.2);
+  box-shadow: 0 8px 30px rgba(34, 197, 94, 0.15);
   transition: all 0.3s ease;
   position: relative;
   overflow: hidden;
@@ -288,7 +289,7 @@ html, body {
 
 .withdraw-btn:hover:not(:disabled) {
   transform: translateY(-3px);
-  box-shadow: 0 12px 40px rgba(34, 197, 94, 0.3);
+  box-shadow: 0 12px 40px rgba(34, 197, 94, 0.25);
 }
 
 .withdraw-btn:hover:not(:disabled)::before {
@@ -334,7 +335,7 @@ html, body {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.8);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   display: flex;
@@ -348,7 +349,7 @@ html, body {
 .modal {
   width: min(420px, 92vw);
   max-width: 100%;
-  background: rgba(20, 30, 50, 0.95);
+  background: rgba(15, 25, 50, 0.95);
   backdrop-filter: blur(30px);
   -webkit-backdrop-filter: blur(30px);
   border: 1px solid rgba(255, 255, 255, 0.06);
@@ -481,12 +482,12 @@ html, body {
 .btn-primary {
   background: linear-gradient(135deg, #3b82f6, #2563eb);
   color: white;
-  box-shadow: 0 8px 25px rgba(59, 130, 246, 0.2);
+  box-shadow: 0 8px 25px rgba(59, 130, 246, 0.15);
 }
 
 .btn-primary:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 12px 35px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 12px 35px rgba(59, 130, 246, 0.25);
 }
 
 .btn-primary:disabled {
@@ -521,7 +522,7 @@ html, body {
   overflow: hidden;
   text-align: left;
   font-size: 11px;
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(0, 0, 0, 0.4);
   backdrop-filter: blur(10px);
   padding: 12px 14px;
   border-radius: 14px;
