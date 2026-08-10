@@ -33,7 +33,6 @@ export default function Referrals() {
   const tonWallet = useTonWallet();
   const address = useMemo(() => tonWallet?.account?.address, [tonWallet]);
   
-  // ✅ استفاده از useRef برای جلوگیری از ارسال درخواست‌های تکراری
   const hasFetched = useRef(false);
 
   const [myCode, setMyCode] = useState(null);
@@ -47,6 +46,9 @@ export default function Referrals() {
   const [telegramId, setTelegramId] = useState(null);
   const [telegramUsername, setTelegramUsername] = useState(null);
   const [isTelegramWebApp, setIsTelegramWebApp] = useState(false);
+  
+  // ✅ State برای انتخاب خروجی
+  const [selectedOutput, setSelectedOutput] = useState("ECG"); // "ECG" یا "USDT"
 
   const SITE_URL = "https://aipolynet.com/";
 
@@ -69,7 +71,6 @@ export default function Referrals() {
         setTelegramUsername(tgUsername);
         setIsTelegramWebApp(true);
         
-        // ذخیره در localStorage
         saveUserDataToStorage({
           telegramId: tgId,
           telegramUsername: tgUsername,
@@ -129,14 +130,13 @@ export default function Referrals() {
       return;
     }
 
-    // ✅ اگر قبلاً درخواست داده شده، دیگر تکرار نکن
     if (hasFetched.current) {
         console.log("⛔️ [DEBUG] Data already fetched, skipping.");
         return;
     }
 
     let cancelled = false;
-    hasFetched.current = true; // قفل را فعال کن
+    hasFetched.current = true;
 
     async function fetchData() {
       try {
@@ -145,7 +145,6 @@ export default function Referrals() {
 
         const inviterCode = localStorage.getItem("inviter_code");
 
-        // تعیین telegram_id نهایی از localStorage
         let finalTelegramId;
         let finalTelegramUsername = null;
         
@@ -182,7 +181,6 @@ export default function Referrals() {
         setMyCode(res.data?.user?.referral_code || null);
         console.log("✅ [DEBUG] User registered successfully");
 
-        // دریافت تعداد referrals
         const countRes = await api.get("/referrals/count/", {
           params: { wallet_address: address },
         });
@@ -420,6 +418,72 @@ export default function Referrals() {
               >
                 📤 Share on Telegram
               </button>
+            </div>
+
+            {/* ✅ باکس انتخاب خروجی */}
+            <div className="output-selector">
+              <p className="output-label">💰 Select Output Currency:</p>
+              <div className="output-buttons">
+                <button
+                  className={`output-btn ${selectedOutput === "ECG" ? "active-ecg" : ""}`}
+                  onClick={() => setSelectedOutput("ECG")}
+                >
+                  ⚡ ECG
+                </button>
+                <button
+                  className={`output-btn ${selectedOutput === "USDT" ? "active-usdt" : ""}`}
+                  onClick={() => setSelectedOutput("USDT")}
+                >
+                  💵 USDT
+                </button>
+              </div>
+            </div>
+
+            {/* ✅ باکس‌های مجزا برای ECG و USDT */}
+            <div className="output-boxes">
+              {/* باکس ECG */}
+              <div className={`output-box ${selectedOutput === "ECG" ? "box-active" : "box-inactive"}`}>
+                <div className="box-header">
+                  <span className="box-icon">⚡</span>
+                  <span className="box-title">ECG</span>
+                </div>
+                <div className="box-content">
+                  <div className="box-row">
+                    <span className="box-label">Balance:</span>
+                    <span className="box-value">0.00 ECG</span>
+                  </div>
+                  <div className="box-row">
+                    <span className="box-label">Total Rewards:</span>
+                    <span className="box-value">0.00 ECG</span>
+                  </div>
+                  <div className="box-row">
+                    <span className="box-label">Referral Bonus:</span>
+                    <span className="box-value">0.00 ECG</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* باکس USDT */}
+              <div className={`output-box ${selectedOutput === "USDT" ? "box-active" : "box-inactive"}`}>
+                <div className="box-header">
+                  <span className="box-icon">💵</span>
+                  <span className="box-title">USDT</span>
+                </div>
+                <div className="box-content">
+                  <div className="box-row">
+                    <span className="box-label">Balance:</span>
+                    <span className="box-value">0.00 USDT</span>
+                  </div>
+                  <div className="box-row">
+                    <span className="box-label">Total Rewards:</span>
+                    <span className="box-value">0.00 USDT</span>
+                  </div>
+                  <div className="box-row">
+                    <span className="box-label">Referral Bonus:</span>
+                    <span className="box-value">0.00 USDT</span>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* بخش آمار */}
