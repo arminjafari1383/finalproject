@@ -59,12 +59,7 @@ export default function TimerPage() {
     try {
       const res = await axios.get(url, {
         params: { 
-          wallet_address: walletAddress,
-          telegram_id: localStorage.getItem('telegram_id') || ''
-        },
-        headers: {
-          'X-Telegram-Id': localStorage.getItem('telegram_id') || '',
-          'Content-Type': 'application/json',
+          wallet_address: walletAddress
         }
       });
 
@@ -131,23 +126,14 @@ export default function TimerPage() {
     }
 
     const url = `${API}/tick/`;
-    const telegramId = localStorage.getItem('telegram_id') || '';
     
-    console.log("[Timer] claimReward =>", url, "wallet_address=", walletAddress, "telegram_id=", telegramId);
+    console.log("[Timer] claimReward =>", url, "wallet_address=", walletAddress);
 
     try {
       setMessage("⏳ Claiming reward...");
 
       const res = await axios.post(url, {
-        wallet_address: walletAddress,
-        telegram_id: telegramId,  // ✅ ارسال telegram_id در body
-        is_telegram: true
-      }, {
-        headers: {
-          'X-Telegram-Id': telegramId,
-          'X-Telegram': 'true',
-          'Content-Type': 'application/json',
-        }
+        wallet_address: walletAddress
       });
 
       console.log("[Timer] tick HTTP:", res.status);
