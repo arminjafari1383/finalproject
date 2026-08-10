@@ -5,7 +5,8 @@ import "./Timer.css";
 import Logo from "../assets/2.png";
 import Blade from "../assets/1.png";
 
-const API = "https://aipolynet.com/api/wallet";
+// ✅ استفاده از آدرس نسبی برای جلوگیری از مشکل CORS و Nginx
+const API = "/api/wallet";
 
 export default function TimerPage() {
   const tonWallet = useTonWallet();
@@ -29,8 +30,10 @@ export default function TimerPage() {
   };
 
   const stopTimer = () => {
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    intervalRef.current = null;
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
   };
 
   const startTimer = () => {
@@ -45,7 +48,10 @@ export default function TimerPage() {
   };
 
   const fetchStatus = useCallback(async () => {
-    if (!walletAddress) return;
+    if (!walletAddress) {
+      console.log("[Timer] No wallet address");
+      return;
+    }
 
     const url = `${API}/reward_status/`;
     console.log("[Timer] fetchStatus =>", url, "wallet_address=", walletAddress);
@@ -53,6 +59,10 @@ export default function TimerPage() {
     try {
       const res = await axios.get(url, {
         params: { wallet_address: walletAddress },
+        headers: {
+          'X-Telegram-Id': localStorage.getItem('telegram_id') || '',
+          'Content-Type': 'application/json',
+        }
       });
 
       console.log("[Timer] reward_status HTTP:", res.status);
@@ -60,8 +70,8 @@ export default function TimerPage() {
 
       const data = res.data;
 
-      // ✅ بررسی status
-      if (data?.status === "ok") {
+      // بررسی وجود data و status
+      if (data && data.status === "ok") {
         const sec = data.seconds_remaining ?? 0;
 
         setRemaining(sec);
@@ -77,29 +87,26 @@ export default function TimerPage() {
           setMessage("✅ Ready to claim daily reward!");
           stopTimer();
         }
-      } else {
-        // ✅ اگر status "ok" نبود، از داده‌های موجود استفاده کن
-        console.warn("[Timer] Unexpected response format:", data);
+      } else if (data) {
+        // اگر data وجود داشت ولی status "ok" نبود
+        console.warn("[Timer] Unexpected response format, using data:", data);
         
-        // سعی کن از data موجود استفاده کنی
-        if (data) {
-          const sec = data.seconds_remaining ?? 0;
-          setRemaining(sec);
-          setBalance(data.balance_ecg || data.withdrawable_total || "0");
-          setTotalRewards(data.total_rewards || data.withdrawable_total || "0");
-          setReferralBonus(data.referral_points || data.referral_bonus || "0");
-          setRewardCount(data.rewards_count || 0);
+        const sec = data.seconds_remaining ?? data.seconds ?? 0;
+        setRemaining(sec);
+        setBalance(data.balance_ecg ?? data.balance ?? data.withdrawable_total ?? "0");
+        setTotalRewards(data.total_rewards ?? data.totalRewards ?? data.withdrawable_total ?? "0");
+        setReferralBonus(data.referral_points ?? data.referralBonus ?? data.referral_bonus ?? "0");
+        setRewardCount(data.rewards_count ?? data.rewardCount ?? 0);
 
-          if (sec > 0) {
-            setMessage("⏳ Timer is running...");
-            startTimer();
-          } else {
-            setMessage("✅ Ready to claim daily reward!");
-            stopTimer();
-          }
+        if (sec > 0) {
+          setMessage("⏳ Timer is running...");
+          startTimer();
         } else {
-          setMessage("❌ Invalid server response.");
+          setMessage("✅ Ready to claim daily reward!");
+          stopTimer();
         }
+      } else {
+        setMessage("❌ Invalid server response.");
       }
     } catch (e) {
       console.error("[Timer] fetchStatus ERROR:", e);
@@ -109,7 +116,7 @@ export default function TimerPage() {
     }
   }, [walletAddress]);
 
-  const canClaim = remaining === 0;
+  const canClaim = remaining === 0 || remaining === null;
 
   const claimReward = async () => {
     if (!walletAddress) {
@@ -130,6 +137,11 @@ export default function TimerPage() {
 
       const res = await axios.post(url, {
         wallet_address: walletAddress,
+      }, {
+        headers: {
+          'X-Telegram-Id': localStorage.getItem('telegram_id') || '',
+          'Content-Type': 'application/json',
+        }
       });
 
       console.log("[Timer] tick HTTP:", res.status);
@@ -143,10 +155,16 @@ export default function TimerPage() {
         setRewardCount(data.rewards_count ?? 0);
         setMessage(`🎉 ${data.message || "Reward claimed!"}`);
 
+        // به‌روزرسانی وضعیت
         await fetchStatus();
+      } else if (data?.status === "too_early") {
+        const sec = data.seconds_remaining || 0;
+        setRemaining(sec);
+        setMessage(`⏳ Please wait ${Math.floor(sec/60)} minutes ${sec%60} seconds`);
+        startTimer();
       } else {
         console.warn("[Timer] tick unexpected response:", data);
-        setMessage("⚠️ " + (data.message || "Could not claim."));
+        setMessage("⚠️ " + (data?.message || data?.error || "Could not claim."));
         setTimeout(fetchStatus, 5000);
       }
     } catch (e) {
@@ -159,6 +177,12 @@ export default function TimerPage() {
         e.response?.data?.error ||
         "Error claiming reward.";
       setMessage(`❌ ${errorMsg}`);
+      
+      // اگر خطای 405 بود، پیام خاص
+      if (e.response?.status === 405) {
+        setMessage("❌ Server method not allowed. Please try again later.");
+      }
+      
       setTimeout(fetchStatus, 5000);
     }
   };
