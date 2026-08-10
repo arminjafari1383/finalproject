@@ -58,7 +58,10 @@ export default function TimerPage() {
 
     try {
       const res = await axios.get(url, {
-        params: { wallet_address: walletAddress },
+        params: { 
+          wallet_address: walletAddress,
+          telegram_id: localStorage.getItem('telegram_id') || ''
+        },
         headers: {
           'X-Telegram-Id': localStorage.getItem('telegram_id') || '',
           'Content-Type': 'application/json',
@@ -70,7 +73,6 @@ export default function TimerPage() {
 
       const data = res.data;
 
-      // بررسی وجود data و status
       if (data && data.status === "ok") {
         const sec = data.seconds_remaining ?? 0;
 
@@ -88,7 +90,6 @@ export default function TimerPage() {
           stopTimer();
         }
       } else if (data) {
-        // اگر data وجود داشت ولی status "ok" نبود
         console.warn("[Timer] Unexpected response format, using data:", data);
         
         const sec = data.seconds_remaining ?? data.seconds ?? 0;
@@ -130,16 +131,21 @@ export default function TimerPage() {
     }
 
     const url = `${API}/tick/`;
-    console.log("[Timer] claimReward =>", url, "wallet_address=", walletAddress);
+    const telegramId = localStorage.getItem('telegram_id') || '';
+    
+    console.log("[Timer] claimReward =>", url, "wallet_address=", walletAddress, "telegram_id=", telegramId);
 
     try {
       setMessage("⏳ Claiming reward...");
 
       const res = await axios.post(url, {
         wallet_address: walletAddress,
+        telegram_id: telegramId,  // ✅ ارسال telegram_id در body
+        is_telegram: true
       }, {
         headers: {
-          'X-Telegram-Id': localStorage.getItem('telegram_id') || '',
+          'X-Telegram-Id': telegramId,
+          'X-Telegram': 'true',
           'Content-Type': 'application/json',
         }
       });
@@ -155,7 +161,6 @@ export default function TimerPage() {
         setRewardCount(data.rewards_count ?? 0);
         setMessage(`🎉 ${data.message || "Reward claimed!"}`);
 
-        // به‌روزرسانی وضعیت
         await fetchStatus();
       } else if (data?.status === "too_early") {
         const sec = data.seconds_remaining || 0;
@@ -178,7 +183,6 @@ export default function TimerPage() {
         "Error claiming reward.";
       setMessage(`❌ ${errorMsg}`);
       
-      // اگر خطای 405 بود، پیام خاص
       if (e.response?.status === 405) {
         setMessage("❌ Server method not allowed. Please try again later.");
       }
