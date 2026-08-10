@@ -57,18 +57,7 @@ export default function Wallet() {
 
   // دریافت کد دعوت در اولین لود
   useEffect(() => {
-    const code = captureInviterCode();
-    
-    setDebug((d) => ({
-      ...d,
-      tgStartParam:
-        window.Telegram?.WebApp?.initDataUnsafe?.start_param || "",
-      lsInviterCode:
-        localStorage.getItem("inviter_code") || "",
-      sentInviterCode: code || "",
-      connectStatus: "Wallet page loaded",
-      connectError: "",
-    }));
+    captureInviterCode();
   }, []);
 
   // ذخیره آدرس ولت در localStorage
@@ -95,10 +84,6 @@ export default function Wallet() {
     setConnectError("");
     setErrorType("none");
     
-    const tgStartParam =
-      window.Telegram?.WebApp?.initDataUnsafe?.start_param || "";
-    const lsInviterCode =
-      localStorage.getItem("inviter_code") || "";
     const inviter_code = captureInviterCode();
 
     // ====== دریافت Telegram ID ======
@@ -155,15 +140,6 @@ export default function Wallet() {
       console.log(`⚠️ Generated fallback telegram_id: ${telegramId}`);
     }
 
-    setDebug((d) => ({
-      ...d,
-      tgStartParam,
-      lsInviterCode,
-      sentInviterCode: inviter_code || "",
-      connectStatus: "Sending /connect ...",
-      connectError: "",
-    }));
-
     const payload = {
       wallet_address: address,
       inviter_code: inviter_code || null,
@@ -198,12 +174,6 @@ export default function Wallet() {
         });
         console.log(`📝 User data saved to localStorage`);
       }
-
-      setDebug((d) => ({
-        ...d,
-        connectStatus: "connect OK ✅",
-        connectError: "",
-      }));
 
       console.log(`🔄 Fetching wallet data...`);
       const r = await api.get(`/wallet/${address}/`);
@@ -253,12 +223,6 @@ export default function Wallet() {
         console.log(`❌ Server Error: ${errorMessage}`);
       }
 
-      setDebug((d) => ({
-        ...d,
-        connectStatus: "connect FAILED ❌",
-        connectError: errorData?.error || errorData?.detail || "",
-      }));
-
       if (statusCode !== 400 && !isNetworkError) {
         try {
           console.log(`🔄 Trying to fetch wallet data anyway...`);
@@ -303,13 +267,6 @@ export default function Wallet() {
 
   const resetReferral = () => {
     clearInviterCode();
-    setDebug((d) => ({
-      ...d,
-      lsInviterCode: "",
-      sentInviterCode: "",
-      connectStatus: "Referral reset done",
-      connectError: "",
-    }));
     alert("inviter_code پاک شد");
   };
 
