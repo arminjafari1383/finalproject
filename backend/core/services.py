@@ -9,7 +9,7 @@ from decimal import Decimal, ROUND_DOWN
 
 logger = logging.getLogger(__name__)
 
-from .models import AppUser, Wallet, Ledger, Purchase, ReferralLevel,PurchaseUSDT,ReferralLevel,PurchaseBNB
+from .models import AppUser, Wallet, Ledger, Purchase, ReferralLevel, PurchaseUSDT, PurchaseBNB
 
 
 # ثابت‌ها
@@ -26,13 +26,6 @@ def get_or_create_user(wallet_address: str, telegram_id: int = None, is_telegram
     """
     logger.info(f"🔍 get_or_create_user: wallet={wallet_address}, telegram_id={telegram_id}, is_telegram={is_telegram}")
     
-    # برای تست در مرورگر، این خط را کامنت کنید (اگر واقعاً فقط تلگرام می‌خواهید، آن‌را از کامنت خارج کنید)
-    # if not is_telegram:
-    #     raise ValueError("Only Telegram mini-app users are allowed")
-
-    # ==========================================================
-    # سناریو 1: اگر telegram_id وجود نداشت (برای reward_status و wallet_view)
-    # ==========================================================
     if not telegram_id:
         logger.warning("⚠️ No telegram_id, trying to find by wallet_address")
         user = AppUser.objects.filter(wallet_address=wallet_address).first()
@@ -40,7 +33,6 @@ def get_or_create_user(wallet_address: str, telegram_id: int = None, is_telegram
             logger.info(f"✅ User found by wallet_address: {user.wallet_address}")
             return user
         
-        # اگر کاربر وجود نداشت، یکی بساز (بدون قفل)
         user = AppUser.objects.create(
             wallet_address=wallet_address,
             telegram_id=None,
@@ -52,15 +44,11 @@ def get_or_create_user(wallet_address: str, telegram_id: int = None, is_telegram
         logger.info(f"✅ New user created with wallet only: {wallet_address}")
         return user
     
-    # ==========================================================
-    # سناریو 2: اگر کاربر با این telegram_id قبلاً وجود دارد
-    # ==========================================================
     existing_user_by_telegram = AppUser.objects.filter(telegram_id=telegram_id).first()
     
     if existing_user_by_telegram:
         logger.info(f"✅ User found by telegram_id: {existing_user_by_telegram.wallet_address}")
         
-        # اگر ولت قفل شده باشد، اجازه تغییر ولت را نده
         if existing_user_by_telegram.wallet_locked:
             if existing_user_by_telegram.wallet_address != wallet_address:
                 raise ValueError(
@@ -68,7 +56,6 @@ def get_or_create_user(wallet_address: str, telegram_id: int = None, is_telegram
                     f"{existing_user_by_telegram.wallet_address[:6]}...{existing_user_by_telegram.wallet_address[-4:]}"
                 )
         else:
-            # اگر ولت قفل نشده باشد، ولت را به‌روز کن و قفلش کن
             if existing_user_by_telegram.wallet_address != wallet_address:
                 existing_user_by_telegram.wallet_address = wallet_address
                 existing_user_by_telegram.wallet_locked = True
@@ -77,17 +64,12 @@ def get_or_create_user(wallet_address: str, telegram_id: int = None, is_telegram
         
         return existing_user_by_telegram
     
-    # ==========================================================
-    # سناریو 3: اگر کاربر با این wallet_address قبلاً وجود دارد
-    # ==========================================================
     existing_user_by_wallet = AppUser.objects.filter(wallet_address=wallet_address).first()
     
     if existing_user_by_wallet:
         logger.info(f"⚠️ Wallet address already registered with telegram_id: {existing_user_by_wallet.telegram_id}")
         
-        # ✅ اگر ولت قفل شده باشد (wallet_locked=True)، یعنی قبلاً به آیدی دیگری وصل شده
         if existing_user_by_wallet.wallet_locked:
-            # اگر ولت قفل است و telegram_id ندارد، یعنی هنوز جفت نشده (می‌توان وصل کرد)
             if not existing_user_by_wallet.telegram_id:
                 existing_user_by_wallet.telegram_id = telegram_id
                 existing_user_by_wallet.is_telegram_user = True
@@ -97,12 +79,8 @@ def get_or_create_user(wallet_address: str, telegram_id: int = None, is_telegram
                 logger.info(f"🔒 Wallet locked for existing user (previously unlinked): {existing_user_by_wallet.wallet_address}")
                 return existing_user_by_wallet
             
-            # اگر قفل است و telegram_id دارد، یعنی ولت دزدیده شده
             raise ValueError("This wallet is already linked to another Telegram account (Locked)")
-        
         else:
-            # ✅ اگر ولت قفل نیست (wallet_locked=False)، یعنی کاربر فقط با ولت ثبت شده ولی هنوز با تلگرام جفت نشده
-            # این مورد برای وقتی است که کاربر قبلاً با مرورگر وصل شده و حالا می‌خواهد با تلگرام وصل شود
             existing_user_by_wallet.telegram_id = telegram_id
             existing_user_by_wallet.is_telegram_user = True
             existing_user_by_wallet.telegram_verified = True
@@ -111,9 +89,6 @@ def get_or_create_user(wallet_address: str, telegram_id: int = None, is_telegram
             logger.info(f"✅ Wallet paired with Telegram ID successfully: {existing_user_by_wallet.wallet_address}")
             return existing_user_by_wallet
 
-    # ==========================================================
-    # سناریو 4: ایجاد کاربر کاملاً جدید
-    # ==========================================================
     user = AppUser.objects.create(
         wallet_address=wallet_address,
         telegram_id=telegram_id,
@@ -152,15 +127,11 @@ def apply_referral(inviter_code: str, user: AppUser):
         logger.warning("[REF] self referral blocked user_id=%s", user.id)
         return
 
-    # ست کردن inviter
     user.inviter = inviter
     user.save(update_fields=["inviter"])
     logger.info("[REF] success user=%s inviter=%s", user.id, inviter.id)
 
-    # بروزرسانی سطوح
     update_referral_levels(user, inviter)
-
-    # دادن پاداش 3 توکن به inviter
     give_referral_bonus(inviter, user)
 
 
@@ -197,10 +168,8 @@ def update_referral_levels(new_user: AppUser, direct_inviter: AppUser):
     level = 1
 
     while current and level <= 5:
-        # ✅ استفاده از ReferralLevel
         level_obj, created = ReferralLevel.objects.get_or_create(user=current)
 
-        # اطلاعات کاربر جدید با ۴ ستون
         user_data = {
             "telegram_id": new_user.telegram_id,
             "wallet": new_user.wallet_address,
@@ -210,7 +179,6 @@ def update_referral_levels(new_user: AppUser, direct_inviter: AppUser):
 
         if level == 1:
             level_obj.level_1_count += 1
-            # بررسی تکراری نبودن
             existing_wallets = [u.get("wallet") for u in level_obj.level_1_users]
             if new_user.wallet_address not in existing_wallets:
                 level_obj.level_1_users.append(user_data)
@@ -246,7 +214,7 @@ def update_referral_levels(new_user: AppUser, direct_inviter: AppUser):
         level += 1
 
 
-def update_user_investment(user: AppUser, ton_amount: Decimal):
+def update_user_investment(user: AppUser, amount: Decimal):
     """
     بروزرسانی مبلغ سرمایه‌گذاری کاربر در جدول سطوح بالاسری‌ها
     """
@@ -259,10 +227,9 @@ def update_user_investment(user: AppUser, ton_amount: Decimal):
             level_field = f"level_{level}_users"
             users = getattr(level_obj, level_field)
             
-            # پیدا کردن کاربر و بروزرسانی investment
             for i, u in enumerate(users):
                 if u.get("wallet") == user.wallet_address:
-                    users[i]["investment"] = float(ton_amount)
+                    users[i]["investment"] = float(amount)
                     break
             
             setattr(level_obj, level_field, users)
@@ -281,7 +248,6 @@ def update_level_profit(user: AppUser, level: int, from_wallet: str, profit: Dec
     level_field = f"level_{level}_users"
     users = getattr(level_obj, level_field)
 
-    # پیدا کردن کاربر در لیست و بروزرسانی سود
     for i, u in enumerate(users):
         if u.get("wallet") == from_wallet:
             current_profit = Decimal(str(u.get("profit", 0)))
@@ -304,28 +270,36 @@ def fetch_ton_usd_rate() -> Decimal:
         return Decimal(str(rate))
     except Exception as e:
         logger.error(f"Failed to fetch TON rate: {e}")
-        return Decimal("2.5")  # مقدار پیش‌فرض
+        return Decimal("2.5")
+
+
+def fetch_bnb_usd_rate() -> Decimal:
+    """
+    گرفتن نرخ BNB به USD از CoinGecko
+    """
+    try:
+        r = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=binancecoin&vs_currencies=usd", timeout=10)
+        r.raise_for_status()
+        data = r.json()
+        rate = data["binancecoin"]["usd"]
+        return Decimal(str(rate))
+    except Exception as e:
+        logger.error(f"Failed to fetch BNB rate: {e}")
+        return Decimal("600")
 
 
 @transaction.atomic
 def register_purchase(user: AppUser, ton_amount: Decimal, ton_tx_hash: str, is_test: bool = False) -> Purchase:
     """
-    ثبت خرید کاربر:
-    - ایجاد Purchase
-    - اضافه کردن Locked ها به Wallet کاربر
-    - افزودن Ledger
-    - پرداخت 5٪ به بالاسری در downline_profit_instant
-    - اگر کاربر سطح 5 باشد، به 4 سطح بالاتر 0.01 می‌دهد
+    ثبت خرید کاربر با TON
     """
     logger.info("[BUY] start user=%s user_id=%s inviter_id=%s ton_amount=%s tx=%s",
                 user.wallet_address, user.id, user.inviter_id, ton_amount, ton_tx_hash)
 
-    # جلوگیری از تراکنش تکراری
     if Purchase.objects.filter(ton_tx_hash=ton_tx_hash).exists():
         logger.warning("[BUY] duplicate tx=%s", ton_tx_hash)
         raise ValueError("TX already registered")
 
-    # fetch rate
     rate = fetch_ton_usd_rate()
     usd_value = ton_amount * rate
     ecg_value = usd_value * ECG_PER_USD
@@ -337,10 +311,6 @@ def register_purchase(user: AppUser, ton_amount: Decimal, ton_tx_hash: str, is_t
     principal_unlock_at = now + timezone.timedelta(days=365)
     self_profit_unlock_at = now + timezone.timedelta(days=30)
 
-    logger.info("[BUY] computed ecg_value=%s self_bonus=%s upline_bonus=%s invoice=%s",
-                ecg_value, self_bonus, upline_bonus, invoice_no)
-
-    # 1) ایجاد Purchase
     p = Purchase.objects.create(
         user=user,
         invoice_no=invoice_no,
@@ -353,28 +323,18 @@ def register_purchase(user: AppUser, ton_amount: Decimal, ton_tx_hash: str, is_t
         principal_unlock_at=principal_unlock_at,
         self_profit_unlock_at=self_profit_unlock_at,
     )
-    logger.info("[BUY] purchase created id=%s", p.id)
 
-    # 2) آپدیت کیف پول خود کاربر
     Wallet.objects.select_for_update().filter(user=user).update(
         principal_locked=F("principal_locked") + ecg_value,
         self_profit_locked=F("self_profit_locked") + self_bonus
     )
 
     Ledger.objects.create(user=user, typ="BUY_PRINCIPAL", amount=ecg_value,
-                          meta={"invoice": invoice_no, "tx": ton_tx_hash, "is_test": is_test})
+                          meta={"invoice": invoice_no, "tx": ton_tx_hash, "currency": "TON", "is_test": is_test})
     Ledger.objects.create(user=user, typ="BUY_SELF_PROFIT", amount=self_bonus,
-                          meta={"invoice": invoice_no, "tx": ton_tx_hash, "is_test": is_test})
+                          meta={"invoice": invoice_no, "tx": ton_tx_hash, "currency": "TON", "is_test": is_test})
 
-    logger.info("[BUY] user wallet updated: +principal_locked=%s +self_profit_locked=%s",
-                ecg_value, self_bonus)
-
-    # 3) پرداخت سود به بالاسری (downline_profit_instant)
     if user.inviter_id:
-        inv_wallet, created = Wallet.objects.get_or_create(user=user.inviter)
-        if created:
-            logger.info("[BUY] inviter wallet created user_id=%s", user.inviter_id)
-
         Wallet.objects.filter(user=user.inviter).update(
             downline_profit_instant=F("downline_profit_instant") + upline_bonus
         )
@@ -382,35 +342,142 @@ def register_purchase(user: AppUser, ton_amount: Decimal, ton_tx_hash: str, is_t
             user=user.inviter,
             typ="DOWNLINE_PROFIT",
             amount=upline_bonus,
-            meta={"from": user.wallet_address, "invoice": invoice_no, "tx": ton_tx_hash, "is_test": is_test}
+            meta={"from": user.wallet_address, "invoice": invoice_no, "tx": ton_tx_hash, "currency": "TON", "is_test": is_test}
         )
-        logger.info("[BUY] upline wallet updated inviter_id=%s +downline_profit_instant=%s",
-                    user.inviter_id, upline_bonus)
-    else:
-        logger.info("[BUY] no inviter -> skip downline profit")
 
-    # ✅ بروزرسانی سرمایه‌گذاری در جدول سطوح
     update_user_investment(user, ton_amount)
 
-    # ✅ بررسی سطح 5 و توزیع پاداش
     level_obj = ReferralLevel.objects.filter(user=user).first()
     if level_obj and level_obj.level_5_count > 0:
-        logger.info(f"[LEVEL5] User {user.wallet_address} is level 5, distributing bonuses")
         distribute_level_5_purchase(user, ecg_value)
-    else:
-        logger.info(f"[LEVEL5] User {user.wallet_address} is not level 5 yet (count: {level_obj.level_5_count if level_obj else 0})")
 
-    # 4) refresh از دیتابیس برای لاگ دقیق
-    user.wallet.refresh_from_db()
-    logger.info("[BUY] AFTER user_wallet principal_locked=%s self_profit_locked=%s downline_profit_instant=%s",
-                user.wallet.principal_locked, user.wallet.self_profit_locked, user.wallet.downline_profit_instant)
+    return p
+
+
+@transaction.atomic
+def register_purchase_usdt(user: AppUser, usdt_amount: Decimal, usdt_tx_hash: str, is_test: bool = False) -> PurchaseUSDT:
+    """
+    ثبت خرید کاربر با USDT
+    """
+    logger.info("[BUY_USDT] start user=%s usdt_amount=%s tx=%s", user.wallet_address, usdt_amount, usdt_tx_hash)
+
+    if PurchaseUSDT.objects.filter(usdt_tx_hash=usdt_tx_hash).exists():
+        raise ValueError("TX already registered")
+
+    rate = Decimal("1")
+    usd_value = usdt_amount * rate
+    ecg_value = usd_value * ECG_PER_USD
+    self_bonus = ecg_value * SELF_BONUS_RATE
+    upline_bonus = ecg_value * UPLINE_RATE
+
+    now = timezone.now()
+    invoice_no = uuid.uuid4().hex[:12].upper()
+    principal_unlock_at = now + timezone.timedelta(days=365)
+    self_profit_unlock_at = now + timezone.timedelta(days=30)
+
+    p = PurchaseUSDT.objects.create(
+        user=user,
+        invoice_no=invoice_no,
+        usdt_amount=usdt_amount,
+        usdt_tx_hash=usdt_tx_hash,
+        usdt_usd_rate=rate,
+        usd_value=usd_value,
+        ecg_value=ecg_value,
+        self_profit_5=self_bonus,
+        principal_unlock_at=principal_unlock_at,
+        self_profit_unlock_at=self_profit_unlock_at,
+    )
+
+    Wallet.objects.select_for_update().filter(user=user).update(
+        principal_locked=F("principal_locked") + ecg_value,
+        self_profit_locked=F("self_profit_locked") + self_bonus
+    )
+
+    Ledger.objects.create(user=user, typ="BUY_PRINCIPAL", amount=ecg_value,
+                          meta={"invoice": invoice_no, "tx": usdt_tx_hash, "currency": "USDT", "is_test": is_test})
+    Ledger.objects.create(user=user, typ="BUY_SELF_PROFIT", amount=self_bonus,
+                          meta={"invoice": invoice_no, "tx": usdt_tx_hash, "currency": "USDT", "is_test": is_test})
 
     if user.inviter_id:
-        user.inviter.wallet.refresh_from_db()
-        logger.info("[BUY] AFTER upline_wallet principal_locked=%s self_profit_locked=%s downline_profit_instant=%s",
-                    user.inviter.wallet.principal_locked,
-                    user.inviter.wallet.self_profit_locked,
-                    user.inviter.wallet.downline_profit_instant)
+        Wallet.objects.filter(user=user.inviter).update(
+            downline_profit_instant=F("downline_profit_instant") + upline_bonus
+        )
+        Ledger.objects.create(
+            user=user.inviter,
+            typ="DOWNLINE_PROFIT",
+            amount=upline_bonus,
+            meta={"from": user.wallet_address, "invoice": invoice_no, "currency": "USDT", "is_test": is_test}
+        )
+
+    update_user_investment(user, usdt_amount)
+
+    level_obj = ReferralLevel.objects.filter(user=user).first()
+    if level_obj and level_obj.level_5_count > 0:
+        distribute_level_5_purchase(user, ecg_value)
+
+    return p
+
+
+@transaction.atomic
+def register_purchase_bnb(user: AppUser, bnb_amount: Decimal, bnb_tx_hash: str, is_test: bool = False) -> PurchaseBNB:
+    """
+    ثبت خرید کاربر با BNB
+    """
+    logger.info("[BUY_BNB] start user=%s bnb_amount=%s tx=%s", user.wallet_address, bnb_amount, bnb_tx_hash)
+
+    if PurchaseBNB.objects.filter(bnb_tx_hash=bnb_tx_hash).exists():
+        raise ValueError("TX already registered")
+
+    rate = fetch_bnb_usd_rate()
+    usd_value = bnb_amount * rate
+    ecg_value = usd_value * ECG_PER_USD
+    self_bonus = ecg_value * SELF_BONUS_RATE
+    upline_bonus = ecg_value * UPLINE_RATE
+
+    now = timezone.now()
+    invoice_no = uuid.uuid4().hex[:12].upper()
+    principal_unlock_at = now + timezone.timedelta(days=365)
+    self_profit_unlock_at = now + timezone.timedelta(days=30)
+
+    p = PurchaseBNB.objects.create(
+        user=user,
+        invoice_no=invoice_no,
+        bnb_amount=bnb_amount,
+        bnb_tx_hash=bnb_tx_hash,
+        bnb_usd_rate=rate,
+        usd_value=usd_value,
+        ecg_value=ecg_value,
+        self_profit_5=self_bonus,
+        principal_unlock_at=principal_unlock_at,
+        self_profit_unlock_at=self_profit_unlock_at,
+    )
+
+    Wallet.objects.select_for_update().filter(user=user).update(
+        principal_locked=F("principal_locked") + ecg_value,
+        self_profit_locked=F("self_profit_locked") + self_bonus
+    )
+
+    Ledger.objects.create(user=user, typ="BUY_PRINCIPAL", amount=ecg_value,
+                          meta={"invoice": invoice_no, "tx": bnb_tx_hash, "currency": "BNB", "is_test": is_test})
+    Ledger.objects.create(user=user, typ="BUY_SELF_PROFIT", amount=self_bonus,
+                          meta={"invoice": invoice_no, "tx": bnb_tx_hash, "currency": "BNB", "is_test": is_test})
+
+    if user.inviter_id:
+        Wallet.objects.filter(user=user.inviter).update(
+            downline_profit_instant=F("downline_profit_instant") + upline_bonus
+        )
+        Ledger.objects.create(
+            user=user.inviter,
+            typ="DOWNLINE_PROFIT",
+            amount=upline_bonus,
+            meta={"from": user.wallet_address, "invoice": invoice_no, "currency": "BNB", "is_test": is_test}
+        )
+
+    update_user_investment(user, bnb_amount)
+
+    level_obj = ReferralLevel.objects.filter(user=user).first()
+    if level_obj and level_obj.level_5_count > 0:
+        distribute_level_5_purchase(user, ecg_value)
 
     return p
 
@@ -430,7 +497,6 @@ def distribute_level_5_purchase(user: AppUser, purchase_amount: Decimal):
     """
     logger.info(f"[LEVEL5] Distributing purchase for user {user.wallet_address}")
 
-    # بررسی اینکه کاربر سطح 5 است
     level_obj = ReferralLevel.objects.filter(user=user).first()
     if not level_obj or level_obj.level_5_count == 0:
         logger.info(f"[LEVEL5] User {user.wallet_address} is not level 5")
@@ -438,7 +504,7 @@ def distribute_level_5_purchase(user: AppUser, purchase_amount: Decimal):
 
     current = user.inviter
     level = 1
-    bonus = Decimal("0.01")  # ✅ مقدار ثابت 0.01
+    bonus = Decimal("0.01")
 
     while current and level <= 4:
         with transaction.atomic():
@@ -446,12 +512,10 @@ def distribute_level_5_purchase(user: AppUser, purchase_amount: Decimal):
             if created:
                 logger.info(f"[LEVEL5] Wallet created for {current.wallet_address}")
 
-            # ✅ اصلاح: referral_bonus
             Wallet.objects.filter(user=current).update(
                 referral_bonus=F("referral_bonus") + bonus
             )
 
-            # ثبت در Ledger
             Ledger.objects.create(
                 user=current,
                 typ="LEVEL5_BONUS",
@@ -464,7 +528,6 @@ def distribute_level_5_purchase(user: AppUser, purchase_amount: Decimal):
                 }
             )
 
-            # ✅ بروزرسانی سود در جدول سطوح
             update_level_profit(current, level, user.wallet_address, bonus)
 
             logger.info(f"[LEVEL5] Bonus {bonus} given to level {level} user {current.wallet_address}")
@@ -474,147 +537,3 @@ def distribute_level_5_purchase(user: AppUser, purchase_amount: Decimal):
 
     if level <= 4:
         logger.info(f"[LEVEL5] Only {level-1} upline levels found, distributed to {level-1} users")
-
-
-def fetch_bnb_usd_rate() -> Decimal:
-
-    try:
-        r = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=binancecoin&vs_currencies=usd",timeout=10)
-        r.raise_for_status()
-        data = r.json()
-        rate = data["binancecoin"]["usd"]
-        return Decimal(str(rate))
-
-    except Exception as e:
-        logger.error(f"Faield to fetch BNB rate:{e}")
-        return Decimal("600")
-
-@transaction.atomic
-def register_purchase_usdt(user: AppUser,usdt_amount:Decimal,usdt_tx_hash:str,is_test:bool = False) -> PurchaseUSDT:
-
-    logger.info("[BUY_USDT] start user=%s usdt_amount=%s tx=%s",user.wallet_address,usdt_amount,usdt_tx_hash)
-
-    if PurchaseUSDT.objects.filter(usdt_tx_hash=usdt_tx_hash).exists():
-        raise ValueError("TX already registered")
-
-    rate = Decimal("1")
-    usd_value = usdt_amount*rate
-    ecg_value = usd_value * ECG_PER_USD
-    self_bouns = ecg_value * SELF_BONUS_RATE
-    upline_bouns = ecg_value * UPLINE_RATE
-
-    now = timezone.now()
-
-    invoice_no = uuid.uuid4().hex[:12].upper()
-
-    principal_unlock_at = now + timezone.timedelta(day=365)
-
-    self_profit_unlock_at = now + timezone.timedelta(days=30)
-
-    p = PurchaseUSDT.objects.create(
-        user=user,
-        invoice_no = invoice_no,
-        usdt_amount = usdt_amount,
-        usdt_tx_hash=usdt_tx_hash,
-        usdt_usd_rate = rate,
-        usd_value=usd_value,
-        ecg_value=ecg_value,
-        self_profit_5 = self_bouns,
-        principal_unlock_at=principal_unlock_at,
-        self_profit_unlock_at=self_profit_unlock_at,
-    )
-
-    Wallet.objects.select_for_update().filter(user=user).update(
-        principal_locked = F("principal_locked") + ecg_value,
-        self_profit_locked = F("self_profit_locked") + self_bouns
-    )
-
-    Ledger.objects.create(user=user,typ="BUY_PRINCIPAL",amount=ecg_value,
-                          meta = {"invoice":invoice_no,"tx":usdt_tx_hash,"currency":"USDT","is_test":is_test})
-
-    Ledger.objects.create(user=user,typ="BUY_SELF_PROFIT",amount=self_bouns,
-                          meta={"invoice":invoice_no,"tx":usdt_tx_hash,"currency":"USDT","is_test":is_test})
-
-    if user.inviter_id:
-        Wallet.objects.filter(user=user.inviter).update(
-            dowline_profit_instant = F("downline_profit_instant") + upline_bouns
-        )
-
-        Ledger.objects.create(
-            user = user.inviter,
-            typ = "DOWNLINE_PROFIT",
-            amount = upline_bouns,
-            meta = {"from":user.wallet_address,"invoice":invoice_no,"currency":"USDT","is_test":is_test}
-
-        )
-
-    update_user_investment(user,usdt_amount)
-
-    level_obj = ReferralLevel.objects.filter(user=user).first()
-    if level_obj and level_obj.level_5_count > 0:
-        distribute_level_5_purchase(user, ecg_value)
-
-    return p
-
-@transaction.atomic
-def regiter_purchase_bnb(user:AppUser,bnb_amount:Decimal,bnb_tx_hash: str,is_test:bool = False) -> PurchaseBNB:
-
-    logger.info("[BUY_BNB] start user=%s bnb_amount=%s tx=%s",user.wallet_address,bnb_amount, bnb_tx_hash)
-
-    if PurchaseBNB.objects.filter(bnb_tx_hash=bnb_tx_hash).exists():
-        raise ValueError
-
-    rate = fetch_bnb_usd_rate()
-    usd_value = bnb_amount * rate
-    ecg_value = usd_value * ECG_PER_USD
-    self_bouns = ecg_value * SELF_BONUS_RATE
-    upline_bouns = ecg_value * UPLINE_RATE
-
-    now = timezone.now()
-    invoice_no = uuid.uuid4().hex[:12].upper()
-    principal_unlock_at = now + timezone.timedelta(days=365)
-    self_profit_unlock_at = now + timezone.timedelta(days=30)
-
-    p = PurchaseBNB.objects.create(
-        user=user,
-        invoice_no = invoice_no,
-        bnb_amount=bnb_amount,
-        bnb_tx_hash=bnb_tx_hash,
-        bnb_usd_rate = rate,
-        usd_value=usd_value,
-        ecg_value=ecg_value,
-        self_profit_5=self_bouns,
-        principal_unlock_at=principal_unlock_at,
-        self_profit_unlock_at=self_profit_unlock_at,
-    )
-
-    Wallet.objects.select_for_update().filter(user=user).update(
-        principal_locked=F("principal_locked") + ecg_value,
-        self_profit_locked = F("self_profit_locked") + self_bouns
-    )
-
-    Ledger.objects.create(user=user,typ="BUY_PRINCIPAL",amount=ecg_value,
-                          meta={"invoice":invoice_no,"tx":bnb_tx_hash,"currency":"BNB","is_test":is_test})
-
-    Ledger.objects.create(user=user,typ="BUY_SELF_PROFIT",amount=self_bouns,
-                          meta={"invoice":invoice_no,"tx":bnb_tx_hash,"currency":"BNB","is_test":is_test})
-
-    if user.inviter_id:
-        Wallet.objects.filter(user=user.inviter).update(
-            downline_profit_instant = F("downline_profit_instant") + upline_bouns
-        )
-        Ledger.objects.create(
-            user=user.inviter,
-            typ="DOWNLINE_PROFIT",
-            amount=upline_bouns,
-            meta={"from":user.wallet_address,"invoice":invoice_no,"currency":"BNB","is_test":is_test}
-        )
-
-        update_user_investment(user, bnb_amount)
-
-        level_obj = ReferralLevel.objects.filter(user=user).first()
-        if level_obj and level_obj.level_5_count > 0:
-            distribute_level_5_purchase(user, ecg_value)
-
-        return p    
-    

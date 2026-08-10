@@ -4,10 +4,18 @@ from rest_framework import status
 from decimal import Decimal
 from datetime import timedelta
 from django.utils import timezone
-from .services import get_or_create_user, apply_referral, register_purchase, ecg_to_ton,register_purchase_usdt,regiter_purchase_bnb
+from .services import (
+    get_or_create_user, 
+    apply_referral, 
+    register_purchase, 
+    ecg_to_ton,
+    register_purchase_usdt,
+    register_purchase_bnb
+)
 from .models import (
     AppUser, Wallet, Ledger, Purchase, 
-    WithdrawRequest, ReferralLevel
+    WithdrawRequest, ReferralLevel,
+    PurchaseUSDT, PurchaseBNB
 )
 from .serializers import WalletSerializer, PurchaseSerializer, UserSerializer
 from django.conf import settings
@@ -30,14 +38,9 @@ def connect_wallet(request):
     if not telegram_id:
         return Response({"error": "telegram_id required"}, status=status.HTTP_400_BAD_REQUEST)
 
-    # ✅ برای تست در مرورگر، این خط را کامنت کنید
-    # if not is_telegram:
-    #     return Response({"error": "Only Telegram mini-app allowed"}, status=status.HTTP_403_FORBIDDEN)
-
     try:
         user = get_or_create_user(wallet_address, telegram_id, is_telegram)
         
-        # ✅ اگر کاربر جدید است و کد رفرال دارد، اعمال کن
         if inviter_code and not user.inviter_id:
             apply_referral(inviter_code, user)
             
@@ -58,18 +61,15 @@ def connect_wallet(request):
 def wallet_view(request, wallet_address):
     print(f"🔍 wallet_view called for: {wallet_address}")
     
-    # ✅ دریافت telegram_id از کوئری پارامتر
     telegram_id = request.query_params.get("telegram_id")
     is_telegram = request.query_params.get("is_telegram", "false").lower() == "true"
     
     print(f"📊 telegram_id: {telegram_id}, is_telegram: {is_telegram}")
     
     try:
-        # اگر telegram_id وجود داشت، با آن کاربر را پیدا کن
         if telegram_id:
             user = get_or_create_user(wallet_address, int(telegram_id), is_telegram)
         else:
-            # اگر telegram_id وجود نداشت، فقط با wallet_address
             user = get_or_create_user(wallet_address, telegram_id=None, is_telegram=False)
             
         return Response(WalletSerializer(user.wallet).data, status=status.HTTP_200_OK)
@@ -96,7 +96,6 @@ def create_purchase(request):
     except:
         return Response({"error": "invalid ton_amount"}, status=400)
 
-    # ✅ دریافت telegram_id از کوئری پارامتر یا هدر
     telegram_id = request.query_params.get("telegram_id") or request.headers.get("X-Telegram-Id")
     is_telegram = request.query_params.get("is_telegram", "false").lower() == "true" or request.headers.get("X-Telegram") == "true"
     
@@ -120,7 +119,6 @@ def list_purchases(request):
     if not wallet_address:
         return Response({"error": "wallet param required"}, status=400)
 
-    # ✅ دریافت telegram_id از کوئری پارامتر
     telegram_id = request.query_params.get("telegram_id")
     is_telegram = request.query_params.get("is_telegram", "false").lower() == "true"
     
@@ -145,7 +143,6 @@ def request_withdraw(request):
     if amount < Decimal("60"):
         return Response({"error": "min withdraw is 60 ECG"}, status=status.HTTP_400_BAD_REQUEST)
 
-    # ✅ دریافت telegram_id از هدر
     telegram_id = request.headers.get("X-Telegram-Id")
     is_telegram = request.headers.get("X-Telegram") == "true"
     
@@ -233,7 +230,6 @@ def referral_count(request):
     if not wallet_address:
         return Response({"error": "wallet_address required"}, status=status.HTTP_400_BAD_REQUEST)
 
-    # ✅ دریافت telegram_id از کوئری پارامتر
     telegram_id = request.query_params.get("telegram_id")
     is_telegram = request.query_params.get("is_telegram", "false").lower() == "true"
     
@@ -259,7 +255,6 @@ def reward_status(request):
     if not wallet_address:
         return Response({"error": "wallet_address required"}, status=status.HTTP_400_BAD_REQUEST)
 
-    # ✅ دریافت telegram_id از کوئری پارامتر
     telegram_id = request.query_params.get("telegram_id")
     is_telegram = request.query_params.get("is_telegram", "false").lower() == "true"
     
@@ -296,7 +291,6 @@ def tick(request):
     if not wallet_address:
         return Response({"error": "wallet_address required"}, status=status.HTTP_400_BAD_REQUEST)
 
-    # ✅ دریافت telegram_id از هدر
     telegram_id = request.headers.get("X-Telegram-Id") or request.data.get("telegram_id")
     is_telegram = request.headers.get("X-Telegram") == "true" or request.data.get("is_telegram", False)
     
@@ -345,15 +339,11 @@ def tick(request):
 
 
 # =======================
-# ✅ Referral Levels API با ۴ ستون
+# Referral Levels API
 # =======================
 
 @api_view(["GET"])
 def get_referral_levels(request):
-    """
-    دریافت اطلاعات سطوح referral برای یک کاربر
-    شامل 5 سطح با 4 ستون: telegram_id, wallet, investment, profit
-    """
     wallet_address = request.query_params.get("wallet_address")
     if not wallet_address:
         return Response({"error": "wallet_address required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -368,14 +358,12 @@ def get_referral_levels(request):
     is_test = request.query_params.get("test", "false").lower() == "true"
 
     if is_test:
-        # ✅ داده‌های تستی با ۴ ستون کامل
         test_data = generate_test_data_with_columns()
         return Response({
             "levels": test_data,
             "is_test": True
         }, status=status.HTTP_200_OK)
 
-    # داده‌های واقعی با ۴ ستون
     return Response({
         "levels": {
             "level_1": {
@@ -409,17 +397,9 @@ def get_referral_levels(request):
 
 
 def generate_test_data_with_columns():
-    """
-    تولید داده‌های تستی با 4 ستون:
-    1. telegram_id
-    2. wallet
-    3. investment (TON)
-    4. profit
-    """
     import random
     
     def generate_user(level):
-        """تولید یک کاربر تستی با ۴ ستون"""
         telegram_id = random.randint(100000000, 999999999)
         wallet = "0x" + ''.join(random.choices('0123456789abcdef', k=40))
         investment = round(random.uniform(1, 100), 2)
@@ -432,7 +412,6 @@ def generate_test_data_with_columns():
             "profit": profit
         }
     
-    # تعداد کاربران در هر سطح (طبق درخت باینری)
     level_counts = {
         "level_1": 3,
         "level_2": 7,
@@ -465,11 +444,13 @@ def generate_test_data_with_columns():
     }
 
 
-# ✅ تابع قدیمی برای سازگاری (اختیاری)
 def generate_test_data():
-    """سازگاری با کدهای قبلی"""
     return generate_test_data_with_columns()
 
+
+# =======================
+# USDT Purchase Endpoints
+# =======================
 
 @api_view(["POST"])
 def create_purchase_usdt(request):
@@ -477,74 +458,33 @@ def create_purchase_usdt(request):
     usdt_amount = request.data.get("usdt_amount")
     usdt_tx_hash = request.data.get("usdt_tx_hash")
 
-    if not all(wallet_address,usdt_amount,usdt_tx_hash):
-        return Response({"error":"missing fields"},status=400)
+    # ✅ اصلاح شده
+    if not wallet_address or not usdt_amount or not usdt_tx_hash:
+        return Response({"error": "missing fields"}, status=400)
 
     try:
         usdt_amount = Decimal(str(usdt_amount))
         if usdt_amount <= 0:
-            raise ValueError
-
-    except:
-        return Response({"error":"invalid usdt_amount"},status=400)
-
-    user = get_or_create_user(wallet_address,None,False)
-
-    try:
-        p = register_purchase_usdt(user,usdt_amount,str(usdt_tx_hash))
-
-    except Exception as e:
-        return Response({"error":str(e)},status=400)
-
-
-    return Response({
-        "id":p.id,
-        "invoice_no":p.invoice_no,
-        "usdt_amount":str(p.usdt_amount),
-        "ecg_value":str(p.ecg_value),
-        "self_profit_5":str(p.self_profit_5),
-        "principal_unlock_at":p.principal_unlock_at,
-        "self_profit_unlock_at":p.self_profit_unlock_at,
-    },status=201)
-
-
-@api_view(["POST"])
-def create_purchase_bnb(request):
-
-    wallet_address = request.data.get("wallet_address")
-    bnb_amount = request.data.get("bnb_amount")
-    bnb_tx_hash = request.data.get("bnb_tx_hash")
-
-    if not all([wallet_address,bnb_amount,bnb_tx_hash]):
-        return Response({"error":"missing fields"},status=400)
-
-    try:
-        bnb_amount = Decimal(str(bnb_amount))
-        if bnb_amount <= 0:
             raise ValueError()
-
     except:
-        return Response({"error":"invalid bnb_amount"},status=400)
+        return Response({"error": "invalid usdt_amount"}, status=400)
 
-    user = get_or_create_user(wallet_address,None,False)
+    user = get_or_create_user(wallet_address, None, False)
 
     try:
-        p = regiter_purchase_bnb(user,bnb_amount,str(bnb_tx_hash))
-
+        p = register_purchase_usdt(user, usdt_amount, str(usdt_tx_hash))
     except Exception as e:
-
-        return Response({"error":str(e)}, status=400)
-
+        return Response({"error": str(e)}, status=400)
 
     return Response({
-        "id":p.id,
-        "invoice_no":p.invoice_no,
-        "bnb_amount":str(p.bnb_amount),
-        "ecg_value":str(p.ecg_value),
-        "self_profit_5":str(p.self_profit_5),
-        "principal_unlock_at":p.principal_unlock_at,
-        "self_profit_unlock_at":p.self_profit_unlock_at,
-    },status=201)
+        "id": p.id,
+        "invoice_no": p.invoice_no,
+        "usdt_amount": str(p.usdt_amount),
+        "ecg_value": str(p.ecg_value),
+        "self_profit_5": str(p.self_profit_5),
+        "principal_unlock_at": p.principal_unlock_at,
+        "self_profit_unlock_at": p.self_profit_unlock_at,
+    }, status=201)
 
 
 @api_view(["GET"])
@@ -552,43 +492,79 @@ def list_purchases_usdt(request):
     wallet_address = request.query_params.get("wallet")
 
     if not wallet_address:
-        return Response({"error":"wallet param required"}, status=400)
+        return Response({"error": "wallet param required"}, status=400)
 
-    user = get_or_create_user(wallet_address,None,False)
+    user = get_or_create_user(wallet_address, None, False)
     qs = user.purchases_usdt.all().order_by("-created_at")
 
     return Response([{
-        "id":p.id,
-        "invoice_no":p.invoice_no,
-        "usdt_amount":str(p.usdt_amount),
-        "ecg_value":str(p.ecg_value),
-        "self_profit_5":str(p.self_profit_5),
-        "principal_unlock_at":p.principal_unlock_at,
-        "self_profit_unlock_at":p.self_profit_unlock_at,
-        "usdt_tx_hash":p.usdt_tx_hash,
-    }for p in qs])
+        "id": p.id,
+        "invoice_no": p.invoice_no,
+        "usdt_amount": str(p.usdt_amount),
+        "ecg_value": str(p.ecg_value),
+        "self_profit_5": str(p.self_profit_5),
+        "principal_unlock_at": p.principal_unlock_at,
+        "self_profit_unlock_at": p.self_profit_unlock_at,
+        "usdt_tx_hash": p.usdt_tx_hash,
+    } for p in qs])
+
+
+# =======================
+# BNB Purchase Endpoints
+# =======================
+
+@api_view(["POST"])
+def create_purchase_bnb(request):
+    wallet_address = request.data.get("wallet_address")
+    bnb_amount = request.data.get("bnb_amount")
+    bnb_tx_hash = request.data.get("bnb_tx_hash")
+
+    # ✅ اصلاح شده
+    if not wallet_address or not bnb_amount or not bnb_tx_hash:
+        return Response({"error": "missing fields"}, status=400)
+
+    try:
+        bnb_amount = Decimal(str(bnb_amount))
+        if bnb_amount <= 0:
+            raise ValueError()
+    except:
+        return Response({"error": "invalid bnb_amount"}, status=400)
+
+    user = get_or_create_user(wallet_address, None, False)
+
+    try:
+        p = register_purchase_bnb(user, bnb_amount, str(bnb_tx_hash))
+    except Exception as e:
+        return Response({"error": str(e)}, status=400)
+
+    return Response({
+        "id": p.id,
+        "invoice_no": p.invoice_no,
+        "bnb_amount": str(p.bnb_amount),
+        "ecg_value": str(p.ecg_value),
+        "self_profit_5": str(p.self_profit_5),
+        "principal_unlock_at": p.principal_unlock_at,
+        "self_profit_unlock_at": p.self_profit_unlock_at,
+    }, status=201)
 
 
 @api_view(["GET"])
 def list_purchases_bnb(request):
-
     wallet_address = request.query_params.get("wallet")
+    
     if not wallet_address:
-        return Response({"error":"wallet param required"},status=400)
+        return Response({"error": "wallet param required"}, status=400)
 
-    user = get_or_create_user(wallet_address,None,False)
-
+    user = get_or_create_user(wallet_address, None, False)
     qs = user.purchases_bnb.all().order_by("-created_at")
 
-
     return Response([{
-        "id":p.id,
-        "invoice_no":p.invoice_no,
-        "bnb_amount":str(p.bnb_amount),
-        "ecg_value":str(p.ecg_value),
-        "self_profit_5":str(p.self_profit_5),
-        "principal_unlock_at":p.principal_unlock_at,
-        "self_profit_unlock_at":p.self_profit_unlock_at,
-        "bnb_tx_hash":p.bnb_tx_hash,
-        
+        "id": p.id,
+        "invoice_no": p.invoice_no,
+        "bnb_amount": str(p.bnb_amount),
+        "ecg_value": str(p.ecg_value),
+        "self_profit_5": str(p.self_profit_5),
+        "principal_unlock_at": p.principal_unlock_at,
+        "self_profit_unlock_at": p.self_profit_unlock_at,
+        "bnb_tx_hash": p.bnb_tx_hash,
     } for p in qs])
