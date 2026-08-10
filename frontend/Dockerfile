@@ -9,9 +9,8 @@ RUN npm install
 # اضافه کردن کد پروژه
 COPY . .
 
-# ⭐ اضافه کردن این خط برای شکستن کش در مرحله build
-ARG CACHE_BREAKER=1
-RUN echo "Cache breaker: ${CACHE_BREAKER}" && npm run build
+# ساخت خروجی نهایی
+RUN npm run build
 
 # مرحله ۲: سرو خروجی با Nginx (Production Serve)
 FROM nginx:1.25-alpine
@@ -23,7 +22,10 @@ RUN apk add --no-cache curl
 RUN rm -rf /usr/share/nginx/html/*
 
 # کپی کردن خروجی build به مسیر Nginx
-COPY --from=build /app/build /usr/share/nginx/html
+# اگر خروجی در dist است:
+COPY --from=build /app/dist /usr/share/nginx/html
+# اگر خروجی در build است (بیشتر React پروژه‌ها):
+# COPY --from=build /app/build /usr/share/nginx/html
 
 # کپی کانفیگ Nginx (اختیاری)
 # COPY nginx.conf /etc/nginx/conf.d/default.conf
