@@ -1,62 +1,261 @@
-/* =========================================================
-   PAYMENT NETWORK ROW
-   ========================================================= */
+/* ============================================================
+   REFERRALS - ULTIMATE GLASS DESIGN
+   ============================================================ */
 
-.payment-network {
-  margin-top: 4px;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
-  padding-top: 8px;
+* {
+  box-sizing: border-box;
 }
 
-.network-value {
-  background: rgba(96, 165, 250, 0.1);
-  padding: 2px 10px;
-  border-radius: 20px;
-  font-size: 11px;
-  color: #60a5fa !important;
+.referrals-container {
+  width: 100%;
+  max-width: 1200px;
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 24px;
+  color: #ffffff;
+  background:
+    radial-gradient(circle at 10% 10%, rgba(59, 130, 246, 0.08), transparent 30%),
+    radial-gradient(circle at 90% 20%, rgba(34, 197, 94, 0.06), transparent 30%),
+    #070b16;
 }
 
-/* =========================================================
-   OUTPUT BOXES - IMPROVED
-   ========================================================= */
+/* ============================================================
+   TITLE
+   ============================================================ */
 
+.ref-title {
+  margin: 0 0 24px;
+  text-align: center;
+  color: #dbeafe;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+/* ============================================================
+   REFERRAL LINK - GLASS CARD
+   ============================================================ */
+
+.referral-link-section {
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 28px;
+  padding: 24px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.referral-link-section::before {
+  content: "";
+  position: absolute;
+  top: -100px;
+  right: -100px;
+  width: 250px;
+  height: 250px;
+  border-radius: 50%;
+  background: rgba(59, 130, 246, 0.08);
+  filter: blur(50px);
+  pointer-events: none;
+}
+
+.referral-link-section::after {
+  content: "";
+  position: absolute;
+  bottom: -80px;
+  left: -80px;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background: rgba(34, 197, 94, 0.05);
+  filter: blur(40px);
+  pointer-events: none;
+}
+
+.referral-link-label {
+  position: relative;
+  margin: 0 0 14px;
+  color: #94a3b8;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.link-actions {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.link-input {
+  flex: 1;
+  min-width: 0;
+  height: 46px;
+  padding: 0 15px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: #e2e8f0;
+  font-family: monospace;
+  font-size: 13px;
+  transition: 0.25s ease;
+}
+
+.link-input:focus {
+  outline: none;
+  border-color: rgba(96, 165, 250, 0.4);
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.08);
+}
+
+/* ====== GLASS BUTTONS ====== */
+.btn-open,
+.btn-copy,
+.btn-share-telegram {
+  height: 46px;
+  padding: 0 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.btn-open:hover,
+.btn-copy:hover,
+.btn-share-telegram:hover {
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+}
+
+.btn-open {
+  border-color: rgba(96, 165, 250, 0.2);
+  background: rgba(96, 165, 250, 0.08);
+}
+
+.btn-open:hover {
+  border-color: rgba(96, 165, 250, 0.4);
+  background: rgba(96, 165, 250, 0.15);
+}
+
+.btn-copy {
+  border-color: rgba(148, 163, 184, 0.15);
+  background: rgba(148, 163, 184, 0.06);
+}
+
+.btn-copy:hover {
+  border-color: rgba(148, 163, 184, 0.3);
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.btn-share-telegram {
+  border-color: rgba(34, 158, 217, 0.25);
+  background: linear-gradient(135deg, rgba(34, 158, 217, 0.15), rgba(22, 133, 217, 0.08));
+  box-shadow: 0 8px 25px rgba(34, 158, 217, 0.08);
+}
+
+.btn-share-telegram:hover {
+  border-color: rgba(34, 158, 217, 0.5);
+  background: linear-gradient(135deg, rgba(34, 158, 217, 0.25), rgba(22, 133, 217, 0.15));
+  box-shadow: 0 12px 30px rgba(34, 158, 217, 0.15);
+}
+
+/* ============================================================
+   OUTPUT BOXES - GLASS CARDS
+   ============================================================ */
+
+.output-boxes {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 18px;
+  width: 100%;
+  margin: 20px 0 25px;
+}
+
+/* ====== GLASS BOX BASE ====== */
 .output-box {
   position: relative;
   padding: 22px 20px;
   border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.06);
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
-  transition: all 0.4s ease;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  overflow: hidden;
 }
 
-.output-box:hover {
-  transform: translateY(-3px);
+/* ====== GLOW EFFECTS ====== */
+.output-box::before {
+  content: "";
+  position: absolute;
+  top: -60px;
+  right: -60px;
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  filter: blur(40px);
+  opacity: 0.3;
+  transition: opacity 0.5s ease;
+  pointer-events: none;
+}
+
+.output-box.ecg-box::before {
+  background: rgba(34, 197, 94, 0.15);
+}
+
+.output-box.usdt-box::before {
+  background: rgba(96, 165, 250, 0.15);
+}
+
+.output-box:hover::before {
+  opacity: 0.6;
+}
+
+/* ====== ACTIVE STATE ====== */
+.output-box.box-active {
   border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  transform: translateY(-4px);
+  box-shadow:
+    0 20px 50px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
-/* ECG Box */
 .output-box.ecg-box.box-active {
-  border-color: rgba(34, 197, 94, 0.3);
-  background: linear-gradient(145deg, rgba(34, 197, 94, 0.06), rgba(34, 197, 94, 0.01));
-  box-shadow: 0 12px 40px rgba(34, 197, 94, 0.06);
+  border-color: rgba(34, 197, 94, 0.25);
+  box-shadow:
+    0 20px 50px rgba(34, 197, 94, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
-.output-box.ecg-box .box-value {
-  color: #4ade80;
-}
-
-/* USDT Box */
 .output-box.usdt-box.box-active {
-  border-color: rgba(96, 165, 250, 0.3);
-  background: linear-gradient(145deg, rgba(96, 165, 250, 0.06), rgba(96, 165, 250, 0.01));
-  box-shadow: 0 12px 40px rgba(96, 165, 250, 0.06);
+  border-color: rgba(96, 165, 250, 0.25);
+  box-shadow:
+    0 20px 50px rgba(96, 165, 250, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
-.output-box.usdt-box .box-value {
-  color: #60a5fa;
-}
-
-/* Box Header */
+/* ====== BOX HEADER ====== */
 .box-header {
   display: flex;
   align-items: center;
@@ -67,37 +266,44 @@
 }
 
 .box-icon {
-  width: 44px;
-  height: 44px;
+  width: 46px;
+  height: 46px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 14px;
   font-size: 20px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .ecg-box .box-icon {
-  background: rgba(34, 197, 94, 0.1);
+  background: rgba(34, 197, 94, 0.08);
+  border-color: rgba(34, 197, 94, 0.1);
 }
 
 .usdt-box .box-icon {
-  background: rgba(96, 165, 250, 0.1);
+  background: rgba(96, 165, 250, 0.08);
+  border-color: rgba(96, 165, 250, 0.1);
 }
 
 .box-title {
   font-size: 16px;
   font-weight: 700;
-  color: #fff;
+  color: #ffffff;
+  letter-spacing: 0.3px;
 }
 
 .box-subtitle {
   font-size: 11px;
   color: #64748b;
   font-weight: 400;
+  margin-top: 1px;
 }
 
-/* Box Content */
+/* ====== BOX CONTENT ====== */
 .box-content {
   display: flex;
   flex-direction: column;
@@ -108,9 +314,15 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 6px 8px;
-  border-radius: 8px;
+  padding: 7px 10px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  transition: background 0.25s ease;
+}
+
+.box-row:hover {
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .box-label {
@@ -124,56 +336,268 @@
   font-weight: 700;
 }
 
-/* =========================================================
-   LEVELS - RESPONSIVE FIX
-   ========================================================= */
-
-@media (max-width: 768px) {
-  .levels-grid {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-
-  .level-table table {
-    min-width: 400px;
-    font-size: 10px;
-  }
-
-  .level-table th,
-  .level-table td {
-    padding: 5px 8px;
-  }
-
-  .level-card {
-    padding: 12px;
-  }
-
-  .output-boxes {
-    grid-template-columns: 1fr;
-    gap: 14px;
-  }
-
-  .output-box {
-    padding: 18px 16px;
-  }
-
-  .stats-box {
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-  }
+.ecg-box .box-value {
+  color: #4ade80;
 }
 
-@media (max-width: 480px) {
+.usdt-box .box-value {
+  color: #60a5fa;
+}
+
+/* ====== NETWORK ROW ====== */
+.payment-network {
+  margin-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  padding-top: 8px;
+}
+
+.network-value {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 2px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #93bbfc !important;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+/* ============================================================
+   STATS - GLASS CARDS
+   ============================================================ */
+
+.stats-box {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin: 20px 0;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 18px;
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: all 0.3s ease;
+}
+
+.stat-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.stat-label {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+}
+
+.stat-value {
+  color: #facc15;
+  font-size: 26px;
+  font-weight: 900;
+}
+
+/* ============================================================
+   LEVELS SECTION - GLASS
+   ============================================================ */
+
+.levels-section {
+  margin-top: 24px;
+  padding: 22px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.02);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.levels-section h3 {
+  margin: 0 0 20px;
+  color: #e94560;
+  font-size: 20px;
+  text-align: center;
+  letter-spacing: 0.5px;
+}
+
+.levels-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+/* ====== LEVEL CARD ====== */
+.level-card {
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.3s ease;
+}
+
+.level-card:hover {
+  border-color: rgba(233, 69, 96, 0.3);
+  transform: translateY(-3px);
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 12px 30px rgba(233, 69, 96, 0.06);
+}
+
+.level-table {
+  width: 100%;
+}
+
+.level-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.level-header h4 {
+  margin: 0;
+  color: #facc15;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.level-count {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ====== TABLE ====== */
+.table-wrapper {
+  overflow-x: auto;
+  border-radius: 8px;
+}
+
+.level-table table {
+  width: 100%;
+  min-width: 500px;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.level-table th {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.03);
+  color: #64748b;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.level-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  color: #cbd5e1;
+}
+
+.level-table tr:hover td {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.telegram-id {
+  color: #facc15;
+  font-family: monospace;
+}
+
+.wallet-address {
+  color: #60a5fa;
+  font-family: monospace;
+}
+
+.investment-cell {
+  color: #38bdf8;
+  font-weight: 700;
+}
+
+.profit-cell {
+  color: #4ade80;
+  font-weight: 700;
+}
+
+.empty-message,
+.no-data {
+  padding: 20px !important;
+  color: #475569;
+  text-align: center;
+  font-style: italic;
+}
+
+.show-more {
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  color: #64748b;
+  font-size: 11px;
+  text-align: center;
+}
+
+/* ============================================================
+   TEST BUTTON
+   ============================================================ */
+
+.test-actions {
+  margin-top: 22px;
+  text-align: center;
+}
+
+.btn-test {
+  padding: 12px 28px;
+  border: 1px solid rgba(118, 75, 162, 0.25);
+  border-radius: 12px;
+  background: rgba(118, 75, 162, 0.08);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: #a78bfa;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-test:hover {
+  background: rgba(118, 75, 162, 0.15);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 30px rgba(118, 75, 162, 0.1);
+}
+
+.btn-test:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+
+@media (max-width: 768px) {
   .referrals-container {
-    padding: 12px;
+    padding: 15px;
   }
 
   .ref-title {
-    font-size: 20px;
+    font-size: 25px;
   }
 
   .referral-link-section {
-    padding: 14px;
+    padding: 18px;
   }
 
   .link-actions {
@@ -189,10 +613,49 @@
 
   .output-boxes {
     grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .output-box {
+    padding: 18px 16px;
+  }
+
+  .stats-box {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .levels-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .levels-section {
+    padding: 15px;
+  }
+}
+
+@media (max-width: 480px) {
+  .referrals-container {
+    padding: 10px;
+  }
+
+  .ref-title {
+    font-size: 20px;
+    margin-bottom: 18px;
+  }
+
+  .referral-link-section {
+    padding: 14px;
+    border-radius: 17px;
+  }
+
+  .output-boxes {
+    gap: 12px;
   }
 
   .output-box {
     padding: 14px 12px;
+    border-radius: 15px;
   }
 
   .box-title {
@@ -208,54 +671,51 @@
     gap: 8px;
   }
 
+  .stat-item {
+    padding: 12px 14px;
+  }
+
   .stat-value {
-    font-size: 18px;
+    font-size: 20px;
   }
 
   .levels-section {
     padding: 12px;
   }
 
-  .levels-grid {
-    grid-template-columns: 1fr;
-  }
-
   .level-table table {
-    min-width: 320px;
-    font-size: 9px;
+    min-width: 350px;
+    font-size: 10px;
   }
 
   .level-table th,
   .level-table td {
-    padding: 4px 5px;
+    padding: 4px 6px;
   }
 
-  .wallet-address {
-    font-size: 8px;
-  }
-
+  .wallet-address,
   .telegram-id {
     font-size: 8px;
   }
 
-  .investment-cell,
-  .profit-cell {
-    font-size: 9px;
+  .btn-test {
+    padding: 10px 20px;
+    font-size: 12px;
   }
 }
 
 @media (max-width: 360px) {
+  .stats-box {
+    grid-template-columns: 1fr;
+  }
+
   .level-table table {
-    min-width: 280px;
-    font-size: 8px;
+    min-width: 300px;
+    font-size: 9px;
   }
 
   .level-table th,
   .level-table td {
     padding: 3px 4px;
-  }
-
-  .stats-box {
-    grid-template-columns: 1fr;
   }
 }

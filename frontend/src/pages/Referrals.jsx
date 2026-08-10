@@ -456,73 +456,7 @@ export default function Referrals() {
             </div>
 
             {/* ==================================================
-                💰 USDT + ECG BOXES (بدون دکمه Withdraw)
-                ================================================== */}
-
-            <div className="output-boxes">
-              {/* 💵 USDT Box */}
-              <div className="output-box usdt-box box-active">
-                <div className="box-header">
-                  <div className="box-icon">💵</div>
-                  <div>
-                    <div className="box-title">USDT Rewards</div>
-                    <div className="box-subtitle">Referral rewards</div>
-                  </div>
-                </div>
-
-                <div className="box-content">
-                  <div className="box-row">
-                    <span className="box-label">Balance</span>
-                    <span className="box-value">0.00 USDT</span>
-                  </div>
-                  <div className="box-row">
-                    <span className="box-label">Total Rewards</span>
-                    <span className="box-value">0.00 USDT</span>
-                  </div>
-                  <div className="box-row">
-                    <span className="box-label">Referral Bonus</span>
-                    <span className="box-value">0.00 USDT</span>
-                  </div>
-                  <div className="box-row payment-network">
-                    <span className="box-label">💎 Network</span>
-                    <span className="box-value network-value">TON</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* ⚡ ECG Box */}
-              <div className="output-box ecg-box box-active">
-                <div className="box-header">
-                  <div className="box-icon">⚡</div>
-                  <div>
-                    <div className="box-title">ECG Rewards</div>
-                    <div className="box-subtitle">Referral rewards</div>
-                  </div>
-                </div>
-
-                <div className="box-content">
-                  <div className="box-row">
-                    <span className="box-label">Balance</span>
-                    <span className="box-value">0.00 ECG</span>
-                  </div>
-                  <div className="box-row">
-                    <span className="box-label">Total Rewards</span>
-                    <span className="box-value">0.00 ECG</span>
-                  </div>
-                  <div className="box-row">
-                    <span className="box-label">Referral Bonus</span>
-                    <span className="box-value">0.00 ECG</span>
-                  </div>
-                  <div className="box-row payment-network">
-                    <span className="box-label">💎 Network</span>
-                    <span className="box-value network-value">TON</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* ==================================================
-                Stats
+                💰 Stats
                 ================================================== */}
 
             <div className="stats-box">
