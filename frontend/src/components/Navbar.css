@@ -1,64 +1,233 @@
+/* ============================================================
+   NAVBAR - MODERN DARK BLUE
+   ============================================================ */
+
 .navbar {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  background-color: #0a0f2b;
+  background: rgba(10, 15, 43, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   display: flex;
   justify-content: space-around;
   align-items: center;
-  padding: 10px 0 14px;
-  border-top: 1px solid rgba(47, 92, 255, 0.4);
-  box-shadow: 0 -4px 25px rgba(0, 225, 255, 0.08) inset;
+  padding: 8px 0 14px;
+  border-top: 1px solid rgba(47, 92, 255, 0.3);
+  box-shadow: 
+    0 -4px 30px rgba(0, 225, 255, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
   z-index: 9999;
 }
 
+/* ====== NAV ITEMS ====== */
 .nav-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
+  justify-content: center;
+  gap: 3px;
   color: #9fb3ff;
   text-decoration: none;
-  transition: all 0.25s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 4px 12px;
+  border-radius: 12px;
+  min-width: 50px;
+  position: relative;
 }
 
 .nav-item img {
-  width: 50px;
-  height: 50px;
+  width: 44px;
+  height: 44px;
   object-fit: contain;
-  filter: drop-shadow(0 0 6px rgba(0, 225, 255, 0.3));
-  transition: transform 0.25s ease, filter 0.25s ease;
+  filter: drop-shadow(0 0 6px rgba(0, 225, 255, 0.15));
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .nav-item span {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 700;
-  color: #dbe3ff;
-  text-shadow: 0 0 8px rgba(0, 225, 255, 0.35);
+  color: #8899cc;
+  text-shadow: 0 0 8px rgba(0, 225, 255, 0.1);
+  transition: all 0.3s ease;
+  letter-spacing: 0.3px;
 }
 
-/* حالت hover */
+/* ====== HOVER ====== */
 .nav-item:hover img {
   transform: translateY(-3px) scale(1.05);
-  filter: drop-shadow(0 0 12px rgba(0, 225, 255, 0.6));
+  filter: drop-shadow(0 0 16px rgba(0, 225, 255, 0.4));
 }
 
 .nav-item:hover span {
   color: #00e1ff;
-  text-shadow: 0 0 12px rgba(0, 225, 255, 0.7);
+  text-shadow: 0 0 16px rgba(0, 225, 255, 0.4);
 }
 
-/* حالت active برای لینک فعلی */
-.nav-item.active img,
-.nav-item.active span,
+.nav-item:hover {
+  transform: translateY(-2px);
+}
+
+/* ====== ACTIVE ====== */
 .nav-item.active {
-  filter: drop-shadow(0 0 14px rgba(47, 92, 255, 0.9));
-  transform: scale(1.1);
   color: #00e1ff;
+  transform: translateY(-2px);
 }
 
-/* مخصوص NavLink تا active به‌درستی کار کنه */
+.nav-item.active img {
+  filter: drop-shadow(0 0 20px rgba(47, 92, 255, 0.6));
+  transform: scale(1.08);
+}
+
 .nav-item.active span {
   color: #00e1ff;
+  text-shadow: 0 0 20px rgba(0, 225, 255, 0.5);
+}
+
+/* خط زیر active */
+.nav-item.active::after {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 24px;
+  height: 3px;
+  background: linear-gradient(90deg, #3b82f6, #00e1ff);
+  border-radius: 0 0 4px 4px;
+  box-shadow: 0 0 20px rgba(0, 225, 255, 0.3);
+}
+
+/* ====== DISABLED STATE ====== */
+.nav-item.disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+  filter: grayscale(0.5);
+}
+
+.nav-item.disabled img {
+  filter: grayscale(0.8) opacity(0.5);
+}
+
+.nav-item.disabled span {
+  color: #4a5578;
+}
+
+/* ============================================================
+   WALLET STATUS
+   ============================================================ */
+
+.wallet-status {
+  position: absolute;
+  top: -30px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px 12px;
+  border-radius: 20px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.navbar:hover .wallet-status {
+  opacity: 1;
+}
+
+.status-valid {
+  color: #4ade80;
+}
+
+.status-invalid {
+  color: #f87171;
+}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+
+@media (max-width: 768px) {
+  .navbar {
+    padding: 6px 0 12px;
+  }
+
+  .nav-item {
+    padding: 2px 8px;
+    min-width: 40px;
+  }
+
+  .nav-item img {
+    width: 36px;
+    height: 36px;
+  }
+
+  .nav-item span {
+    font-size: 9px;
+  }
+
+  .nav-item.active::after {
+    width: 18px;
+    height: 2px;
+  }
+}
+
+@media (max-width: 480px) {
+  .navbar {
+    padding: 4px 0 10px;
+  }
+
+  .nav-item {
+    padding: 2px 4px;
+    min-width: 32px;
+    gap: 2px;
+  }
+
+  .nav-item img {
+    width: 30px;
+    height: 30px;
+  }
+
+  .nav-item span {
+    font-size: 8px;
+    font-weight: 600;
+  }
+
+  .nav-item.active::after {
+    width: 14px;
+    height: 2px;
+  }
+
+  .wallet-status {
+    font-size: 7px;
+    padding: 1px 8px;
+    top: -24px;
+  }
+}
+
+/* ============================================================
+   SCROLLBAR
+   ============================================================ */
+
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3b82f6;
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #60a5fa;
 }
