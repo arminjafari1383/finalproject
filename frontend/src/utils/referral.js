@@ -14,6 +14,8 @@ const INVITER_CODE_KEY = "inviter_code";
  * 3. Telegram Mini App:
  *    https://t.me/aipolynetbot/app?startapp=ref_ABC123
  *
+ * 4. Any parameter with ref_ or referral
+ *
  * Result:
  *    ABC123
  */
@@ -29,49 +31,84 @@ export function captureInviterCode() {
 
     const url = new URL(window.location.href);
     
-    // ✅ چک کردن همه پارامترهای ممکن
-    const possibleParams = ['ref', 'startapp', 'tgWebAppStartParam', 'start_param'];
-    let ref = null;
+    // ✅ همه پارامترهای ممکن برای رفرال
+    const possibleParams = [
+      'ref',           // normal ref
+      'startapp',      // Telegram Mini App
+      'tgWebAppStartParam',  // Telegram WebApp
+      'start_param',   // another Telegram format
+      'referral',      // generic
+      'referral_code', // generic
+      'code',          // generic
+      'inviter',       // inviter code
+      'invite',        // invite code
+      'share'          // share code
+    ];
     
+    let ref = null;
+    let foundParam = null;
+    
+    // 1. چک کردن پارامترهای خاص
     for (const param of possibleParams) {
       const value = url.searchParams.get(param);
-      if (value) {
+      if (value && value.trim()) {
         console.log(`🔍 [referral.js] Found param "${param}":`, value);
         ref = value;
+        foundParam = param;
         break;
       }
     }
     
-    // اگر پارامتری پیدا نشد، همه پارامترها رو چک کن
+    // 2. اگر پیدا نشد، همه پارامترها رو چک کن
     if (!ref) {
       console.log('🔍 [referral.js] Checking all URL params:', Object.fromEntries(url.searchParams));
       
-      // چک کردن همه پارامترها برای پیدا کردن ref_ یا referral
       for (const [key, value] of url.searchParams) {
-        if (value && (value.startsWith('ref_') || key.includes('ref'))) {
+        // چک کردن هر مقدار که با ref_ یا r_ شروع میشه
+        if (value && (value.startsWith('ref_') || value.startsWith('r_') || value.startsWith('invite_'))) {
           console.log(`🔍 [referral.js] Found potential referral in "${key}":`, value);
           ref = value;
+          foundParam = key;
+          break;
+        }
+        // چک کردن کلیدهایی که شامل ref یا invite هستن
+        if (key && (key.toLowerCase().includes('ref') || 
+                    key.toLowerCase().includes('invite') || 
+                    key.toLowerCase().includes('referral') ||
+                    key.toLowerCase().includes('share'))) {
+          console.log(`🔍 [referral.js] Found referral key "${key}":`, value);
+          ref = value;
+          foundParam = key;
           break;
         }
       }
     }
 
+    // 3. پاکسازی و استخراج کد
     if (ref) {
       let cleanRef = ref.trim();
       
-      // اگر با ref_ شروع شد، جدا کن
+      // حذف پیشوندهای مختلف
       if (cleanRef.startsWith('ref_')) {
         cleanRef = cleanRef.substring(4);
       }
-      
-      // اگر با r_ شروع شد (حالت دیگه)
       if (cleanRef.startsWith('r_')) {
         cleanRef = cleanRef.substring(2);
       }
+      if (cleanRef.startsWith('invite_')) {
+        cleanRef = cleanRef.substring(7);
+      }
+      if (cleanRef.startsWith('inv_')) {
+        cleanRef = cleanRef.substring(4);
+      }
+      
+      // فقط حروف و اعداد رو نگه دار
+      cleanRef = cleanRef.replace(/[^a-zA-Z0-9]/g, '');
 
-      if (cleanRef) {
+      if (cleanRef && cleanRef.length > 0) {
         localStorage.setItem(INVITER_CODE_KEY, cleanRef);
-        console.log("✅ Referral captured from URL:", cleanRef);
+        console.log(`✅ [referral.js] Referral captured from "${foundParam}":`, cleanRef);
+        console.log(`💾 [referral.js] Saved to localStorage:`, cleanRef);
         return cleanRef;
       }
     }
@@ -81,28 +118,33 @@ export function captureInviterCode() {
     // ==========================================
 
     const tg = window.Telegram?.WebApp;
-
     if (tg) {
+      console.log('📱 [referral.js] Telegram WebApp detected');
       tg.ready();
+      
       const startParam = tg.initDataUnsafe?.start_param || null;
-      console.log("📱 Telegram start_param:", startParam);
+      console.log("📱 [referral.js] Telegram start_param:", startParam);
 
       if (startParam) {
         let referralCode = startParam;
-
+        
+        // حذف پیشوندها
         if (referralCode.startsWith("ref_")) {
           referralCode = referralCode.substring(4);
         }
-        
         if (referralCode.startsWith("r_")) {
           referralCode = referralCode.substring(2);
         }
+        if (referralCode.startsWith("invite_")) {
+          referralCode = referralCode.substring(7);
+        }
+        
+        referralCode = referralCode.trim().replace(/[^a-zA-Z0-9]/g, '');
 
-        referralCode = referralCode.trim();
-
-        if (referralCode) {
+        if (referralCode && referralCode.length > 0) {
           localStorage.setItem(INVITER_CODE_KEY, referralCode);
-          console.log("✅ Referral captured from Telegram:", referralCode);
+          console.log("✅ [referral.js] Referral captured from Telegram:", referralCode);
+          console.log(`💾 [referral.js] Saved to localStorage:`, referralCode);
           return referralCode;
         }
       }
@@ -113,47 +155,78 @@ export function captureInviterCode() {
     // ==========================================
 
     const storedReferral = localStorage.getItem(INVITER_CODE_KEY);
-
     if (storedReferral) {
-      console.log("📂 Using stored referral:", storedReferral);
+      console.log("📂 [referral.js] Using stored referral:", storedReferral);
       return storedReferral;
     }
 
     // ==========================================
-    // 4) Check URL hash (some apps use hash)
+    // 4) Check URL hash
     // ==========================================
     
     const hash = window.location.hash;
     if (hash) {
-      console.log("🔍 Checking URL hash:", hash);
+      console.log("🔍 [referral.js] Checking URL hash:", hash);
       const hashParams = new URLSearchParams(hash.replace('#', '?'));
-      const hashRef = hashParams.get('ref');
-      if (hashRef) {
-        let cleanRef = hashRef.trim();
+      
+      // چک کردن همه پارامترهای ممکن در هش
+      for (const param of possibleParams) {
+        const hashRef = hashParams.get(param);
+        if (hashRef) {
+          let cleanRef = hashRef.trim();
+          if (cleanRef.startsWith('ref_')) {
+            cleanRef = cleanRef.substring(4);
+          }
+          if (cleanRef.startsWith('r_')) {
+            cleanRef = cleanRef.substring(2);
+          }
+          cleanRef = cleanRef.replace(/[^a-zA-Z0-9]/g, '');
+          if (cleanRef && cleanRef.length > 0) {
+            localStorage.setItem(INVITER_CODE_KEY, cleanRef);
+            console.log("✅ [referral.js] Referral captured from hash:", cleanRef);
+            console.log(`💾 [referral.js] Saved to localStorage:`, cleanRef);
+            return cleanRef;
+          }
+        }
+      }
+    }
+
+    // ==========================================
+    // 5) Check window.name (some apps use this)
+    // ==========================================
+    
+    try {
+      const windowName = window.name;
+      if (windowName && (windowName.startsWith('ref_') || windowName.includes('ref_'))) {
+        let cleanRef = windowName;
         if (cleanRef.startsWith('ref_')) {
           cleanRef = cleanRef.substring(4);
         }
-        if (cleanRef) {
+        cleanRef = cleanRef.replace(/[^a-zA-Z0-9]/g, '');
+        if (cleanRef && cleanRef.length > 0) {
           localStorage.setItem(INVITER_CODE_KEY, cleanRef);
-          console.log("✅ Referral captured from hash:", cleanRef);
+          console.log("✅ [referral.js] Referral captured from window.name:", cleanRef);
+          console.log(`💾 [referral.js] Saved to localStorage:`, cleanRef);
           return cleanRef;
         }
       }
+    } catch (e) {
+      // ignore
     }
 
     // ==========================================
     // No Referral
     // ==========================================
 
-    console.log("ℹ️ No referral code found");
+    console.log("ℹ️ [referral.js] No referral code found");
     return null;
     
   } catch (error) {
-    console.error("❌ Error capturing referral:", error);
+    console.error("❌ [referral.js] Error capturing referral:", error);
     try {
       return localStorage.getItem(INVITER_CODE_KEY);
     } catch (storageError) {
-      console.error("❌ LocalStorage error:", storageError);
+      console.error("❌ [referral.js] LocalStorage error:", storageError);
       return null;
     }
   }
@@ -166,26 +239,60 @@ export function getStoredInviterCode() {
   try {
     return localStorage.getItem(INVITER_CODE_KEY);
   } catch (error) {
-    console.error("❌ Error getting stored referral:", error);
+    console.error("❌ [referral.js] Error getting stored referral:", error);
     return null;
   }
 }
 
 /**
- * Alias
+ * Alias for getStoredInviterCode
  */
 export function getInviterCode() {
   return getStoredInviterCode();
 }
 
 /**
- * Clear referral code
+ * Clear referral code from localStorage
  */
 export function clearInviterCode() {
   try {
     localStorage.removeItem(INVITER_CODE_KEY);
-    console.log("🗑️ Inviter code cleared");
+    console.log("🗑️ [referral.js] Inviter code cleared");
   } catch (error) {
-    console.error("❌ Error clearing inviter code:", error);
+    console.error("❌ [referral.js] Error clearing inviter code:", error);
   }
+}
+
+/**
+ * Check if a referral code exists
+ */
+export function hasInviterCode() {
+  return !!getInviterCode();
+}
+
+/**
+ * Get referral code with validation
+ */
+export function validateAndGetInviterCode() {
+  const code = getInviterCode();
+  if (code && code.length >= 8 && code.length <= 20) {
+    return code;
+  }
+  console.warn("⚠️ [referral.js] Invalid referral code format:", code);
+  return null;
+}
+
+/**
+ * Force set referral code (for testing)
+ */
+export function setInviterCode(code) {
+  if (code && code.trim()) {
+    const cleanCode = code.trim().replace(/[^a-zA-Z0-9]/g, '');
+    if (cleanCode) {
+      localStorage.setItem(INVITER_CODE_KEY, cleanCode);
+      console.log("🔧 [referral.js] Force set inviter code:", cleanCode);
+      return cleanCode;
+    }
+  }
+  return null;
 }
