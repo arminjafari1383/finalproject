@@ -1,3 +1,5 @@
+# backend/core/services.py
+
 from decimal import Decimal
 from django.utils import timezone
 from django.db import transaction
@@ -26,28 +28,42 @@ def get_or_create_user(wallet_address: str, telegram_id: int = None, is_telegram
     """
     logger.info(f"🔍 get_or_create_user: wallet={wallet_address}, telegram_id={telegram_id}, is_telegram={is_telegram}")
     
+    # ✅ اگر telegram_id وجود نداشت، با ولت آدرس پیدا کن
     if not telegram_id:
         logger.warning("⚠️ No telegram_id, trying to find by wallet_address")
         user = AppUser.objects.filter(wallet_address=wallet_address).first()
         if user:
             logger.info(f"✅ User found by wallet_address: {user.wallet_address}")
+            # ✅ آپدیت is_active
+            if not user.is_active:
+                user.is_active = True
+                user.save()
             return user
         
+        # ✅ ایجاد کاربر جدید با مقداردهی کامل
         user = AppUser.objects.create(
             wallet_address=wallet_address,
             telegram_id=None,
             is_telegram_user=False,
             telegram_verified=False,
-            wallet_locked=False
+            wallet_locked=False,
+            is_active=True,  # ✅ مقداردهی
+            is_admin=False,  # ✅ مقداردهی
         )
         Wallet.objects.create(user=user)
         logger.info(f"✅ New user created with wallet only: {wallet_address}")
         return user
     
+    # ✅ جستجو با telegram_id
     existing_user_by_telegram = AppUser.objects.filter(telegram_id=telegram_id).first()
     
     if existing_user_by_telegram:
         logger.info(f"✅ User found by telegram_id: {existing_user_by_telegram.wallet_address}")
+        
+        # ✅ آپدیت is_active
+        if not existing_user_by_telegram.is_active:
+            existing_user_by_telegram.is_active = True
+            existing_user_by_telegram.save()
         
         if existing_user_by_telegram.wallet_locked:
             if existing_user_by_telegram.wallet_address != wallet_address:
@@ -59,15 +75,21 @@ def get_or_create_user(wallet_address: str, telegram_id: int = None, is_telegram
             if existing_user_by_telegram.wallet_address != wallet_address:
                 existing_user_by_telegram.wallet_address = wallet_address
                 existing_user_by_telegram.wallet_locked = True
+                existing_user_by_telegram.is_active = True  # ✅
                 existing_user_by_telegram.save()
                 logger.info(f"🔒 Wallet locked for user: {existing_user_by_telegram.wallet_address}")
         
         return existing_user_by_telegram
     
+    # ✅ جستجو با wallet_address
     existing_user_by_wallet = AppUser.objects.filter(wallet_address=wallet_address).first()
     
     if existing_user_by_wallet:
         logger.info(f"⚠️ Wallet address already registered with telegram_id: {existing_user_by_wallet.telegram_id}")
+        
+        # ✅ آپدیت is_active
+        if not existing_user_by_wallet.is_active:
+            existing_user_by_wallet.is_active = True
         
         if existing_user_by_wallet.wallet_locked:
             if not existing_user_by_wallet.telegram_id:
@@ -75,6 +97,7 @@ def get_or_create_user(wallet_address: str, telegram_id: int = None, is_telegram
                 existing_user_by_wallet.is_telegram_user = True
                 existing_user_by_wallet.telegram_verified = True
                 existing_user_by_wallet.wallet_locked = True
+                existing_user_by_wallet.is_active = True  # ✅
                 existing_user_by_wallet.save()
                 logger.info(f"🔒 Wallet locked for existing user (previously unlinked): {existing_user_by_wallet.wallet_address}")
                 return existing_user_by_wallet
@@ -85,16 +108,20 @@ def get_or_create_user(wallet_address: str, telegram_id: int = None, is_telegram
             existing_user_by_wallet.is_telegram_user = True
             existing_user_by_wallet.telegram_verified = True
             existing_user_by_wallet.wallet_locked = True
+            existing_user_by_wallet.is_active = True  # ✅
             existing_user_by_wallet.save()
             logger.info(f"✅ Wallet paired with Telegram ID successfully: {existing_user_by_wallet.wallet_address}")
             return existing_user_by_wallet
 
+    # ✅ ایجاد کاربر جدید با مقداردهی کامل
     user = AppUser.objects.create(
         wallet_address=wallet_address,
         telegram_id=telegram_id,
         is_telegram_user=True,
         telegram_verified=True,
-        wallet_locked=True
+        wallet_locked=True,
+        is_active=True,  # ✅ مقداردهی
+        is_admin=False,  # ✅ مقداردهی
     )
     
     Wallet.objects.create(user=user)
@@ -351,6 +378,9 @@ def register_purchase(user: AppUser, ton_amount: Decimal, ton_tx_hash: str, is_t
     if level_obj and level_obj.level_5_count > 0:
         distribute_level_5_purchase(user, ecg_value)
 
+    # ✅ بروزرسانی total_investment کاربر
+    update_user_total_investment(user)
+
     return p
 
 
@@ -414,6 +444,9 @@ def register_purchase_usdt(user: AppUser, usdt_amount: Decimal, usdt_tx_hash: st
     level_obj = ReferralLevel.objects.filter(user=user).first()
     if level_obj and level_obj.level_5_count > 0:
         distribute_level_5_purchase(user, ecg_value)
+
+    # ✅ بروزرسانی total_investment کاربر
+    update_user_total_investment(user)
 
     return p
 
@@ -479,6 +512,9 @@ def register_purchase_bnb(user: AppUser, bnb_amount: Decimal, bnb_tx_hash: str, 
     if level_obj and level_obj.level_5_count > 0:
         distribute_level_5_purchase(user, ecg_value)
 
+    # ✅ بروزرسانی total_investment کاربر
+    update_user_total_investment(user)
+
     return p
 
 
@@ -537,3 +573,55 @@ def distribute_level_5_purchase(user: AppUser, purchase_amount: Decimal):
 
     if level <= 4:
         logger.info(f"[LEVEL5] Only {level-1} upline levels found, distributed to {level-1} users")
+
+
+# ✅ تابع جدید برای بروزرسانی total_investment
+def update_user_total_investment(user: AppUser):
+    """
+    بروزرسانی کل سرمایه‌گذاری کاربر
+    """
+    from django.db.models import Sum
+    
+    # محاسبه کل خریدهای تکمیل شده
+    total_purchase_ton = Purchase.objects.filter(user=user).aggregate(
+        total=Sum('ecg_value')
+    )['total'] or Decimal('0')
+    
+    total_purchase_usdt = PurchaseUSDT.objects.filter(user=user).aggregate(
+        total=Sum('ecg_value')
+    )['total'] or Decimal('0')
+    
+    total_purchase_bnb = PurchaseBNB.objects.filter(user=user).aggregate(
+        total=Sum('ecg_value')
+    )['total'] or Decimal('0')
+    
+    total_investment = total_purchase_ton + total_purchase_usdt + total_purchase_bnb
+    
+    # بروزرسانی کاربر
+    user.total_investment = total_investment
+    user.save(update_fields=['total_investment'])
+    
+    logger.info(f"✅ Updated total_investment for {user.wallet_address}: {total_investment}")
+    
+    return total_investment
+
+
+# ✅ تابع برای بروزرسانی total_earned
+def update_user_total_earned(user: AppUser):
+    """
+    بروزرسانی کل سود کسب شده کاربر
+    """
+    from django.db.models import Sum
+    
+    # محاسبه کل سود از Ledger
+    total_earned = Ledger.objects.filter(
+        user=user,
+        typ__in=['DAILY_UNLOCK', 'SELF_PROFIT_UNLOCK', 'DOWNLINE_PROFIT', 'REF_BONUS']
+    ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
+    
+    user.total_earned = total_earned
+    user.save(update_fields=['total_earned'])
+    
+    logger.info(f"✅ Updated total_earned for {user.wallet_address}: {total_earned}")
+    
+    return total_earned
