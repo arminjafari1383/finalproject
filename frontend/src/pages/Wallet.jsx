@@ -1,3 +1,5 @@
+// frontend/src/components/Wallet.jsx
+
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { useTonWallet, TonConnectButton } from "@tonconnect/ui-react";
 import { api } from "../api";
@@ -11,6 +13,7 @@ import {
 // توابع کمکی برای کار با localStorage
 // =============================================
 const USER_DATA_KEY = "my_app_user_data";
+const DEBUG_REFERRAL_KEY = "debug_referral_logs";
 
 const loadUserDataFromStorage = () => {
   try {
@@ -31,18 +34,223 @@ const saveUserDataToStorage = (newData) => {
     console.error("Error saving to localStorage:", e);
   }
 };
-// =============================================
 
+// =============================================
+// 📋 دیباگ لاگر رفرال
+// =============================================
+const debugReferral = (step, data) => {
+  const timestamp = new Date().toISOString();
+  const logEntry = {
+    timestamp,
+    step,
+    data,
+    url: window.location.href,
+    search: window.location.search,
+    hash: window.location.hash,
+  };
+  
+  // ذخیره در localStorage برای دیباگ
+  try {
+    const logs = JSON.parse(localStorage.getItem(DEBUG_REFERRAL_KEY) || '[]');
+    logs.push(logEntry);
+    // فقط ۵۰ تا آخرین لاگ رو نگه دار
+    if (logs.length > 50) logs.shift();
+    localStorage.setItem(DEBUG_REFERRAL_KEY, JSON.stringify(logs));
+  } catch (e) {
+    console.error("Error saving debug log:", e);
+  }
+  
+  // نمایش در کنسول با رنگ
+  const colors = {
+    'START': '#4CAF50',
+    'URL': '#2196F3',
+    'STORAGE': '#FF9800',
+    'TELEGRAM': '#9C27B0',
+    'PAYLOAD': '#E91E63',
+    'RESPONSE': '#00BCD4',
+    'ERROR': '#F44336',
+    'SUCCESS': '#4CAF50',
+  };
+  
+  const color = colors[step] || '#FFFFFF';
+  console.log(
+    `%c📋 [${step}] ${timestamp}`,
+    `background: ${color}; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;`
+  );
+  console.log(`📋 Data:`, data);
+  console.log(`📋 URL: ${window.location.href}`);
+  console.log(`📋 Search: ${window.location.search}`);
+  console.log(`📋 Hash: ${window.location.hash}`);
+  console.log('---');
+  
+  return logEntry;
+};
+
+// =============================================
+// نمایش لاگ‌های رفرال در صفحه
+// =============================================
+const ReferralDebugger = () => {
+  const [logs, setLogs] = useState([]);
+  const [isOpen, setIsOpen] = useState(false);
+  
+  useEffect(() => {
+    try {
+      const logs = JSON.parse(localStorage.getItem(DEBUG_REFERRAL_KEY) || '[]');
+      setLogs(logs);
+    } catch (e) {
+      console.error("Error loading debug logs:", e);
+    }
+  }, []);
+  
+  if (!isOpen) {
+    return (
+      <button 
+        onClick={() => setIsOpen(true)}
+        style={{
+          position: 'fixed',
+          bottom: '20px',
+          right: '20px',
+          zIndex: 9999,
+          padding: '10px 16px',
+          background: '#333',
+          color: '#4CAF50',
+          border: 'none',
+          borderRadius: '8px',
+          cursor: 'pointer',
+          fontSize: '14px',
+          fontWeight: 'bold',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+        }}
+      >
+        🐛 Referral Debug ({logs.length})
+      </button>
+    );
+  }
+  
+  return (
+    <div style={{
+      position: 'fixed',
+      bottom: '20px',
+      right: '20px',
+      zIndex: 9999,
+      width: '500px',
+      maxHeight: '400px',
+      background: '#1e1e1e',
+      color: '#d4d4d4',
+      borderRadius: '8px',
+      padding: '16px',
+      boxShadow: '0 8px 32px rgba(0,0,0,0.8)',
+      overflow: 'auto',
+      fontFamily: 'monospace',
+      fontSize: '12px',
+    }}>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '12px',
+        borderBottom: '1px solid #333',
+        paddingBottom: '8px',
+      }}>
+        <span style={{ color: '#4CAF50', fontWeight: 'bold' }}>🐛 Referral Debug Logs</span>
+        <button 
+          onClick={() => setIsOpen(false)}
+          style={{
+            background: 'transparent',
+            color: '#888',
+            border: 'none',
+            cursor: 'pointer',
+            fontSize: '18px',
+          }}
+        >
+          ✕
+        </button>
+      </div>
+      
+      <div style={{ marginBottom: '8px', display: 'flex', gap: '8px' }}>
+        <button 
+          onClick={() => {
+            localStorage.removeItem(DEBUG_REFERRAL_KEY);
+            setLogs([]);
+          }}
+          style={{
+            padding: '4px 12px',
+            background: '#dc3545',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '11px',
+          }}
+        >
+          Clear Logs
+        </button>
+        <button 
+          onClick={() => {
+            const logs = JSON.parse(localStorage.getItem(DEBUG_REFERRAL_KEY) || '[]');
+            console.log('📋 Full Debug Logs:', logs);
+          }}
+          style={{
+            padding: '4px 12px',
+            background: '#007bff',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '11px',
+          }}
+        >
+          Export to Console
+        </button>
+      </div>
+      
+      {logs.length === 0 ? (
+        <div style={{ color: '#666', textAlign: 'center', padding: '20px' }}>
+          No logs yet. Open a referral link to start debugging.
+        </div>
+      ) : (
+        logs.map((log, index) => (
+          <div key={index} style={{
+            padding: '6px 8px',
+            marginBottom: '4px',
+            background: index % 2 === 0 ? '#252525' : '#1a1a1a',
+            borderRadius: '4px',
+            borderLeft: `3px solid ${log.data?.step === 'ERROR' ? '#F44336' : '#4CAF50'}`,
+            fontSize: '11px',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#888' }}>
+              <span>{log.step}</span>
+              <span>{new Date(log.timestamp).toLocaleTimeString()}</span>
+            </div>
+            <div style={{ color: '#d4d4d4', wordBreak: 'break-all' }}>
+              {log.data?.message || JSON.stringify(log.data).slice(0, 100)}
+              {JSON.stringify(log.data).length > 100 && '...'}
+            </div>
+            {log.data?.code && (
+              <div style={{ color: '#4CAF50', fontSize: '10px' }}>
+                Code: {log.data.code}
+              </div>
+            )}
+          </div>
+        ))
+      )}
+    </div>
+  );
+};
+
+// =============================================
+// کامپوننت اصلی Wallet
+// =============================================
 export default function Wallet() {
   const tonWallet = useTonWallet();
   
-  // آدرس ولت
   const address = useMemo(
     () => tonWallet?.account?.address,
     [tonWallet]
   );
 
-  // ✅ قفل اتصال برای جلوگیری از حلقه (لوپ)
   const hasConnected = useRef(false);
 
   const [wallet, setWallet] = useState(null);
@@ -55,9 +263,46 @@ export default function Wallet() {
   const [withdrawError, setWithdrawError] = useState("");
   const [isWithdrawing, setIsWithdrawing] = useState(false);
 
-  // دریافت کد دعوت در اولین لود
+  // =============================================
+  // 📋 مرحله 1: دریافت کد دعوت در اولین لود
+  // =============================================
   useEffect(() => {
-    captureInviterCode();
+    debugReferral('START', { 
+      message: '🔍 Starting referral capture...',
+      url: window.location.href,
+      search: window.location.search,
+    });
+    
+    const inviterCode = captureInviterCode();
+    
+    debugReferral('CAPTURE', {
+      message: inviterCode ? `✅ Inviter code captured: ${inviterCode}` : 'ℹ️ No inviter code found',
+      code: inviterCode,
+      localStorage: localStorage.getItem('inviter_code'),
+    });
+    
+    // بررسی URL برای پارامتر ref
+    const urlParams = new URLSearchParams(window.location.search);
+    const refParam = urlParams.get('ref');
+    const startParam = urlParams.get('startapp');
+    
+    debugReferral('URL', {
+      message: '🔍 Checking URL parameters',
+      refParam,
+      startParam,
+      allParams: Object.fromEntries(urlParams),
+    });
+    
+    // بررسی start_param تلگرام
+    const tg = window.Telegram?.WebApp;
+    if (tg?.initDataUnsafe?.start_param) {
+      debugReferral('TELEGRAM', {
+        message: `✅ Telegram start_param found: ${tg.initDataUnsafe.start_param}`,
+        start_param: tg.initDataUnsafe.start_param,
+        initDataUnsafe: tg.initDataUnsafe,
+      });
+    }
+    
   }, []);
 
   // ذخیره آدرس ولت در localStorage
@@ -68,23 +313,45 @@ export default function Wallet() {
         ...currentData,
         walletAddress: address
       });
-      console.log(`💾 Wallet address saved: ${address.slice(0, 8)}...`);
+      debugReferral('STORAGE', {
+        message: `💾 Wallet address saved: ${address.slice(0, 8)}...`,
+        address: address,
+        currentData: currentData,
+      });
     }
   }, [address]);
 
-  // ✅ تابع اصلی اتصال به سرور
+  // =============================================
+  // 📋 مرحله 2: تابع اصلی اتصال به سرور
+  // =============================================
   const connectAndLoadWallet = useCallback(async () => {
     if (hasConnected.current || !address) {
-        console.log("⛔️ Skipping connect (already connected or no address)");
+        debugReferral('SKIP', {
+          message: '⛔️ Skipping connect (already connected or no address)',
+          hasConnected: hasConnected.current,
+          address: address,
+        });
         return;
     }
 
-    console.log("🔄 Starting connectAndLoadWallet...");
+    debugReferral('START', {
+      message: '🔄 Starting connectAndLoadWallet...',
+      address: address,
+      timestamp: new Date().toISOString(),
+    });
+    
     hasConnected.current = true;
     setConnectError("");
     setErrorType("none");
     
+    // ====== دریافت کد رفرال ======
     const inviter_code = captureInviterCode();
+    
+    debugReferral('REFERRAL', {
+      message: inviter_code ? `✅ Inviter code found: ${inviter_code}` : 'ℹ️ No inviter code found',
+      code: inviter_code,
+      localStorage: localStorage.getItem('inviter_code'),
+    });
 
     // ====== دریافت Telegram ID ======
     let telegramId = null;
@@ -93,19 +360,45 @@ export default function Wallet() {
 
     const savedData = loadUserDataFromStorage();
     
+    debugReferral('STORAGE', {
+      message: '📂 Loading user data from storage',
+      savedData: savedData,
+    });
+    
     if (savedData?.telegramId && Number.isInteger(Number(savedData.telegramId)) && Number(savedData.telegramId) > 0) {
       telegramId = Number(savedData.telegramId);
       telegramUsername = savedData.telegramUsername || null;
       isTelegram = savedData.isTelegram || false;
-      console.log(`📂 Using telegram_id from localStorage: ${telegramId}`);
+      
+      debugReferral('TELEGRAM', {
+        message: `📂 Using telegram_id from localStorage: ${telegramId}`,
+        telegramId: telegramId,
+        telegramUsername: telegramUsername,
+        isTelegram: isTelegram,
+        source: 'localStorage',
+      });
     } else {
       const tg = window.Telegram?.WebApp;
+      
+      debugReferral('TELEGRAM', {
+        message: '🔍 Checking Telegram WebApp',
+        hasTelegram: !!tg,
+        initDataUnsafe: tg?.initDataUnsafe,
+      });
+      
       if (tg?.initDataUnsafe?.user) {
         const user = tg.initDataUnsafe.user;
         telegramId = Number(user.id);
         telegramUsername = user.username || null;
         isTelegram = true;
-        console.log(`✅ Using telegram_id from Telegram: ${telegramId}`);
+        
+        debugReferral('TELEGRAM', {
+          message: `✅ Using telegram_id from Telegram: ${telegramId}`,
+          telegramId: telegramId,
+          telegramUsername: telegramUsername,
+          user: user,
+          source: 'Telegram',
+        });
         
         saveUserDataToStorage({
           telegramId: telegramId,
@@ -123,7 +416,14 @@ export default function Wallet() {
           telegramId = Number(Math.abs(hash) + 1000000000000);
           telegramUsername = `browser_${address.slice(0, 8)}`;
           isTelegram = false;
-          console.log(`🌐 Generated browser telegram_id: ${telegramId}`);
+          
+          debugReferral('BROWSER', {
+            message: `🌐 Generated browser telegram_id: ${telegramId}`,
+            telegramId: telegramId,
+            telegramUsername: telegramUsername,
+            address: address,
+            hash: hash,
+          });
           
           saveUserDataToStorage({
             telegramId: telegramId,
@@ -137,9 +437,13 @@ export default function Wallet() {
 
     if (!telegramId) {
       telegramId = Number(Math.floor(Math.random() * 1000000000) + 100000000);
-      console.log(`⚠️ Generated fallback telegram_id: ${telegramId}`);
+      debugReferral('FALLBACK', {
+        message: `⚠️ Generated fallback telegram_id: ${telegramId}`,
+        telegramId: telegramId,
+      });
     }
 
+    // ====== ساخت Payload ======
     const payload = {
       wallet_address: address,
       inviter_code: inviter_code || null,
@@ -151,17 +455,28 @@ export default function Wallet() {
       payload.telegram_username = telegramUsername || null;
     }
 
-    console.log(`📤 Sending payload to /api/connect/`);
-    console.log(`📤 Payload: ${JSON.stringify(payload, null, 2)}`);
+    debugReferral('PAYLOAD', {
+      message: '📤 Sending payload to /api/connect/',
+      payload: payload,
+      fullPayload: JSON.stringify(payload, null, 2),
+    });
 
     try {
       const response = await api.post("/connect/", payload);
-      console.log(`✅ /connect/ response received`);
-      console.log(`✅ Status: ${response.status}`);
+      
+      debugReferral('RESPONSE', {
+        message: `✅ /connect/ response received`,
+        status: response.status,
+        data: response.data,
+        headers: response.headers,
+      });
 
       if (response.data?.user?.wallet_locked) {
         setWalletLocked(true);
-        console.log(`🔒 Wallet is locked to this Telegram ID`);
+        debugReferral('LOCKED', {
+          message: '🔒 Wallet is locked to this Telegram ID',
+          walletLocked: true,
+        });
       }
 
       if (response.data?.user) {
@@ -172,18 +487,49 @@ export default function Wallet() {
           isTelegram: user.is_telegram || isTelegram,
           walletAddress: address
         });
-        console.log(`📝 User data saved to localStorage`);
+        
+        debugReferral('STORAGE', {
+          message: '📝 User data saved to localStorage',
+          user: user,
+          savedData: {
+            telegramId: user.telegram_id || telegramId,
+            telegramUsername: user.telegram_username || telegramUsername,
+            isTelegram: user.is_telegram || isTelegram,
+          },
+        });
       }
 
-      console.log(`🔄 Fetching wallet data...`);
+      debugReferral('FETCH', {
+        message: '🔄 Fetching wallet data...',
+        url: `/wallet/${address}/`,
+      });
+      
       const r = await api.get(`/wallet/${address}/`);
-      console.log(`✅ Wallet data received`);
+      
+      debugReferral('WALLET', {
+        message: '✅ Wallet data received',
+        wallet: r.data,
+      });
 
       setWallet(r.data);
       setErrorType("none");
-      console.log(`✅ Connection completed successfully!`);
+      
+      debugReferral('SUCCESS', {
+        message: '✅ Connection completed successfully!',
+        wallet: r.data,
+      });
 
     } catch (e) {
+      debugReferral('ERROR', {
+        message: '❌ Error in connectAndLoadWallet',
+        error: {
+          message: e.message,
+          response: e.response,
+          request: e.request,
+          stack: e.stack,
+        },
+      });
+      
       console.log(`❌ Error in connectAndLoadWallet`);
       console.log(`❌ Error Message: ${e.message}`);
       
@@ -204,44 +550,81 @@ export default function Wallet() {
       if (isNetworkError) {
         setErrorType("network_error");
         setConnectError("🌐 Network Error! Please check your internet connection.");
-        console.log(`🌐 Network Error detected. Server unreachable.`);
+        
+        debugReferral('NETWORK_ERROR', {
+          message: '🌐 Network Error detected',
+          error: e.message,
+        });
       } else if (errorData?.error?.includes("already linked") || 
                  errorData?.error?.includes("locked") ||
                  errorData?.detail?.includes("already linked")) {
         setErrorType("locked");
         setConnectError("🔒 This wallet is already linked to another Telegram account.");
-        console.log(`🔒 Wallet linked to another account`);
+        
+        debugReferral('LOCKED_ERROR', {
+          message: '🔒 Wallet linked to another account',
+          errorData: errorData,
+        });
       } else if (statusCode === 400) {
         setErrorType("bad_request");
         const msg = errorData?.error || errorData?.detail || "Invalid wallet address format.";
         setConnectError(`⚠️ Bad Request: ${msg}`);
-        console.log(`⚠️ Bad Request: ${msg}`);
+        
+        debugReferral('BAD_REQUEST', {
+          message: '⚠️ Bad Request',
+          error: msg,
+          errorData: errorData,
+        });
       } else {
         setErrorType("server_error");
         const errorMessage = errorData?.error || errorData?.detail || e?.message || "Server error.";
         setConnectError(`❌ Server Error: ${errorMessage}`);
-        console.log(`❌ Server Error: ${errorMessage}`);
+        
+        debugReferral('SERVER_ERROR', {
+          message: '❌ Server Error',
+          error: errorMessage,
+          errorData: errorData,
+        });
       }
 
       if (statusCode !== 400 && !isNetworkError) {
         try {
-          console.log(`🔄 Trying to fetch wallet data anyway...`);
+          debugReferral('FALLBACK_FETCH', {
+            message: '🔄 Trying to fetch wallet data anyway...',
+          });
+          
           const r = await api.get(`/wallet/${address}/`);
           setWallet(r.data);
-          console.log(`✅ Wallet data (fallback) received`);
+          
+          debugReferral('FALLBACK_SUCCESS', {
+            message: '✅ Wallet data (fallback) received',
+            wallet: r.data,
+          });
         } catch (e2) {
-          console.log(`❌ Fallback also failed: ${e2.message}`);
+          debugReferral('FALLBACK_ERROR', {
+            message: `❌ Fallback also failed: ${e2.message}`,
+            error: e2.message,
+          });
         }
       }
     }
   }, [address]);
 
   useEffect(() => {
-    console.log(`🔍 Address changed: ${address ? 'Wallet connected' : 'No wallet'}`);
+    debugReferral('ADDRESS_CHANGE', {
+      message: `🔍 Address changed: ${address ? 'Wallet connected' : 'No wallet'}`,
+      address: address,
+      hasConnected: hasConnected.current,
+    });
+    
     connectAndLoadWallet();
   }, [connectAndLoadWallet]);
 
   const disconnectWallet = () => {
+    debugReferral('DISCONNECT', {
+      message: '🔌 Disconnecting wallet...',
+    });
+    
     localStorage.removeItem('telegram_id');
     localStorage.removeItem('inviter_code');
     clearInviterCode();
@@ -258,16 +641,25 @@ export default function Wallet() {
   };
 
   const handleRetry = () => {
+    debugReferral('RETRY', {
+      message: '🔄 Retrying connection...',
+    });
+    
     setConnectError("");
     setErrorType("none");
     hasConnected.current = false;
-    console.log(`🔄 Retrying connection...`);
     window.location.reload();
   };
 
   const resetReferral = () => {
     clearInviterCode();
-    alert("inviter_code پاک شد");
+    localStorage.removeItem(DEBUG_REFERRAL_KEY);
+    
+    debugReferral('RESET', {
+      message: '🔄 Referral data cleared',
+    });
+    
+    alert("✅ inviter_code و debug logs پاک شد");
   };
 
   const openWithdraw = () => {
@@ -306,142 +698,189 @@ export default function Wallet() {
   };
 
   return (
-    <div className="wallet-page-container">
-      <div className="wallet-box">
+    <>
+      <div className="wallet-page-container">
+        <div className="wallet-box">
 
-        <h1 className="wallet-title">
-          Connect Wallet
-        </h1>
+          <h1 className="wallet-title">
+            Connect Wallet
+          </h1>
 
-        <div className="connect-button-wrapper">
-          <TonConnectButton />
-        </div>
+          <div className="connect-button-wrapper">
+            <TonConnectButton />
+          </div>
 
-        {/* ========== نمایش خطای اتصال ========== */}
-        {connectError && (
-          <div className="wallet-error" style={{
-            color: errorType === 'locked' ? '#ff6b6b' : '#ff6b6b',
-            background: errorType === 'locked' ? 'rgba(255,0,0,0.15)' : 'rgba(255,0,0,0.1)',
-            padding: '16px 20px',
-            borderRadius: '8px',
-            marginTop: '12px',
-            border: errorType === 'locked' ? '2px solid rgba(255,0,0,0.3)' : '1px solid rgba(255,0,0,0.2)',
-            fontSize: '14px',
-            textAlign: 'center'
+          {/* ========== دکمه دیباگ ========== */}
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'center', 
+            gap: '8px', 
+            marginTop: '8px',
+            flexWrap: 'wrap',
           }}>
-            <div style={{ fontSize: '20px', marginBottom: '8px' }}>
-              {errorType === 'locked' ? '🔒' : '⚠️'}
-            </div>
-            <div>{connectError}</div>
-            
-            {errorType === 'locked' && (
-              <div style={{ marginTop: '12px' }}>
-                <p style={{ fontSize: '13px', color: '#666', marginBottom: '10px' }}>
-                  This wallet is connected to another Telegram account. 
-                  Please use the wallet that is linked to your current Telegram account.
-                </p>
-                <button onClick={disconnectWallet} style={{
-                  padding: '8px 20px',
-                  background: '#dc3545',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  fontWeight: '600'
-                }}>
-                  🔄 Disconnect & Try Again
-                </button>
-              </div>
-            )}
-
-            {errorType === 'network_error' && (
-              <div style={{ marginTop: '12px' }}>
-                <p style={{ fontSize: '13px', color: '#666', marginBottom: '10px' }}>
-                  The server is currently unreachable. Please check your internet connection.
-                </p>
-                <button onClick={handleRetry} style={{
-                  padding: '8px 20px',
-                  background: '#007bff',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  fontWeight: '600'
-                }}>
-                  🔄 Retry Connection
-                </button>
-              </div>
-            )}
+            <button 
+              onClick={resetReferral}
+              style={{
+                padding: '4px 12px',
+                background: '#6c757d',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '11px',
+              }}
+            >
+              🗑️ Clear Referral
+            </button>
+            <button 
+              onClick={() => {
+                const logs = localStorage.getItem(DEBUG_REFERRAL_KEY);
+                console.log('📋 Full Debug Logs:', logs ? JSON.parse(logs) : 'No logs');
+                alert('Check console for debug logs!');
+              }}
+              style={{
+                padding: '4px 12px',
+                background: '#17a2b8',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '11px',
+              }}
+            >
+              📋 Show Logs
+            </button>
           </div>
-        )}
 
-        {address && (
-          <div className="wallet-content">
-            {!wallet ? (
-              <div className="loading-text">Loading...</div>
-            ) : (
-              <>
-                <h3>Total Balance</h3>
-                <div className="balance">{wallet.withdrawable_total}</div>
-                {walletLocked && (
-                  <div className="wallet-locked-badge" style={{
-                    fontSize: '12px',
-                    color: '#4caf50',
-                    marginTop: '8px',
-                    padding: '4px 12px',
-                    background: 'rgba(76, 175, 80, 0.15)',
-                    borderRadius: '20px',
-                    display: 'inline-block'
+          {/* ========== نمایش خطای اتصال ========== */}
+          {connectError && (
+            <div className="wallet-error" style={{
+              color: errorType === 'locked' ? '#ff6b6b' : '#ff6b6b',
+              background: errorType === 'locked' ? 'rgba(255,0,0,0.15)' : 'rgba(255,0,0,0.1)',
+              padding: '16px 20px',
+              borderRadius: '8px',
+              marginTop: '12px',
+              border: errorType === 'locked' ? '2px solid rgba(255,0,0,0.3)' : '1px solid rgba(255,0,0,0.2)',
+              fontSize: '14px',
+              textAlign: 'center'
+            }}>
+              <div style={{ fontSize: '20px', marginBottom: '8px' }}>
+                {errorType === 'locked' ? '🔒' : '⚠️'}
+              </div>
+              <div>{connectError}</div>
+              
+              {errorType === 'locked' && (
+                <div style={{ marginTop: '12px' }}>
+                  <p style={{ fontSize: '13px', color: '#666', marginBottom: '10px' }}>
+                    This wallet is connected to another Telegram account. 
+                    Please use the wallet that is linked to your current Telegram account.
+                  </p>
+                  <button onClick={disconnectWallet} style={{
+                    padding: '8px 20px',
+                    background: '#dc3545',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '600'
                   }}>
-                    🔒 Wallet Locked
-                  </div>
-                )}
-                <button className="withdraw-btn" onClick={openWithdraw} disabled={walletLocked}>
-                  Withdraw
+                    🔄 Disconnect & Try Again
+                  </button>
+                </div>
+              )}
+
+              {errorType === 'network_error' && (
+                <div style={{ marginTop: '12px' }}>
+                  <p style={{ fontSize: '13px', color: '#666', marginBottom: '10px' }}>
+                    The server is currently unreachable. Please check your internet connection.
+                  </p>
+                  <button onClick={handleRetry} style={{
+                    padding: '8px 20px',
+                    background: '#007bff',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '600'
+                  }}>
+                    🔄 Retry Connection
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {address && (
+            <div className="wallet-content">
+              {!wallet ? (
+                <div className="loading-text">Loading...</div>
+              ) : (
+                <>
+                  <h3>Total Balance</h3>
+                  <div className="balance">{wallet.withdrawable_total}</div>
+                  {walletLocked && (
+                    <div className="wallet-locked-badge" style={{
+                      fontSize: '12px',
+                      color: '#4caf50',
+                      marginTop: '8px',
+                      padding: '4px 12px',
+                      background: 'rgba(76, 175, 80, 0.15)',
+                      borderRadius: '20px',
+                      display: 'inline-block'
+                    }}>
+                      🔒 Wallet Locked
+                    </div>
+                  )}
+                  <button className="withdraw-btn" onClick={openWithdraw} disabled={walletLocked}>
+                    Withdraw
+                  </button>
+                  <button onClick={disconnectWallet} style={{
+                    marginTop: '12px',
+                    padding: '6px 16px',
+                    background: 'transparent',
+                    color: '#999',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '12px'
+                  }}>
+                    Disconnect Wallet
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
+        </div>
+
+        {/* Withdraw Modal */}
+        {isWithdrawOpen && (
+          <div className="modal-backdrop" onClick={closeWithdraw}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h3>Withdraw ECG</h3>
+                <button className="modal-close" onClick={closeWithdraw} disabled={isWithdrawing}>×</button>
+              </div>
+              <div className="modal-body">
+                <label>Withdrawal Amount (ECG)</label>
+                <input type="number" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="e.g. 60" min="0" />
+                {withdrawError && <div className="error-text">{withdrawError}</div>}
+              </div>
+              <div className="modal-footer">
+                <button className="btn-secondary" onClick={closeWithdraw} disabled={isWithdrawing}>Cancel</button>
+                <button className="btn-primary" onClick={onWithdraw} disabled={isWithdrawing}>
+                  {isWithdrawing ? "Submitting..." : "Confirm Withdrawal"}
                 </button>
-                <button onClick={disconnectWallet} style={{
-                  marginTop: '12px',
-                  padding: '6px 16px',
-                  background: 'transparent',
-                  color: '#999',
-                  border: '1px solid #ddd',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '12px'
-                }}>
-                  Disconnect Wallet
-                </button>
-              </>
-            )}
+              </div>
+            </div>
           </div>
         )}
-
       </div>
-
-      {/* Withdraw Modal */}
-      {isWithdrawOpen && (
-        <div className="modal-backdrop" onClick={closeWithdraw}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Withdraw ECG</h3>
-              <button className="modal-close" onClick={closeWithdraw} disabled={isWithdrawing}>×</button>
-            </div>
-            <div className="modal-body">
-              <label>Withdrawal Amount (ECG)</label>
-              <input type="number" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="e.g. 60" min="0" />
-              {withdrawError && <div className="error-text">{withdrawError}</div>}
-            </div>
-            <div className="modal-footer">
-              <button className="btn-secondary" onClick={closeWithdraw} disabled={isWithdrawing}>Cancel</button>
-              <button className="btn-primary" onClick={onWithdraw} disabled={isWithdrawing}>
-                {isWithdrawing ? "Submitting..." : "Confirm Withdrawal"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+      
+      {/* ========== کامپوننت دیباگ ========== */}
+      <ReferralDebugger />
+    </>
   );
 }
