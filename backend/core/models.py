@@ -48,6 +48,9 @@ class Wallet(models.Model):
 
     updated_at = models.DateTimeField(auto_now=True)
     level_profits = models.JSONField(default=dict)
+    total_deposited = models.DecimalField(max_digits=24, decimal_places=6, default=0)
+    total_withdrawn = models.DecimalField(max_digits=24, decimal_places=6, default=0)
+    last_withdraw_at = models.DateTimeField(null=True, blank=True)
 
     def withdrawable_total(self):
         return (
