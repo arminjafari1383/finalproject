@@ -17,6 +17,15 @@ class AppUser(models.Model):
     telegram_verified = models.BooleanField(default=False)
     wallet_locked = models.BooleanField(default=False)
     
+    # ==========================================
+    # ✅ فیلدهای جدید - اینها رو اضافه کن
+    # ==========================================
+    is_admin = models.BooleanField(default=False, help_text="آیا کاربر ادمین است؟")
+    is_active = models.BooleanField(default=True, help_text="آیا کاربر فعال است؟")
+    last_active = models.DateTimeField(null=True, blank=True, help_text="آخرین فعالیت کاربر")
+    total_investment = models.DecimalField(max_digits=24, decimal_places=6, default=0, help_text="کل سرمایه‌گذاری")
+    total_earned = models.DecimalField(max_digits=24, decimal_places=6, default=0, help_text="کل سود کسب شده")
+    
     def save(self, *args, **kwargs):
         if not self.referral_code:
             self.referral_code = uuid.uuid4().hex[:10].upper()
@@ -24,8 +33,7 @@ class AppUser(models.Model):
 
     def __str__(self):
         return f"{self.telegram_id} - {self.wallet_address[:8]}..."
-
-
+    
 class Wallet(models.Model):
     user = models.OneToOneField(AppUser, on_delete=models.CASCADE, related_name="wallet")
 
