@@ -7,7 +7,7 @@ import "./Wallet.css";
 import {
   captureInviterCode,
   clearInviterCode,
-  getInviterCode,  // ✅ تابع جدید برای دریافت کد از localStorage
+  getInviterCode,
 } from "../utils/referral";
 
 // =============================================
@@ -15,7 +15,7 @@ import {
 // =============================================
 const USER_DATA_KEY = "my_app_user_data";
 const DEBUG_REFERRAL_KEY = "debug_referral_logs";
-const INVITER_CODE_KEY = "inviter_code";  // ✅ کلید ذخیره کد رفرال
+const INVITER_CODE_KEY = "inviter_code";
 
 const loadUserDataFromStorage = () => {
   try {
@@ -45,11 +45,6 @@ const saveInviterCodeToStorage = (code) => {
   }
 };
 
-// ✅ تابع دریافت کد رفرال از localStorage
-const getInviterCodeFromStorage = () => {
-  return localStorage.getItem(INVITER_CODE_KEY);
-};
-
 // =============================================
 // 📋 دیباگ لاگر رفرال با نمایش روی صفحه
 // =============================================
@@ -64,7 +59,6 @@ const debugReferral = (step, data) => {
     hash: window.location.hash,
   };
   
-  // ذخیره در localStorage
   try {
     const logs = JSON.parse(localStorage.getItem(DEBUG_REFERRAL_KEY) || '[]');
     logs.push(logEntry);
@@ -74,7 +68,6 @@ const debugReferral = (step, data) => {
     console.error("Error saving debug log:", e);
   }
   
-  // نمایش در کنسول با رنگ
   const colors = {
     'START': '#4CAF50',
     'URL': '#2196F3',
@@ -98,6 +91,11 @@ const debugReferral = (step, data) => {
     'DISCONNECT': '#FF6B6B',
     'RETRY': '#54A0FF',
     'RESET': '#FF6B6B',
+    'BROWSER': '#FF6B6B',
+    'FALLBACK_FETCH': '#FF6B6B',
+    'FALLBACK_SUCCESS': '#4CAF50',
+    'FALLBACK_ERROR': '#FF4757',
+    'TELEGRAM_REF': '#9C27B0',
   };
   
   const color = colors[step] || '#FFFFFF';
@@ -109,7 +107,6 @@ const debugReferral = (step, data) => {
   console.log(`📋 URL: ${window.location.href}`);
   console.log('---');
   
-  // بروزرسانی نمایشگر روی صفحه
   if (typeof window.updateDebugDisplay === 'function') {
     window.updateDebugDisplay(logEntry);
   }
@@ -125,7 +122,6 @@ const ReferralDebugDisplay = () => {
   const [isMinimized, setIsMinimized] = useState(false);
   const logsEndRef = useRef(null);
 
-  // تابع برای آپدیت لاگ‌ها از بیرون
   useEffect(() => {
     window.updateDebugDisplay = (log) => {
       setLogs(prev => {
@@ -135,7 +131,6 @@ const ReferralDebugDisplay = () => {
       });
     };
 
-    // بارگذاری لاگ‌های قبلی
     try {
       const savedLogs = JSON.parse(localStorage.getItem(DEBUG_REFERRAL_KEY) || '[]');
       setLogs(savedLogs);
@@ -148,20 +143,17 @@ const ReferralDebugDisplay = () => {
     };
   }, []);
 
-  // اسکرول به انتهای لیست
   useEffect(() => {
     if (logsEndRef.current) {
       logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [logs]);
 
-  // پاک کردن لاگ‌ها
   const clearLogs = () => {
     localStorage.removeItem(DEBUG_REFERRAL_KEY);
     setLogs([]);
   };
 
-  // کپی لاگ‌ها
   const copyLogs = () => {
     const text = logs.map(log => 
       `[${new Date(log.timestamp).toLocaleTimeString()}] ${log.step}: ${JSON.stringify(log.data, null, 2)}`
@@ -170,7 +162,6 @@ const ReferralDebugDisplay = () => {
     alert('✅ Logs copied to clipboard!');
   };
 
-  // گرفتن رنگ برای هر مرحله
   const getStepColor = (step) => {
     const colors = {
       'START': '#4CAF50',
@@ -202,7 +193,6 @@ const ReferralDebugDisplay = () => {
     return colors[step] || '#666';
   };
 
-  // گرفتن ایموجی برای هر مرحله
   const getStepEmoji = (step) => {
     const emojis = {
       'START': '🚀',
@@ -252,7 +242,6 @@ const ReferralDebugDisplay = () => {
       overflow: 'hidden',
       transition: 'all 0.3s ease',
     }}>
-      {/* هدر */}
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
@@ -300,7 +289,6 @@ const ReferralDebugDisplay = () => {
         </div>
       </div>
 
-      {/* محتوای لاگ‌ها */}
       {!isMinimized && (
         <div style={{
           padding: '8px',
@@ -438,6 +426,10 @@ export default function Wallet() {
   // 📋 مرحله 1: دریافت کد دعوت در اولین لود
   // =============================================
   useEffect(() => {
+    console.log('🔄 [Wallet] useEffect - Starting referral capture...');
+    console.log('🔄 [Wallet] Current URL:', window.location.href);
+    console.log('🔄 [Wallet] Search params:', window.location.search);
+    
     debugReferral('START', { 
       message: '🔍 Starting referral capture...',
       url: window.location.href,
@@ -447,17 +439,21 @@ export default function Wallet() {
     // ✅ دریافت کد رفرال از URL و ذخیره در localStorage
     const inviterCode = captureInviterCode();
     
-    // ✅ ذخیره در localStorage با کلید اختصاصی
+    console.log('🔄 [Wallet] inviterCode from captureInviterCode():', inviterCode);
+    
     if (inviterCode) {
-      saveInviterCodeToStorage(inviterCode);
+      localStorage.setItem('inviter_code', inviterCode);
+      console.log(`💾 [Wallet] Inviter code saved: ${inviterCode}`);
+      
       debugReferral('CAPTURE', {
         message: `✅ Inviter code captured and saved: ${inviterCode}`,
         code: inviterCode,
-        localStorage: getInviterCodeFromStorage(),
+        localStorage: localStorage.getItem('inviter_code'),
       });
     } else {
-      // ✅ اگر در URL نبود، از localStorage بخوان
-      const savedCode = getInviterCodeFromStorage();
+      const savedCode = localStorage.getItem('inviter_code');
+      console.log(`📂 [Wallet] Checking localStorage: ${savedCode}`);
+      
       if (savedCode) {
         debugReferral('CAPTURE', {
           message: `📂 Inviter code loaded from localStorage: ${savedCode}`,
@@ -473,38 +469,51 @@ export default function Wallet() {
       }
     }
     
-    // بررسی URL برای پارامتر ref
+    // بررسی URL برای همه پارامترهای ممکن
     const urlParams = new URLSearchParams(window.location.search);
-    const refParam = urlParams.get('ref');
-    const startParam = urlParams.get('startapp');
+    const allParams = Object.fromEntries(urlParams);
+    console.log('🔍 [Wallet] All URL params:', allParams);
     
     debugReferral('URL', {
       message: '🔍 Checking URL parameters',
-      refParam,
-      startParam,
-      allParams: Object.fromEntries(urlParams),
+      refParam: urlParams.get('ref'),
+      startParam: urlParams.get('startapp'),
+      tgParam: urlParams.get('tgWebAppStartParam'),
+      allParams: allParams,
     });
     
     // بررسی start_param تلگرام
     const tg = window.Telegram?.WebApp;
-    if (tg?.initDataUnsafe?.start_param) {
-      const startParamValue = tg.initDataUnsafe.start_param;
-      debugReferral('TELEGRAM', {
-        message: `✅ Telegram start_param found: ${startParamValue}`,
-        start_param: startParamValue,
-        initDataUnsafe: tg.initDataUnsafe,
-      });
+    console.log('🔍 [Wallet] Telegram WebApp:', !!tg);
+    
+    if (tg) {
+      console.log('🔍 [Wallet] initDataUnsafe:', tg.initDataUnsafe);
       
-      // ✅ اگر start_param حاوی ref_ بود، استخراج و ذخیره کن
-      if (startParamValue && startParamValue.startsWith('ref_')) {
-        const refCode = startParamValue.replace('ref_', '');
-        saveInviterCodeToStorage(refCode);
-        debugReferral('TELEGRAM_REF', {
-          message: `✅ Extracted ref from start_param: ${refCode}`,
-          code: refCode,
+      if (tg?.initDataUnsafe?.start_param) {
+        const startParamValue = tg.initDataUnsafe.start_param;
+        console.log(`✅ [Wallet] Telegram start_param found: ${startParamValue}`);
+        
+        debugReferral('TELEGRAM', {
+          message: `✅ Telegram start_param found: ${startParamValue}`,
+          start_param: startParamValue,
+          initDataUnsafe: tg.initDataUnsafe,
         });
+        
+        if (startParamValue && startParamValue.startsWith('ref_')) {
+          const refCode = startParamValue.replace('ref_', '');
+          localStorage.setItem('inviter_code', refCode);
+          console.log(`✅ [Wallet] Extracted ref from start_param: ${refCode}`);
+          
+          debugReferral('TELEGRAM_REF', {
+            message: `✅ Extracted ref from start_param: ${refCode}`,
+            code: refCode,
+          });
+        }
       }
     }
+    
+    const finalCode = localStorage.getItem('inviter_code');
+    console.log(`✅ [Wallet] Final inviter_code in localStorage: ${finalCode}`);
     
   }, []);
 
@@ -546,22 +555,27 @@ export default function Wallet() {
     setErrorType("none");
     
     // ====== دریافت کد رفرال ======
-    // ✅ اول از localStorage بخوان
-    let inviter_code = getInviterCodeFromStorage();
+    let inviter_code = localStorage.getItem('inviter_code');
     
-    // ✅ اگر در localStorage نبود، از captureInviterCode استفاده کن (که URL رو چک میکنه)
+    console.log(`📂 [connectAndLoadWallet] inviter_code from localStorage: ${inviter_code}`);
+    
     if (!inviter_code) {
+      console.log('🔄 [connectAndLoadWallet] No code in localStorage, trying captureInviterCode...');
       inviter_code = captureInviterCode();
+      
       if (inviter_code) {
-        saveInviterCodeToStorage(inviter_code);
+        localStorage.setItem('inviter_code', inviter_code);
+        console.log(`💾 [connectAndLoadWallet] inviter_code saved: ${inviter_code}`);
       }
     }
     
     debugReferral('REFERRAL', {
       message: inviter_code ? `✅ Inviter code found: ${inviter_code}` : 'ℹ️ No inviter code found',
       code: inviter_code,
-      localStorage: getInviterCodeFromStorage(),
+      localStorage: localStorage.getItem('inviter_code'),
     });
+
+    console.log(`📤 [connectAndLoadWallet] Final inviter_code: ${inviter_code}`);
 
     // ====== دریافت Telegram ID ======
     let telegramId = null;
