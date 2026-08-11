@@ -7,6 +7,7 @@ import "./Wallet.css";
 import {
   captureInviterCode,
   clearInviterCode,
+  getInviterCode,  // ✅ تابع جدید برای دریافت کد از localStorage
 } from "../utils/referral";
 
 // =============================================
@@ -14,6 +15,7 @@ import {
 // =============================================
 const USER_DATA_KEY = "my_app_user_data";
 const DEBUG_REFERRAL_KEY = "debug_referral_logs";
+const INVITER_CODE_KEY = "inviter_code";  // ✅ کلید ذخیره کد رفرال
 
 const loadUserDataFromStorage = () => {
   try {
@@ -33,6 +35,19 @@ const saveUserDataToStorage = (newData) => {
   } catch (e) {
     console.error("Error saving to localStorage:", e);
   }
+};
+
+// ✅ تابع ذخیره کد رفرال در localStorage
+const saveInviterCodeToStorage = (code) => {
+  if (code) {
+    localStorage.setItem(INVITER_CODE_KEY, code);
+    console.log(`💾 Inviter code saved to localStorage: ${code}`);
+  }
+};
+
+// ✅ تابع دریافت کد رفرال از localStorage
+const getInviterCodeFromStorage = () => {
+  return localStorage.getItem(INVITER_CODE_KEY);
 };
 
 // =============================================
@@ -94,7 +109,7 @@ const debugReferral = (step, data) => {
   console.log(`📋 URL: ${window.location.href}`);
   console.log('---');
   
-  // ✅ بروزرسانی نمایشگر روی صفحه
+  // بروزرسانی نمایشگر روی صفحه
   if (typeof window.updateDebugDisplay === 'function') {
     window.updateDebugDisplay(logEntry);
   }
@@ -311,7 +326,6 @@ const ReferralDebugDisplay = () => {
               const emoji = getStepEmoji(log.step);
               const time = new Date(log.timestamp).toLocaleTimeString();
               
-              // استخراج پیام از data
               let message = '';
               let extraData = '';
               if (log.data?.message) {
@@ -376,7 +390,6 @@ const ReferralDebugDisplay = () => {
                       📌 Code: {log.data.code}
                     </div>
                   )}
-                  {/* نمایش پارامترهای URL اگر مهم باشن */}
                   {(log.step === 'URL' || log.step === 'CAPTURE') && log.search && (
                     <div style={{ 
                       color: '#FFD93D', 
@@ -431,13 +444,34 @@ export default function Wallet() {
       search: window.location.search,
     });
     
+    // ✅ دریافت کد رفرال از URL و ذخیره در localStorage
     const inviterCode = captureInviterCode();
     
-    debugReferral('CAPTURE', {
-      message: inviterCode ? `✅ Inviter code captured: ${inviterCode}` : 'ℹ️ No inviter code found',
-      code: inviterCode,
-      localStorage: localStorage.getItem('inviter_code'),
-    });
+    // ✅ ذخیره در localStorage با کلید اختصاصی
+    if (inviterCode) {
+      saveInviterCodeToStorage(inviterCode);
+      debugReferral('CAPTURE', {
+        message: `✅ Inviter code captured and saved: ${inviterCode}`,
+        code: inviterCode,
+        localStorage: getInviterCodeFromStorage(),
+      });
+    } else {
+      // ✅ اگر در URL نبود، از localStorage بخوان
+      const savedCode = getInviterCodeFromStorage();
+      if (savedCode) {
+        debugReferral('CAPTURE', {
+          message: `📂 Inviter code loaded from localStorage: ${savedCode}`,
+          code: savedCode,
+          localStorage: savedCode,
+        });
+      } else {
+        debugReferral('CAPTURE', {
+          message: 'ℹ️ No inviter code found in URL or localStorage',
+          code: null,
+          localStorage: null,
+        });
+      }
+    }
     
     // بررسی URL برای پارامتر ref
     const urlParams = new URLSearchParams(window.location.search);
@@ -454,11 +488,22 @@ export default function Wallet() {
     // بررسی start_param تلگرام
     const tg = window.Telegram?.WebApp;
     if (tg?.initDataUnsafe?.start_param) {
+      const startParamValue = tg.initDataUnsafe.start_param;
       debugReferral('TELEGRAM', {
-        message: `✅ Telegram start_param found: ${tg.initDataUnsafe.start_param}`,
-        start_param: tg.initDataUnsafe.start_param,
+        message: `✅ Telegram start_param found: ${startParamValue}`,
+        start_param: startParamValue,
         initDataUnsafe: tg.initDataUnsafe,
       });
+      
+      // ✅ اگر start_param حاوی ref_ بود، استخراج و ذخیره کن
+      if (startParamValue && startParamValue.startsWith('ref_')) {
+        const refCode = startParamValue.replace('ref_', '');
+        saveInviterCodeToStorage(refCode);
+        debugReferral('TELEGRAM_REF', {
+          message: `✅ Extracted ref from start_param: ${refCode}`,
+          code: refCode,
+        });
+      }
     }
     
   }, []);
@@ -501,12 +546,21 @@ export default function Wallet() {
     setErrorType("none");
     
     // ====== دریافت کد رفرال ======
-    const inviter_code = captureInviterCode();
+    // ✅ اول از localStorage بخوان
+    let inviter_code = getInviterCodeFromStorage();
+    
+    // ✅ اگر در localStorage نبود، از captureInviterCode استفاده کن (که URL رو چک میکنه)
+    if (!inviter_code) {
+      inviter_code = captureInviterCode();
+      if (inviter_code) {
+        saveInviterCodeToStorage(inviter_code);
+      }
+    }
     
     debugReferral('REFERRAL', {
       message: inviter_code ? `✅ Inviter code found: ${inviter_code}` : 'ℹ️ No inviter code found',
       code: inviter_code,
-      localStorage: localStorage.getItem('inviter_code'),
+      localStorage: getInviterCodeFromStorage(),
     });
 
     // ====== دریافت Telegram ID ======
@@ -613,6 +667,7 @@ export default function Wallet() {
     debugReferral('PAYLOAD', {
       message: '📤 Sending payload to /api/connect/',
       payload: payload,
+      inviter_code_sent: inviter_code,
     });
 
     try {
@@ -741,8 +796,10 @@ export default function Wallet() {
     
     localStorage.removeItem('telegram_id');
     localStorage.removeItem('inviter_code');
+    localStorage.removeItem(INVITER_CODE_KEY);
     clearInviterCode();
     localStorage.removeItem(USER_DATA_KEY);
+    localStorage.removeItem(DEBUG_REFERRAL_KEY);
     
     setWallet(null);
     setWalletLocked(false);
@@ -766,6 +823,7 @@ export default function Wallet() {
 
   const resetReferral = () => {
     clearInviterCode();
+    localStorage.removeItem(INVITER_CODE_KEY);
     localStorage.removeItem(DEBUG_REFERRAL_KEY);
     
     debugReferral('RESET', {
