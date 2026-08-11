@@ -13,7 +13,7 @@ import {
 // ==========================================
 
 const USER_DATA_KEY = "my_app_user_data";
-const BOT_USERNAME = "pooooooooooobot";
+const BOT_USERNAME = "aipolynet";
 
 // ==========================================
 // LocalStorage Helpers
