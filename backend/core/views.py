@@ -33,71 +33,81 @@ logger = logging.getLogger(__name__)
 
 @api_view(["POST"])
 def connect_wallet(request):
-    logger.info("=" * 60)
-    logger.info("🔍 CONNECT_WALLET CALLED")
-    logger.info(f"📥 Data: {request.data}")
-    logger.info(f"📥 Headers: {request.headers}")
-    
     wallet_address = request.data.get("wallet_address")
     inviter_code = request.data.get("inviter_code")
     telegram_id = request.data.get("telegram_id")
     telegram_username = request.data.get("telegram_username")
+    telegram_photo_url = request.data.get("telegram_photo_url")
     is_telegram = request.data.get("is_telegram", False)
 
     if not wallet_address:
-        logger.error("❌ wallet_address required")
-        return Response({"error": "wallet_address required"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {"error": "wallet_address required"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
     if not telegram_id:
-        logger.error("❌ telegram_id required")
-        return Response({"error": "telegram_id required"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {"error": "telegram_id required"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
     try:
-        user = get_or_create_user(wallet_address, telegram_id, is_telegram)
-        
-        # ==========================================
-        # ✅ اصلاح: ذخیره telegram_username با اولویت
-        # ==========================================
-        final_username = None
-        
-        # 1. اگر username واقعی از تلگرام اومده
-        if telegram_username and not telegram_username.startswith('browser_'):
-            final_username = telegram_username
-            logger.info(f"✅ Using real telegram_username: {final_username}")
-        # 2. اگر کاربر تلگرامی هست ولی username نداره
-        elif is_telegram and telegram_id:
-            final_username = str(telegram_id)
-            logger.info(f"✅ Using telegram_id as username: {final_username}")
-        # 3. اگر کاربر از مرورگر هست
-        elif not is_telegram:
-            final_username = f"user_{wallet_address[:8]}"
-            logger.info(f"✅ Generated username from wallet: {final_username}")
-        
-        if final_username:
-            user.telegram_username = final_username
-            user.save(update_fields=["telegram_username"])
-            logger.info(f"✅ Saved username: {final_username}")
-        
+        user = get_or_create_user(
+            wallet_address=wallet_address,
+            telegram_id=int(telegram_id),
+            is_telegram=bool(is_telegram)
+        )
+
+        update_fields = []
+
+        # یوزرنیم واقعی را ذخیره کن؛ ID را به‌عنوان username ذخیره نکن.
+        if telegram_username:
+            clean_username = str(telegram_username).strip().lstrip("@")
+
+            if clean_username and not clean_username.startswith("browser_"):
+                user.telegram_username = clean_username
+                update_fields.append("telegram_username")
+
+        if telegram_photo_url:
+            user.telegram_photo_url = str(telegram_photo_url).strip()
+            update_fields.append("telegram_photo_url")
+
+        if update_fields:
+            user.save(update_fields=list(set(update_fields)))
+
         if inviter_code and not user.inviter_id:
             apply_referral(inviter_code, user)
-            
-    except ValueError as e:
-        logger.error(f"❌ ValueError: {e}")
-        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-    logger.info(f"✅ User connected: {user.wallet_address}")
-    logger.info("=" * 60)
-    
-    return Response({
-        "user": {
-            "telegram_id": user.telegram_id,
-            "telegram_username": user.telegram_username,
-            "wallet_address": user.wallet_address,
-            "referral_code": user.referral_code,
-            "wallet_locked": user.wallet_locked
-        }
-    }, status=status.HTTP_200_OK)
+    except (TypeError, ValueError) as exc:
+        logger.exception("connect_wallet validation error")
 
+        return Response(
+            {"error": str(exc)},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    except Exception:
+        logger.exception("connect_wallet unexpected error")
+
+        return Response(
+            {"error": "Unable to connect wallet"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+    return Response(
+        {
+            "user": {
+                "telegram_id": user.telegram_id,
+                "telegram_username": user.telegram_username,
+                "telegram_photo_url": user.telegram_photo_url,
+                "wallet_address": user.wallet_address,
+                "referral_code": user.referral_code,
+                "wallet_locked": user.wallet_locked,
+            }
+        },
+        status=status.HTTP_200_OK
+    )
 
 @api_view(["GET"])
 def wallet_view(request, wallet_address):
@@ -468,86 +478,136 @@ def test_tick(request):
 @api_view(["GET"])
 def get_referral_levels(request):
     wallet_address = request.query_params.get("wallet_address")
-    if not wallet_address:
-        return Response({"error": "wallet_address required"}, status=status.HTTP_400_BAD_REQUEST)
 
-    user = AppUser.objects.filter(wallet_address=wallet_address).first()
+    if not wallet_address:
+        return Response(
+            {"error": "wallet_address required"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    user = AppUser.objects.filter(
+        wallet_address=wallet_address
+    ).first()
 
     if not user:
-        return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
-
-    level_obj, created = ReferralLevel.objects.get_or_create(user=user)
-
-    is_test = request.query_params.get("test", "false").lower() == "true"
-
-    if is_test:
-        test_data = generate_test_data_with_columns()
-        return Response({
-            "levels": test_data,
-            "is_test": True
-        }, status=status.HTTP_200_OK)
-
-    # ==========================================
-    # ✅ اصلاح شده: شامل telegram_username
-    # ==========================================
-    
-    def process_users(users):
-        """پردازش کاربران برای اضافه کردن telegram_username"""
-        processed = []
-        for user_data in users:
-            if isinstance(user_data, dict):
-                # اگر کاربر دیکشنری است و telegram_username ندارد
-                if 'telegram_username' not in user_data or not user_data.get('telegram_username'):
-                    # تلاش برای پیدا کردن کاربر از دیتابیس
-                    wallet = user_data.get('wallet')
-                    if wallet:
-                        try:
-                            app_user = AppUser.objects.filter(wallet_address=wallet).first()
-                            if app_user and app_user.telegram_username:
-                                user_data['telegram_username'] = app_user.telegram_username
-                            else:
-                                # اگر در دیتابیس هم username نداشت، از telegram_id یا wallet استفاده کن
-                                if user_data.get('telegram_id'):
-                                    user_data['telegram_username'] = str(user_data.get('telegram_id'))
-                                else:
-                                    user_data['telegram_username'] = f"user_{wallet[:8]}" if wallet else "unknown"
-                        except:
-                            user_data['telegram_username'] = None
-                    else:
-                        user_data['telegram_username'] = None
-            processed.append(user_data)
-        return processed
-
-    return Response({
-        "levels": {
-            "level_1": {
-                "count": level_obj.level_1_count,
-                "users": process_users(level_obj.level_1_users[:20]) if level_obj.level_1_users else []
-            },
-            "level_2": {
-                "count": level_obj.level_2_count,
-                "users": process_users(level_obj.level_2_users[:20]) if level_obj.level_2_users else []
-            },
-            "level_3": {
-                "count": level_obj.level_3_count,
-                "users": process_users(level_obj.level_3_users[:20]) if level_obj.level_3_users else []
-            },
-            "level_4": {
-                "count": level_obj.level_4_count,
-                "users": process_users(level_obj.level_4_users[:20]) if level_obj.level_4_users else []
-            },
-            "level_5": {
-                "count": level_obj.level_5_count,
-                "users": process_users(level_obj.level_5_users[:20]) if level_obj.level_5_users else []
-            }
-        },
-        "is_test": False,
-        "total_referrals": (
-            level_obj.level_1_count + level_obj.level_2_count + 
-            level_obj.level_3_count + level_obj.level_4_count + 
-            level_obj.level_5_count
+        return Response(
+            {"error": "User not found"},
+            status=status.HTTP_404_NOT_FOUND
         )
-    }, status=status.HTTP_200_OK)
+
+    level_obj, _ = ReferralLevel.objects.get_or_create(user=user)
+
+    def serialize_level_users(stored_users):
+        stored_users = stored_users or []
+        stored_users = stored_users[:20]
+
+        wallets = [
+            item.get("wallet")
+            for item in stored_users
+            if isinstance(item, dict) and item.get("wallet")
+        ]
+
+        telegram_ids = [
+            item.get("telegram_id")
+            for item in stored_users
+            if isinstance(item, dict) and item.get("telegram_id")
+        ]
+
+        users_by_wallet = {
+            app_user.wallet_address: app_user
+            for app_user in AppUser.objects.filter(
+                wallet_address__in=wallets
+            )
+        }
+
+        users_by_telegram_id = {
+            app_user.telegram_id: app_user
+            for app_user in AppUser.objects.filter(
+                telegram_id__in=telegram_ids
+            )
+        }
+
+        result = []
+
+        for item in stored_users:
+            if isinstance(item, str):
+                item = {
+                    "wallet": item,
+                    "investment": 0,
+                    "profit": 0
+                }
+
+            if not isinstance(item, dict):
+                continue
+
+            wallet = item.get("wallet")
+            telegram_id = item.get("telegram_id")
+
+            app_user = (
+                users_by_wallet.get(wallet)
+                or users_by_telegram_id.get(telegram_id)
+            )
+
+            username = item.get("telegram_username")
+            photo_url = item.get("telegram_photo_url")
+
+            if app_user:
+                username = (
+                    app_user.telegram_username
+                    or username
+                )
+
+                photo_url = (
+                    app_user.telegram_photo_url
+                    or photo_url
+                )
+
+                telegram_id = (
+                    app_user.telegram_id
+                    or telegram_id
+                )
+
+            result.append({
+                "telegram_id": telegram_id,
+                "telegram_username": username,
+                "telegram_photo_url": photo_url,
+                "wallet": wallet,
+                "investment": item.get("investment", 0),
+                "profit": item.get("profit", 0),
+            })
+
+        return result
+
+    levels = {}
+
+    total_referrals = 0
+
+    for level_number in range(1, 6):
+        count = getattr(
+            level_obj,
+            f"level_{level_number}_count"
+        )
+
+        stored_users = getattr(
+            level_obj,
+            f"level_{level_number}_users"
+        )
+
+        levels[f"level_{level_number}"] = {
+            "count": count,
+            "users": serialize_level_users(stored_users)
+        }
+
+        total_referrals += count
+
+    return Response(
+        {
+            "levels": levels,
+            "total_referrals": total_referrals,
+            "is_test": False,
+        },
+        status=status.HTTP_200_OK
+    )
 
 
 def generate_test_data_with_columns():

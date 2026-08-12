@@ -8,6 +8,12 @@ import uuid
 class AppUser(models.Model):
     telegram_id = models.BigIntegerField(unique=True, null=True, blank=True)
     telegram_username = models.CharField(max_length=100, null=True, blank=True, help_text="یوزرنیم تلگرام کاربر")
+    telegram_photo_url = models.URLField(
+        max_length=1000,
+        null=True,
+        blank=True,
+        help_text="آدرس آواتار تلگرام کاربر"
+    )
     wallet_address = models.CharField(max_length=128, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

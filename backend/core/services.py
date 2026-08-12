@@ -259,11 +259,12 @@ def update_referral_levels(new_user: AppUser, direct_inviter: AppUser):
 
         user_data = {
             "telegram_id": new_user.telegram_id,
-            "telegram_username": username,
+            "telegram_username": new_user.telegram_username,
+            "telegram_photo_url": new_user.telegram_photo_url,
             "wallet": new_user.wallet_address,
             "investment": 0,
-            "profit": 0
-        }
+            "profit": 0,
+            }
 
         if level == 1:
             level_obj.level_1_count += 1

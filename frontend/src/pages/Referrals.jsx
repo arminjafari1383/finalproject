@@ -114,6 +114,8 @@ function getTelegramUser(tg) {
     username:
       user.username || null,
 
+    photoUrl: user.photo_url || null,
+
     firstName:
       user.first_name || null,
 
@@ -1313,9 +1315,14 @@ export default function Referrals() {
       // PAYLOAD
       // ==================================================
 
+      const telegramPhotoUrl =
+  window.Telegram?.WebApp?.initDataUnsafe?.user?.photo_url || null;
+
       const payload = {
         wallet_address:
           address,
+        
+        telegram_photo_url: telegramPhotoUrl,
 
         inviter_code:
           finalInviterCode,
@@ -1907,7 +1914,12 @@ export default function Referrals() {
                       }
                     }
 
+                    const userTelegramPhotoUrl = isString
+                    ? null
+                    : user?.telegram_photo_url || user?.photo_url || null;
+
                     const avatarUrl =
+                      userTelegramPhotoUrl ||
                       getTelegramAvatar(
                         userTelegramId,
                         userTelegramUsername

@@ -151,6 +151,7 @@ export default function Wallet() {
     let telegramId = null;
     let telegramUsername = null;
     let isTelegram = false;
+    let telegramPhotoUrl = null;
 
     const savedData = loadUserDataFromStorage();
     
@@ -170,12 +171,14 @@ export default function Wallet() {
         const user = tg.initDataUnsafe.user;
         telegramId = Number(user.id);
         telegramUsername = user.username || null;
+        telegramPhotoUrl = user.photo_url || null;
         isTelegram = true;
         console.log(`✅ Using telegram_id from Telegram: ${telegramId}`);
         
         saveUserDataToStorage({
           telegramId: telegramId,
           telegramUsername: telegramUsername,
+           telegramPhotoUrl,
           isTelegram: true
         });
       } else {
@@ -212,6 +215,7 @@ export default function Wallet() {
       inviter_code: inviter_code || null,
       telegram_id: telegramId,
       telegram_username: telegramUsername,
+      telegram_photo_url: telegramPhotoUrl,
       is_telegram: isTelegram
     };
 
