@@ -29,6 +29,9 @@ html, body {
   display: flex;
   justify-content: center;
   align-items: flex-start;
+  flex-direction: column;
+  gap: 18px;
+  align-items: center;
   background: 
     radial-gradient(circle at 20% 10%, rgba(25, 50, 100, 0.3), transparent 50%),
     radial-gradient(circle at 80% 90%, rgba(15, 30, 70, 0.2), transparent 50%),
@@ -671,6 +674,34 @@ html, body {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(96, 165, 250, 0.5);
 }
+
+/* Ice-blue actions and withdrawal history */
+.wallet-page-container button:not(.modal-close) {
+  color: #031521 !important;
+  background: linear-gradient(135deg, #dff8ff, #8be4ff) !important;
+  border: 1px solid rgba(213, 248, 255, 0.85) !important;
+  box-shadow: 0 8px 24px rgba(89, 211, 255, 0.18) !important;
+}
+.wallet-page-container button:not(.modal-close):hover:not(:disabled) {
+  background: linear-gradient(135deg, #effcff, #a9edff) !important;
+  box-shadow: 0 10px 30px rgba(89, 211, 255, 0.3) !important;
+}
+.asset-picker { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.asset-picker button { padding: 12px; border-radius: 12px; opacity: .55; cursor: pointer; }
+.asset-picker button.selected { opacity: 1; outline: 2px solid #e4faff; outline-offset: 2px; }
+.wallet-warning { padding: 10px 12px; color: #ffe49a; background: rgba(245,158,11,.09); border: 1px solid rgba(245,158,11,.22); border-radius: 12px; font-size: 12px; line-height: 1.55; text-align: left; }
+.withdraw-history { width: 100%; max-width: 440px; padding: 18px; color: #eafaff; background: rgba(205,244,255,.07); border: 1px solid rgba(205,244,255,.18); border-radius: 22px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+.withdraw-history h2 { margin: 0 0 14px; font-size: 17px; }
+.history-empty { margin: 0; color: #84a6b7; font-size: 13px; }
+.history-row { padding: 13px 0; border-top: 1px solid rgba(205,244,255,.1); }
+.history-topline { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.history-row time { display: block; margin-top: 6px; color: #7da2b5; font-size: 11px; }
+.status-pill { padding: 4px 8px; border-radius: 999px; font-size: 10px; background: rgba(255,255,255,.08); }
+.status-success { color: #8fffc1; }
+.status-pending { color: #ffe18a; }
+.status-failed { color: #ff9b9b; }
+.tx-copy-btn { width: 100%; margin-top: 9px; padding: 9px 10px !important; display: flex; justify-content: space-between; gap: 10px; border-radius: 10px !important; cursor: pointer; }
+.tx-copy-btn span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: monospace; }
 
 /* ============================================================
    RESPONSIVE
