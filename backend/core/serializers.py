@@ -29,4 +29,25 @@ class PurchaseSerializer(serializers.ModelSerializer):
 class WithdrawSerializer(serializers.ModelSerializer):
     class Meta:
         model = WithdrawRequest
-        fields = "__all__"
+        fields = [
+            "id",
+            "asset",
+            "scope",
+            "amount",
+            "ton_amount",
+            "destination_wallet",
+            "tx_hash",
+            "status",
+            "created_at",
+            "completed_at",
+        ]
+
+        read_only_fields = [
+            "id",
+            "ton_amount",
+            "tx_hash",
+            "status",
+            "created_at",
+            "completed_at",
+        ]
+        

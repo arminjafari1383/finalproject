@@ -22,8 +22,10 @@ from .models import (
 )
 from .serializers import WalletSerializer, PurchaseSerializer, UserSerializer
 from django.conf import settings
+from django.db import transaction
 import os
 import requests
+import re
 
 # =======================
 # تنظیمات لاگینگ
@@ -192,105 +194,152 @@ def list_purchases(request):
 
 @api_view(["POST"])
 def request_withdraw(request):
-    logger.info("=" * 60)
-    logger.info("💸 REQUEST_WITHDRAW CALLED")
-    
-    wallet_address = request.data.get("wallet_address")
-    scope = request.data.get("scope")
-    amount = Decimal(str(request.data.get("amount", "0")))
+    wallet_address = str(request.data.get("wallet_address", "")).strip()
+    destination = str(request.data.get("destination_wallet", "")).strip()
+    asset = str(request.data.get("asset", "")).upper()
+    scope = request.data.get("scope", "ALL_WITHDRAWABLE")
 
-    if not all([wallet_address, scope]):
-        logger.error("❌ wallet_address, scope required")
-        return Response({"error": "wallet_address, scope required"}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        amount = Decimal(str(request.data.get("amount", "0")))
+    except Exception:
+        return Response({"error": "Invalid amount."}, status=400)
 
+    if not wallet_address or not destination or asset not in {"TON", "ECG"}:
+        return Response({"error": "wallet_address, destination_wallet and asset are required."}, status=400)
     if amount < Decimal("60"):
-        logger.error(f"❌ Amount too small: {amount}")
-        return Response({"error": "min withdraw is 60 ECG"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"error": "Minimum withdrawal is 60 ECG."}, status=400)
+    if scope not in {"DOWNLINE_ONLY", "ALL_WITHDRAWABLE"}:
+        return Response({"error": "Invalid scope."}, status=400)
+
+    # Basic TON raw/user-friendly address validation. The TON service must perform
+    # canonical parsing again before signing the transfer.
+    if asset == "TON" and not (
+        re.fullmatch(r"-?\d:[0-9a-fA-F]{64}", destination)
+        or re.fullmatch(r"[A-Za-z0-9_-]{48}", destination)
+    ):
+        return Response({"error": "Destination must be a valid TON wallet address."}, status=400)
 
     telegram_id = request.headers.get("X-Telegram-Id")
     is_telegram = request.headers.get("X-Telegram") == "true"
-    
-    if telegram_id:
-        user = get_or_create_user(wallet_address, int(telegram_id), is_telegram)
-    else:
-        user = get_or_create_user(wallet_address, telegram_id=None, is_telegram=False)
-    
-    w = user.wallet
-
-    if scope == "DOWNLINE_ONLY":
-        if amount > w.downline_profit_instant:
-            logger.error(f"❌ Insufficient downline balance")
-            return Response({"error": "insufficient downline instant balance"}, status=status.HTTP_400_BAD_REQUEST)
-    elif scope == "ALL_WITHDRAWABLE":
-        if amount > w.withdrawable_total():
-            logger.error(f"❌ Insufficient withdrawable total")
-            return Response({"error": "insufficient withdrawable total"}, status=status.HTTP_400_BAD_REQUEST)
-    else:
-        logger.error(f"❌ Invalid scope: {scope}")
-        return Response({"error": "invalid scope"}, status=status.HTTP_400_BAD_REQUEST)
-
-    ton_amount = ecg_to_ton(amount)
-    dest = wallet_address
-
-    req = WithdrawRequest.objects.create(
-        user=user,
-        scope=scope,
-        amount=amount,
-        ton_amount=ton_amount,
-        destination_wallet=dest,
-        status="PENDING",
+    user = get_or_create_user(
+        wallet_address,
+        int(telegram_id) if telegram_id else None,
+        is_telegram if telegram_id else False,
     )
 
-    ton_service_url = os.getenv("TON_SERVICE_URL", "http://tonservice:3001")
-    try:
-        r = requests.post(
-            f"{ton_service_url}/send-ton",
-            json={"destination": dest, "amountTon": str(ton_amount), "comment": "ECG withdraw"},
-            timeout=30
+    # Lock and reserve balance before any network call, preventing double spend.
+    with transaction.atomic():
+        locked_wallet = Wallet.objects.select_for_update().get(user=user)
+        available = (
+            locked_wallet.downline_profit_instant
+            if scope == "DOWNLINE_ONLY"
+            else locked_wallet.withdrawable_total()
         )
-        data = r.json()
-        if r.status_code != 200 or not data.get("ok"):
-            raise Exception(data.get("error") or "ton-service failed")
-    except Exception as e:
-        req.status = "FAILED"
-        req.fail_reason = str(e)[:500]
-        req.save(update_fields=["status", "fail_reason"])
-        logger.error(f"❌ TON transfer failed: {e}")
-        return Response({"error": "ton transfer failed", "detail": req.fail_reason}, status=status.HTTP_502_BAD_GATEWAY)
+        if amount > available:
+            return Response({"error": "Insufficient withdrawable balance."}, status=400)
 
-    if scope == "DOWNLINE_ONLY":
-        w.downline_profit_instant -= amount
-        w.save(update_fields=["downline_profit_instant"])
-    else:
         remaining = amount
-
-        def take(field):
-            nonlocal remaining
+        fields = (["downline_profit_instant"] if scope == "DOWNLINE_ONLY" else [
+            "downline_profit_instant", "referral_bonus", "daily_reward_unlocked",
+            "self_profit_unlocked", "principal_unlocked", "self_profit_locked",
+        ])
+        breakdown = {}
+        for field in fields:
+            value = getattr(locked_wallet, field)
+            used = min(value, remaining)
+            if used > 0:
+                setattr(locked_wallet, field, value - used)
+                breakdown[field] = str(used)
+                remaining -= used
             if remaining <= 0:
-                return
-            val = getattr(w, field)
-            if val <= 0:
-                return
-            use = min(val, remaining)
-            setattr(w, field, val - use)
-            remaining -= use
+                break
+        locked_wallet.save(update_fields=list(breakdown.keys()) + ["updated_at"])
 
-        take("downline_profit_instant")
-        take("referral_bonus")
-        take("daily_reward_unlocked")
-        take("self_profit_unlocked")
-        take("principal_unlocked")
-        w.save()
+        ton_amount = ecg_to_ton(amount) if asset == "TON" else Decimal("0")
+        req = WithdrawRequest.objects.create(
+            user=user, scope=scope, asset=asset, amount=amount,
+            ton_amount=ton_amount, destination_wallet=destination,
+            status="PENDING", balance_breakdown=breakdown,
+        )
+        Ledger.objects.create(
+            user=user, typ="WITHDRAW", amount=-amount,
+            meta={"withdraw_id": req.id, "asset": asset, "status": "PENDING"},
+        )
 
-    req.status = "SUCCESS"
-    req.tx_hash = f"seqno:{data.get('sent_seqno')}"
-    req.save(update_fields=["status", "tx_hash"])
+    # ECG is a manual admin request; funds are already reserved.
+    if asset == "ECG":
+        return Response(serialize_withdraw(req), status=201)
 
-    logger.info(f"✅ Withdraw successful: {req.id}")
-    return Response(
-        {"id": req.id, "status": req.status, "ton_amount": str(ton_amount), "destination_wallet": dest},
-        status=status.HTTP_201_CREATED
-    )
+    try:
+        service_url = os.getenv("TON_SERVICE_URL", "http://tonservice:3001")
+        response = requests.post(
+            f"{service_url}/send-ton",
+            json={
+                "destination": destination,
+                "amountTon": str(ton_amount),
+                "comment": f"ECG withdraw #{req.id}",
+                "idempotencyKey": f"withdraw-{req.id}",
+            },
+            timeout=30,
+        )
+        data = response.json()
+        if response.status_code not in (200, 201) or not data.get("ok"):
+            raise RuntimeError(data.get("error") or "TON service failed")
+        tx_hash = str(data.get("tx_hash") or data.get("txHash") or "").strip()
+        if not tx_hash:
+            raise RuntimeError("TON service did not return tx_hash")
+
+        with transaction.atomic():
+            req = WithdrawRequest.objects.select_for_update().get(pk=req.pk)
+            req.status = "SUCCESS"
+            req.tx_hash = tx_hash
+            req.completed_at = timezone.now()
+            req.save(update_fields=["status", "tx_hash", "completed_at"])
+            locked_wallet = Wallet.objects.select_for_update().get(user=user)
+            locked_wallet.total_withdrawn += amount
+            locked_wallet.last_withdraw_at = timezone.now()
+            locked_wallet.save(update_fields=["total_withdrawn", "last_withdraw_at", "updated_at"])
+        return Response(serialize_withdraw(req), status=201)
+    except Exception as exc:
+        # Restore the exact reserved buckets on failure.
+        with transaction.atomic():
+            req = WithdrawRequest.objects.select_for_update().get(pk=req.pk)
+            locked_wallet = Wallet.objects.select_for_update().get(user=user)
+            for field, value in req.balance_breakdown.items():
+                setattr(locked_wallet, field, getattr(locked_wallet, field) + Decimal(value))
+            locked_wallet.save(update_fields=list(req.balance_breakdown.keys()) + ["updated_at"])
+            req.status = "FAILED"
+            req.fail_reason = str(exc)[:500]
+            req.completed_at = timezone.now()
+            req.save(update_fields=["status", "fail_reason", "completed_at"])
+        logger.exception("TON withdrawal failed")
+        return Response({"error": "TON transfer failed; balance was restored."}, status=502)
+
+
+def serialize_withdraw(item):
+    return {
+        "id": item.id,
+        "asset": item.asset,
+        "amount": str(item.amount),
+        "ton_amount": str(item.ton_amount),
+        "destination_wallet": item.destination_wallet,
+        "status": item.status,
+        "tx_hash": item.tx_hash,
+        "created_at": item.created_at,
+        "completed_at": item.completed_at,
+    }
+
+
+@api_view(["GET"])
+def withdraw_history(request):
+    wallet_address = request.query_params.get("wallet_address")
+    if not wallet_address:
+        return Response({"error": "wallet_address required"}, status=400)
+    user = AppUser.objects.filter(wallet_address=wallet_address).first()
+    if not user:
+        return Response([], status=200)
+    rows = user.withdraws.order_by("-created_at")[:50]
+    return Response([serialize_withdraw(row) for row in rows])
 
 
 @api_view(["GET"])

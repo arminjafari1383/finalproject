@@ -176,21 +176,31 @@ class WithdrawRequest(models.Model):
     SCOPE = [
         ("DOWNLINE_ONLY", "Downline only"),
         ("ALL_WITHDRAWABLE", "All withdrawable"),
-    ]
-    user = models.ForeignKey(AppUser, on_delete=models.CASCADE, related_name="withdraws")
-    scope = models.CharField(max_length=32, choices=SCOPE)
+        ]
 
+    ASSET = [
+        ("TON","TON"),
+        ("ECG","ECG"),
+    ]
+
+
+
+
+    user = models.ForeignKey(AppUser, on_delete=models.CASCADE, related_name="withdraws")
+    scope = models.CharField(max_length=32, choices=SCOPE,default="ALL_WITHDRAWABLE",)
+    asset = models.CharField(max_length=8,choices=ASSET,default="TON")
     amount = models.DecimalField(max_digits=24, decimal_places=6)
     ton_amount = models.DecimalField(max_digits=24, decimal_places=9, default=0)
     destination_wallet = models.CharField(max_length=128)
     tx_hash = models.CharField(max_length=256, blank=True, default="")
     fail_reason = models.TextField(blank=True, default="")
-
+    balance_breakdown = models.JSONField(default=dict,blank=True)
     status = models.CharField(max_length=16, choices=STATUS, default="PENDING")
     created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True,blank=True)
 
     def __str__(self):
-        return f"{self.status} - {self.amount} ECG"
+        return f"{self.status} - {self.amount} ECG ->{self.asset}"
 
 
 class ReferralLevel(models.Model):

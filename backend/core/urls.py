@@ -40,6 +40,7 @@ urlpatterns = [
     # برداشت
     # ========================
     path("withdraw/request/", views.request_withdraw, name="request_withdraw"),
+    path("withdraw/history/",views.withdraw_history,name="withdraw_history"),
 
     # ========================
     # Referral
