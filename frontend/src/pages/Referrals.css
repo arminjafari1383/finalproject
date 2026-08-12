@@ -387,6 +387,53 @@
   background: rgba(255, 255, 255, 0.02);
 }
 
+/* ====== TELEGRAM USER: AVATAR + USERNAME ====== */
+.user-cell {
+  min-width: 155px;
+}
+
+.referral-user-profile {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.user-avatar-wrapper {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  padding: 2px;
+  overflow: hidden;
+  border: 1px solid rgba(96, 165, 250, 0.55);
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(96, 165, 250, 0.28), rgba(34, 197, 94, 0.16));
+  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.18);
+}
+
+.user-avatar {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  object-position: center;
+  background: #111827;
+}
+
+.referral-username {
+  display: block;
+  max-width: 120px;
+  overflow: hidden;
+  color: #e2e8f0;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .telegram-id {
   color: #facc15;
   font-family: monospace;
@@ -634,6 +681,21 @@
     padding: 4px 6px;
   }
 
+  .user-cell {
+    min-width: 135px;
+  }
+
+  .user-avatar-wrapper {
+    width: 32px;
+    height: 32px;
+    flex-basis: 32px;
+  }
+
+  .referral-username {
+    max-width: 95px;
+    font-size: 9px;
+  }
+
   .telegram-id,
   .wallet-address {
     font-size: 7px;
@@ -755,6 +817,25 @@
   .level-table td {
     font-size: 7px;
     padding: 3px 4px;
+  }
+
+  .user-cell {
+    min-width: 120px;
+  }
+
+  .referral-user-profile {
+    gap: 6px;
+  }
+
+  .user-avatar-wrapper {
+    width: 28px;
+    height: 28px;
+    flex-basis: 28px;
+  }
+
+  .referral-username {
+    max-width: 82px;
+    font-size: 8px;
   }
 
   .telegram-id,

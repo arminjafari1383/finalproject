@@ -1873,26 +1873,42 @@ export default function Referrals() {
                         </td>
 
                         <td className="user-cell">
-                          <div className="user-avatar-wrapper">
-                            <img
-                              src={
-                                avatarUrl
-                              }
-                              alt={
+                          <div className="referral-user-profile">
+                            <div className="user-avatar-wrapper">
+                              <img
+                                src={
+                                  avatarUrl
+                                }
+                                alt={
+                                  cleanUsername
+                                    ? `@${cleanUsername}`
+                                    : "Telegram avatar"
+                                }
+                                className="user-avatar"
+                                referrerPolicy="no-referrer"
+                                onError={(
+                                  event
+                                ) => {
+                                  event.currentTarget.onerror =
+                                    null;
+                                  event.currentTarget.src =
+                                    fallbackAvatar;
+                                }}
+                              />
+                            </div>
+
+                            <span
+                              className="referral-username"
+                              title={
                                 cleanUsername
                                   ? `@${cleanUsername}`
-                                  : "Telegram avatar"
+                                  : "Telegram user"
                               }
-                              className="user-avatar"
-                              onError={(
-                                event
-                              ) => {
-                                event.currentTarget.onerror =
-                                  null;
-                                event.currentTarget.src =
-                                  fallbackAvatar;
-                              }}
-                            />
+                            >
+                              {cleanUsername
+                                ? `@${cleanUsername}`
+                                : "Telegram user"}
+                            </span>
                           </div>
                         </td>
 
