@@ -9,684 +9,1277 @@ import {
   getInviterCode,
 } from "../utils/referral";
 
-// ==========================================
+// ======================================================
 // Constants
-// ==========================================
+// ======================================================
 
 const USER_DATA_KEY = "my_app_user_data";
 const BOT_USERNAME = "Aipolynetbot";
 
-// ==========================================
-// LocalStorage Helpers
-// ==========================================
+// ======================================================
+// LocalStorage
+// ======================================================
 
-const loadUserDataFromStorage = () => {
+function loadUserDataFromStorage() {
   try {
     const data = localStorage.getItem(USER_DATA_KEY);
     return data ? JSON.parse(data) : null;
   } catch (error) {
-    console.error("❌ Error parsing localStorage:", error);
+    console.error("[STORAGE] Load error:", error);
     return null;
   }
-};
+}
 
-const saveUserDataToStorage = (newData) => {
+function saveUserDataToStorage(newData) {
   try {
     const currentData = loadUserDataFromStorage() || {};
-    const mergedData = { ...currentData, ...newData };
-    localStorage.setItem(USER_DATA_KEY, JSON.stringify(mergedData));
+
+    const mergedData = {
+      ...currentData,
+      ...newData,
+    };
+
+    localStorage.setItem(
+      USER_DATA_KEY,
+      JSON.stringify(mergedData)
+    );
   } catch (error) {
-    console.error("❌ Error saving localStorage:", error);
+    console.error("[STORAGE] Save error:", error);
   }
-};
+}
 
-// ==========================================
-// Telegram
-// ==========================================
+// ======================================================
+// Telegram SDK Loader
+// ======================================================
 
-const getTelegramWebApp = () => {
-  const tg = window.Telegram?.WebApp || null;
-  
-  console.log("=========================================");
-  console.log("📱 [TELEGRAM] getTelegramWebApp() called");
-  console.log("📱 [TELEGRAM] window.Telegram:", window.Telegram);
-  console.log("📱 [TELEGRAM] window.Telegram?.WebApp:", window.Telegram?.WebApp);
-  console.log("📱 [TELEGRAM] Result:", tg);
-  console.log("=========================================");
-  
-  return tg;
-};
+function loadTelegramSDK() {
+  return new Promise((resolve) => {
+    // Already loaded
+    if (
+      window.Telegram &&
+      window.Telegram.WebApp
+    ) {
+      resolve(window.Telegram.WebApp);
+      return;
+    }
 
-// ==========================================
-// 🖼️ تابع دریافت عکس تلگرام
-// ==========================================
+    // Find existing script
+    const existingScript = document.querySelector(
+      'script[src="https://telegram.org/js/telegram-web-app.js"]'
+    );
 
-const getTelegramAvatar = (telegramId, username) => {
-  console.log(`🖼️ [AVATAR] telegramId: ${telegramId}, username: ${username}`);
-  
-  if (username && 
-      username !== 'browser' && 
-      !username.startsWith('browser_') &&
-      username !== 'null' && 
-      username !== 'undefined' &&
-      username !== '') {
-    const url = `https://t.me/i/userpic/320/${username}.jpg`;
-    console.log(`✅ [AVATAR] Using Telegram avatar: ${url}`);
-    return url;
+    if (existingScript) {
+      let attempts = 0;
+
+      const check = () => {
+        if (
+          window.Telegram &&
+          window.Telegram.WebApp
+        ) {
+          resolve(window.Telegram.WebApp);
+          return;
+        }
+
+        attempts++;
+
+        if (attempts >= 100) {
+          resolve(null);
+          return;
+        }
+
+        setTimeout(check, 50);
+      };
+
+      check();
+      return;
+    }
+
+    // Load SDK
+    const script = document.createElement("script");
+
+    script.src =
+      "https://telegram.org/js/telegram-web-app.js";
+
+    script.async = true;
+
+    script.onload = () => {
+      let attempts = 0;
+
+      const check = () => {
+        if (
+          window.Telegram &&
+          window.Telegram.WebApp
+        ) {
+          resolve(window.Telegram.WebApp);
+          return;
+        }
+
+        attempts++;
+
+        if (attempts >= 100) {
+          resolve(null);
+          return;
+        }
+
+        setTimeout(check, 50);
+      };
+
+      check();
+    };
+
+    script.onerror = () => {
+      console.error(
+        "[TELEGRAM] Failed to load Telegram WebApp SDK"
+      );
+
+      resolve(null);
+    };
+
+    document.head.appendChild(script);
+  });
+}
+
+// ======================================================
+// Telegram WebApp
+// ======================================================
+
+function getTelegramWebApp() {
+  return (
+    window.Telegram?.WebApp ||
+    null
+  );
+}
+
+// ======================================================
+// Telegram Avatar
+// ======================================================
+
+function getTelegramAvatar(
+  telegramId,
+  username
+) {
+  if (
+    username &&
+    username !== "browser" &&
+    !username.startsWith("browser_") &&
+    username !== "null" &&
+    username !== "undefined" &&
+    username !== ""
+  ) {
+    return `https://t.me/i/userpic/320/${encodeURIComponent(
+      username
+    )}.jpg`;
   }
-  
-  if (telegramId && 
-      telegramId !== '-' && 
-      telegramId !== 'browser' && 
-      typeof telegramId === 'number' && 
-      telegramId > 0) {
-    const url = `https://ui-avatars.com/api/?name=${telegramId}&background=random&size=32&rounded=true`;
-    console.log(`✅ [AVATAR] Using UI Avatar: ${url}`);
-    return url;
+
+  if (
+    telegramId &&
+    telegramId !== "-" &&
+    telegramId !== "browser" &&
+    Number(telegramId) > 0
+  ) {
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(
+      String(telegramId)
+    )}&background=random&size=64&rounded=true`;
   }
-  
-  console.log(`⚠️ [AVATAR] Using fallback avatar`);
-  return `https://ui-avatars.com/api/?name=User&background=random&size=32&rounded=true`;
-};
 
-// ==========================================
-// 🐛 کامپوننت دیباگ روی صفحه با لاگ‌های بیشتر
-// ==========================================
+  return `https://ui-avatars.com/api/?name=User&background=random&size=64&rounded=true`;
+}
 
-const DebugPanel = ({ data }) => {
+// ======================================================
+// Debug Panel
+// ======================================================
+
+function DebugPanel({ data }) {
   const [isOpen, setIsOpen] = useState(true);
-  
+
   if (!isOpen) {
     return (
-      <button 
+      <button
         onClick={() => setIsOpen(true)}
         style={{
-          position: 'fixed',
-          bottom: '20px',
-          right: '20px',
-          zIndex: 99999,
-          padding: '10px 16px',
-          background: '#dc3545',
-          color: 'white',
-          border: 'none',
-          borderRadius: '8px',
-          cursor: 'pointer',
-          fontSize: '14px',
-          fontWeight: 'bold',
+          position: "fixed",
+          bottom: "20px",
+          right: "20px",
+          zIndex: 999999,
+          padding: "10px 16px",
+          background: "#dc3545",
+          color: "#fff",
+          border: "none",
+          borderRadius: "8px",
+          fontWeight: "bold",
         }}
       >
         🐛 Show Debug
       </button>
     );
   }
-  
+
   return (
-    <div style={{
-      position: 'fixed',
-      top: '10px',
-      right: '10px',
-      zIndex: 99999,
-      width: '480px',
-      maxHeight: '80vh',
-      background: '#1a1a2e',
-      color: '#e0e0e0',
-      borderRadius: '12px',
-      padding: '16px',
-      boxShadow: '0 8px 32px rgba(0,0,0,0.9)',
-      fontFamily: 'monospace',
-      fontSize: '12px',
-      overflow: 'auto',
-      border: '1px solid #333',
-    }}>
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: '12px',
-        borderBottom: '1px solid #333',
-        paddingBottom: '8px',
-      }}>
-        <span style={{ color: '#4CAF50', fontWeight: 'bold' }}>
+    <div
+      style={{
+        position: "fixed",
+        top: "10px",
+        right: "10px",
+        zIndex: 999999,
+        width: "min(480px, calc(100vw - 20px))",
+        maxHeight: "80vh",
+        overflow: "auto",
+        background: "#1a1a2e",
+        color: "#e0e0e0",
+        borderRadius: "12px",
+        padding: "16px",
+        boxShadow: "0 8px 32px rgba(0,0,0,.9)",
+        fontFamily: "monospace",
+        fontSize: "12px",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: "12px",
+          borderBottom: "1px solid #333",
+          paddingBottom: "8px",
+        }}
+      >
+        <strong style={{ color: "#4CAF50" }}>
           🐛 Telegram Debug
-        </span>
-        <button 
+        </strong>
+
+        <button
           onClick={() => setIsOpen(false)}
           style={{
-            background: 'transparent',
-            color: '#888',
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: '18px',
+            background: "transparent",
+            color: "#888",
+            border: "none",
+            fontSize: "18px",
           }}
         >
           ✕
         </button>
       </div>
-      
-      {/* Telegram Detection */}
-      <div style={{ marginBottom: '8px', borderBottom: '1px solid #333', paddingBottom: '8px' }}>
-        <div style={{ color: '#FF6B6B', fontWeight: 'bold', marginBottom: '4px' }}>
-          📱 Telegram Detection
-        </div>
-        <div style={{ paddingLeft: '12px', fontSize: '11px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
-            <span style={{ color: '#888' }}>window.Telegram:</span>
-            <span style={{ color: data?.hasTelegram ? '#4CAF50' : '#FF6B6B' }}>
-              {data?.hasTelegram ? '✅ Yes' : '❌ No'}
-            </span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
-            <span style={{ color: '#888' }}>WebApp:</span>
-            <span style={{ color: data?.hasWebApp ? '#4CAF50' : '#FF6B6B' }}>
-              {data?.hasWebApp ? '✅ Yes' : '❌ No'}
-            </span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
-            <span style={{ color: '#888' }}>Platform:</span>
-            <span style={{ color: '#FFD93D' }}>{data?.platform || 'Unknown'}</span>
-          </div>
-        </div>
-      </div>
-      
-      {/* Telegram User Info */}
-      <div style={{ marginBottom: '8px', borderBottom: '1px solid #333', paddingBottom: '8px' }}>
-        <div style={{ color: '#FFD93D', fontWeight: 'bold', marginBottom: '4px' }}>
-          👤 Telegram User Info
-        </div>
-        <div style={{ paddingLeft: '12px', fontSize: '11px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
-            <span style={{ color: '#888' }}>Telegram ID:</span>
-            <span style={{ color: '#4CAF50' }}>{data?.telegramId || '❌ Not found'}</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
-            <span style={{ color: '#888' }}>Username:</span>
-            <span style={{ color: '#4CAF50' }}>{data?.telegramUsername || '❌ Not found'}</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
-            <span style={{ color: '#888' }}>First Name:</span>
-            <span style={{ color: '#4CAF50' }}>{data?.firstName || '❌ Not found'}</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
-            <span style={{ color: '#888' }}>Last Name:</span>
-            <span style={{ color: '#4CAF50' }}>{data?.lastName || '❌ Not found'}</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
-            <span style={{ color: '#888' }}>Language:</span>
-            <span style={{ color: '#4CAF50' }}>{data?.language || '❌ Not found'}</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
-            <span style={{ color: '#888' }}>Is Premium:</span>
-            <span style={{ color: data?.isPremium ? '#4CAF50' : '#FF6B6B' }}>
-              {data?.isPremium ? '✅ Yes' : '❌ No'}
-            </span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
-            <span style={{ color: '#888' }}>Is Telegram WebApp:</span>
-            <span style={{ color: data?.isTelegramWebApp ? '#4CAF50' : '#FF6B6B' }}>
-              {data?.isTelegramWebApp ? '✅ Yes' : '❌ No'}
-            </span>
-          </div>
-        </div>
-      </div>
 
-      {/* initDataUnsafe */}
-      <div style={{ marginBottom: '8px', borderBottom: '1px solid #333', paddingBottom: '8px' }}>
-        <div style={{ color: '#9C27B0', fontWeight: 'bold', marginBottom: '4px' }}>
+      <DebugRow
+        title="window.Telegram"
+        value={
+          data?.hasTelegram
+            ? "✅ Yes"
+            : "❌ No"
+        }
+      />
+
+      <DebugRow
+        title="WebApp"
+        value={
+          data?.hasWebApp
+            ? "✅ Yes"
+            : "❌ No"
+        }
+      />
+
+      <DebugRow
+        title="Platform"
+        value={data?.platform || "Unknown"}
+      />
+
+      <DebugRow
+        title="Telegram ID"
+        value={
+          data?.telegramId ||
+          "❌ Not found"
+        }
+      />
+
+      <DebugRow
+        title="Username"
+        value={
+          data?.telegramUsername ||
+          "❌ Not found"
+        }
+      />
+
+      <DebugRow
+        title="First Name"
+        value={
+          data?.firstName ||
+          "❌ Not found"
+        }
+      />
+
+      <DebugRow
+        title="Last Name"
+        value={
+          data?.lastName ||
+          "❌ Not found"
+        }
+      />
+
+      <DebugRow
+        title="Language"
+        value={
+          data?.language ||
+          "❌ Not found"
+        }
+      />
+
+      <DebugRow
+        title="Premium"
+        value={
+          data?.isPremium
+            ? "✅ Yes"
+            : "❌ No"
+        }
+      />
+
+      <DebugRow
+        title="Telegram Mode"
+        value={
+          data?.isTelegramWebApp
+            ? "✅ Telegram"
+            : "🌐 Browser"
+        }
+      />
+
+      <div
+        style={{
+          borderTop: "1px solid #333",
+          marginTop: "10px",
+          paddingTop: "10px",
+        }}
+      >
+        <div
+          style={{
+            color: "#9C27B0",
+            marginBottom: "5px",
+          }}
+        >
           📦 initDataUnsafe
         </div>
-        <div style={{ 
-          background: '#0d0d1a', 
-          padding: '8px', 
-          borderRadius: '4px',
-          fontSize: '9px',
-          overflow: 'auto',
-          maxHeight: '100px',
-        }}>
-          <pre style={{ margin: 0, color: '#d4d4d4' }}>
-            {JSON.stringify(data?.initDataUnsafe, null, 2) || 'No data'}
-          </pre>
-        </div>
+
+        <pre
+          style={{
+            background: "#0d0d1a",
+            padding: "8px",
+            borderRadius: "5px",
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            maxHeight: "160px",
+            overflow: "auto",
+            fontSize: "9px",
+          }}
+        >
+          {JSON.stringify(
+            data?.initDataUnsafe || {},
+            null,
+            2
+          )}
+        </pre>
       </div>
 
-      <div style={{ marginBottom: '8px', borderTop: '1px solid #333', paddingTop: '8px' }}>
-        <div style={{ color: '#2196F3', fontWeight: 'bold', marginBottom: '4px' }}>
-          📤 Payload to Backend
+      <div
+        style={{
+          borderTop: "1px solid #333",
+          marginTop: "10px",
+          paddingTop: "10px",
+        }}
+      >
+        <div
+          style={{
+            color: "#2196F3",
+            marginBottom: "5px",
+          }}
+        >
+          📤 Payload
         </div>
-        <div style={{ 
-          background: '#0d0d1a', 
-          padding: '8px', 
-          borderRadius: '4px',
-          fontSize: '10px',
-          overflow: 'auto',
-          maxHeight: '150px',
-        }}>
-          <pre style={{ margin: 0, color: '#d4d4d4' }}>
-            {JSON.stringify(data?.payload, null, 2) || 'Not sent yet'}
-          </pre>
-        </div>
+
+        <pre
+          style={{
+            background: "#0d0d1a",
+            padding: "8px",
+            borderRadius: "5px",
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            maxHeight: "180px",
+            overflow: "auto",
+            fontSize: "9px",
+          }}
+        >
+          {JSON.stringify(
+            data?.payload || {},
+            null,
+            2
+          )}
+        </pre>
       </div>
 
-      <div style={{ marginBottom: '8px', borderTop: '1px solid #333', paddingTop: '8px' }}>
-        <div style={{ color: '#00BCD4', fontWeight: 'bold', marginBottom: '4px' }}>
+      <div
+        style={{
+          borderTop: "1px solid #333",
+          marginTop: "10px",
+          paddingTop: "10px",
+        }}
+      >
+        <div
+          style={{
+            color: "#00BCD4",
+            marginBottom: "5px",
+          }}
+        >
           📥 Backend Response
         </div>
-        <div style={{ 
-          background: '#0d0d1a', 
-          padding: '8px', 
-          borderRadius: '4px',
-          fontSize: '10px',
-          overflow: 'auto',
-          maxHeight: '100px',
-        }}>
-          <pre style={{ margin: 0, color: '#d4d4d4' }}>
-            {JSON.stringify(data?.backendResponse, null, 2) || 'Not received yet'}
-          </pre>
-        </div>
+
+        <pre
+          style={{
+            background: "#0d0d1a",
+            padding: "8px",
+            borderRadius: "5px",
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            maxHeight: "180px",
+            overflow: "auto",
+            fontSize: "9px",
+          }}
+        >
+          {JSON.stringify(
+            data?.backendResponse || {},
+            null,
+            2
+          )}
+        </pre>
       </div>
 
-      <div style={{ borderTop: '1px solid #333', paddingTop: '8px' }}>
-        <div style={{ color: '#FF9800', fontWeight: 'bold', marginBottom: '4px' }}>
-          📊 Level Data (First User)
+      <div
+        style={{
+          borderTop: "1px solid #333",
+          marginTop: "10px",
+          paddingTop: "10px",
+          color: "#aaa",
+        }}
+      >
+        <div>
+          inviter_code:{" "}
+          {localStorage.getItem(
+            "inviter_code"
+          ) || "null"}
         </div>
-        <div style={{ 
-          background: '#0d0d1a', 
-          padding: '8px', 
-          borderRadius: '4px',
-          fontSize: '10px',
-          overflow: 'auto',
-          maxHeight: '100px',
-        }}>
-          <pre style={{ margin: 0, color: '#d4d4d4' }}>
-            {JSON.stringify(data?.firstLevelUser, null, 2) || 'No users yet'}
-          </pre>
-        </div>
-      </div>
 
-      <div style={{ borderTop: '1px solid #333', paddingTop: '8px', marginTop: '8px' }}>
-        <div style={{ color: '#9C27B0', fontWeight: 'bold', marginBottom: '4px' }}>
-          💾 localStorage
+        <div>
+          telegram_username:{" "}
+          {localStorage.getItem(
+            "telegram_username"
+          ) || "null"}
         </div>
-        <div style={{ fontSize: '10px', color: '#888' }}>
-          <div>inviter_code: {localStorage.getItem('inviter_code') || 'null'}</div>
-          <div>telegram_username: {localStorage.getItem('telegram_username') || 'null'}</div>
-          <div>telegram_id: {localStorage.getItem('telegram_id') || 'null'}</div>
+
+        <div>
+          telegram_id:{" "}
+          {localStorage.getItem(
+            "telegram_id"
+          ) || "null"}
         </div>
       </div>
     </div>
   );
-};
+}
 
-// ==========================================
+function DebugRow({ title, value }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        gap: "10px",
+        padding: "3px 0",
+        borderBottom: "1px solid rgba(255,255,255,.04)",
+      }}
+    >
+      <span style={{ color: "#888" }}>
+        {title}
+      </span>
+
+      <span
+        style={{
+          color: "#4CAF50",
+          textAlign: "right",
+          wordBreak: "break-word",
+        }}
+      >
+        {String(value)}
+      </span>
+    </div>
+  );
+}
+
+// ======================================================
 // Component
-// ==========================================
+// ======================================================
 
 export default function Referrals() {
   const tonWallet = useTonWallet();
 
   const address = useMemo(
-    () => tonWallet?.account?.address || null,
+    () =>
+      tonWallet?.account?.address ||
+      null,
     [tonWallet]
   );
 
-  // ==========================================
+  // ====================================================
   // State
-  // ==========================================
+  // ====================================================
 
-  const [myCode, setMyCode] = useState(null);
-  const [refCount, setRefCount] = useState(null);
-  const [levels, setLevels] = useState(null);
-  const [showTestTable, setShowTestTable] = useState(false);
-  const [testData, setTestData] = useState(null);
-  const [totalReferrals, setTotalReferrals] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [telegramId, setTelegramId] = useState(null);
-  const [telegramUsername, setTelegramUsername] = useState(null);
-  const [isTelegramWebApp, setIsTelegramWebApp] = useState(false);
+  const [
+    telegramReady,
+    setTelegramReady,
+  ] = useState(false);
 
-  const [inviterCode, setInviterCode] = useState(null);
-  const [referralReady, setReferralReady] = useState(false);
-  const [debugData, setDebugData] = useState({});
-  const [backendResponse, setBackendResponse] = useState(null);
+  const [
+    isTelegramWebApp,
+    setIsTelegramWebApp,
+  ] = useState(false);
 
-  const hasFetched = useRef(false);
+  const [
+    telegramId,
+    setTelegramId,
+  ] = useState(null);
 
-  // ==========================================
-  // Telegram Initialization با لاگ کامل
-  // ==========================================
+  const [
+    telegramUsername,
+    setTelegramUsername,
+  ] = useState(null);
 
-  useEffect(() => {
-    console.log("=========================================");
-    console.log("🔵 [INIT] Starting Telegram detection...");
-    console.log("=========================================");
-    
-    // بررسی وجود Telegram
-    const hasTelegram = typeof window.Telegram !== 'undefined';
-    console.log(`📱 [INIT] window.Telegram exists: ${hasTelegram}`);
-    
-    if (hasTelegram) {
-      console.log("📱 [INIT] window.Telegram:", window.Telegram);
-    }
-    
-    const tg = getTelegramWebApp();
-    console.log(`📱 [INIT] tg result:`, tg);
-    
-    // بررسی platform
-    let platform = 'Unknown';
-    if (tg) {
-      platform = tg.platform || 'Unknown';
-      console.log(`📱 [INIT] Platform: ${platform}`);
-    }
-    
-    setDebugData(prev => ({
-      ...prev,
-      hasTelegram: hasTelegram,
-      hasWebApp: !!tg,
-      platform: platform,
-    }));
+  const [
+    inviterCode,
+    setInviterCode,
+  ] = useState(null);
 
-    if (!tg) {
-      console.log("❌ [INIT] No Telegram WebApp detected - Browser mode");
-      setIsTelegramWebApp(false);
-      const savedReferral = getInviterCode();
-      setInviterCode(savedReferral || false);
-      setReferralReady(true);
-      
-      setDebugData(prev => ({
-        ...prev,
-        isTelegramWebApp: false,
-        telegramId: null,
-        telegramUsername: null,
-      }));
-      
-      console.log("=========================================");
-      console.log("✅ [INIT] Browser mode ready");
-      console.log("=========================================");
-      return;
-    }
+  const [
+    referralReady,
+    setReferralReady,
+  ] = useState(false);
 
-    console.log("✅ [INIT] Telegram WebApp detected!");
-    
-    // آماده‌سازی Telegram
-    try {
-      console.log("📱 [INIT] Calling tg.ready()...");
-      tg.ready();
-      console.log("✅ [INIT] tg.ready() called");
-      
-      console.log("📱 [INIT] Calling tg.expand()...");
-      tg.expand();
-      console.log("✅ [INIT] tg.expand() called");
-    } catch (error) {
-      console.error("❌ [INIT] Error in tg.ready()/expand():", error);
-    }
-    
-    setIsTelegramWebApp(true);
+  const [
+    myCode,
+    setMyCode,
+  ] = useState(null);
 
-    // بررسی initDataUnsafe
-    console.log("📦 [INIT] tg.initDataUnsafe:", tg.initDataUnsafe);
-    console.log("📦 [INIT] tg.initData:", tg.initData);
-    
-    setDebugData(prev => ({
-      ...prev,
-      initDataUnsafe: tg.initDataUnsafe,
-      isTelegramWebApp: true,
-    }));
+  const [
+    refCount,
+    setRefCount,
+  ] = useState(null);
 
-    const user = tg.initDataUnsafe?.user || null;
-    console.log("👤 [INIT] Telegram user object:", user);
+  const [
+    levels,
+    setLevels,
+  ] = useState(null);
 
-    if (user) {
-      const tgId = user.id;
-      const tgUsername = user.username || null;
-      const firstName = user.first_name || null;
-      const lastName = user.last_name || null;
-      const languageCode = user.language_code || null;
-      const isPremium = user.is_premium || false;
+  const [
+    totalReferrals,
+    setTotalReferrals,
+  ] = useState(0);
 
-      console.log("=========================================");
-      console.log("✅ [INIT] User data extracted:");
-      console.log(`  ID: ${tgId}`);
-      console.log(`  Username: ${tgUsername}`);
-      console.log(`  First Name: ${firstName}`);
-      console.log(`  Last Name: ${lastName}`);
-      console.log(`  Language: ${languageCode}`);
-      console.log(`  Is Premium: ${isPremium}`);
-      console.log("=========================================");
+  const [
+    loading,
+    setLoading,
+  ] = useState(false);
 
-      setTelegramId(tgId);
-      setTelegramUsername(tgUsername);
+  const [
+    error,
+    setError,
+  ] = useState("");
 
-      setDebugData(prev => ({
-        ...prev,
-        telegramId: tgId,
-        telegramUsername: tgUsername,
-        firstName: firstName,
-        lastName: lastName,
-        language: languageCode,
-        isPremium: isPremium,
-        user: user,
-      }));
+  const [
+    showTestTable,
+    setShowTestTable,
+  ] = useState(false);
 
-      saveUserDataToStorage({
-        telegramId: tgId,
-        telegramUsername: tgUsername,
-        isTelegram: true,
-      });
-      
-      console.log("💾 [INIT] User data saved to localStorage");
-    } else {
-      console.warn("⚠️ [INIT] No user in initDataUnsafe!");
-      console.log("📦 [INIT] Full initDataUnsafe:", tg.initDataUnsafe);
-      
-      setDebugData(prev => ({
-        ...prev,
-        telegramId: null,
-        telegramUsername: null,
-        error: 'No user in initDataUnsafe',
-      }));
-    }
+  const [
+    testData,
+    setTestData,
+  ] = useState(null);
 
-    // بررسی start_param
-    const startParam = tg.initDataUnsafe?.start_param || null;
-    console.log(`🎯 [INIT] start_param: ${startParam}`);
+  const [
+    backendResponse,
+    setBackendResponse,
+  ] = useState(null);
 
-    const capturedCode = captureInviterCode();
-    console.log(`🎯 [INIT] captureInviterCode() returned: ${capturedCode}`);
-    
-    setInviterCode(capturedCode || false);
-    setReferralReady(true);
+  const [
+    debugData,
+    setDebugData,
+  ] = useState({});
 
-    console.log("✅ [INIT] Referral detection READY");
-    console.log("=========================================");
-  }, []);
+  const registerKey = useRef(null);
 
-  // ==========================================
-  // Save Wallet
-  // ==========================================
-
-  useEffect(() => {
-    if (!address) return;
-    console.log(`💰 [WALLET] Saving address: ${address}`);
-    saveUserDataToStorage({ walletAddress: address });
-  }, [address]);
-
-  // ==========================================
-  // Browser Telegram ID
-  // ==========================================
+  // ====================================================
+  // Browser ID
+  // ====================================================
 
   const browserTelegramId = useMemo(() => {
     if (!address) {
-      const generated = Math.floor(Date.now() / 1000) + 2000000000000;
-      console.log(`🌐 [BROWSER] Generated Telegram ID: ${generated}`);
-      return generated;
+      return (
+        Math.floor(
+          Date.now() / 1000
+        ) + 2000000000000
+      );
     }
 
     let hash = 0;
-    for (let i = 0; i < address.length; i++) {
-      const char = address.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash = hash & hash;
+
+    for (
+      let i = 0;
+      i < address.length;
+      i++
+    ) {
+      hash =
+        (hash << 5) -
+        hash +
+        address.charCodeAt(i);
+
+      hash |= 0;
     }
 
-    const generated = Math.abs(hash) + 1000000000000;
-    console.log(`🌐 [BROWSER] Browser Telegram ID: ${generated}`);
-    return generated;
+    return (
+      Math.abs(hash) +
+      1000000000000
+    );
   }, [address]);
 
-  // ==========================================
-  // Register User
-  // ==========================================
+  // ====================================================
+  // Telegram Initialization
+  // ====================================================
 
   useEffect(() => {
-    console.log("=========================================");
-    console.log("🔴 [REGISTER] Register effect triggered");
-    console.log("=========================================");
-    console.log(`💰 address: ${address}`);
-    console.log(`🔗 referralReady: ${referralReady}`);
-    console.log(`🎯 inviterCode: ${inviterCode}`);
-    console.log(`📱 telegramId: ${telegramId}`);
-    console.log(`📱 telegramUsername: ${telegramUsername}`);
-    console.log(`📱 isTelegramWebApp: ${isTelegramWebApp}`);
-    console.log(`🚫 hasFetched.current: ${hasFetched.current}`);
-    console.log("=========================================");
-    
+    let cancelled = false;
+
+    async function initializeTelegram() {
+      console.log(
+        "===================================="
+      );
+
+      console.log(
+        "🔵 Telegram initialization started"
+      );
+
+      console.log(
+        "===================================="
+      );
+
+      const tg =
+        await loadTelegramSDK();
+
+      if (cancelled) return;
+
+      const hasTelegram =
+        typeof window.Telegram !==
+        "undefined";
+
+      const hasWebApp =
+        !!tg;
+
+      console.log(
+        "window.Telegram:",
+        window.Telegram
+      );
+
+      console.log(
+        "Telegram.WebApp:",
+        tg
+      );
+
+      setDebugData((prev) => ({
+        ...prev,
+        hasTelegram,
+        hasWebApp,
+        platform:
+          tg?.platform ||
+          "Unknown",
+      }));
+
+      // ==================================================
+      // Browser
+      // ==================================================
+
+      if (!tg) {
+        console.log(
+          "🌐 Browser mode"
+        );
+
+        setIsTelegramWebApp(false);
+
+        const savedReferral =
+          getInviterCode();
+
+        setInviterCode(
+          savedReferral || null
+        );
+
+        setTelegramReady(true);
+        setReferralReady(true);
+
+        setDebugData((prev) => ({
+          ...prev,
+          isTelegramWebApp: false,
+          telegramId: null,
+          telegramUsername: null,
+        }));
+
+        return;
+      }
+
+      // ==================================================
+      // Telegram
+      // ==================================================
+
+      try {
+        tg.ready();
+        tg.expand();
+
+        if (
+          typeof tg.setHeaderColor ===
+          "function"
+        ) {
+          try {
+            tg.setHeaderColor(
+              "#ffffff"
+            );
+          } catch {}
+        }
+      } catch (err) {
+        console.warn(
+          "Telegram ready/expand error:",
+          err
+        );
+      }
+
+      const initDataUnsafe =
+        tg.initDataUnsafe || {};
+
+      const user =
+        initDataUnsafe.user ||
+        null;
+
+      console.log(
+        "Telegram initDataUnsafe:",
+        initDataUnsafe
+      );
+
+      console.log(
+        "Telegram user:",
+        user
+      );
+
+      setDebugData((prev) => ({
+        ...prev,
+        hasTelegram: true,
+        hasWebApp: true,
+        platform:
+          tg.platform ||
+          "Unknown",
+        initDataUnsafe,
+        initData:
+          tg.initData || "",
+      }));
+
+      // ==================================================
+      // User
+      // ==================================================
+
+      if (user?.id) {
+        const realTelegramId =
+          Number(user.id);
+
+        const realUsername =
+          user.username ||
+          null;
+
+        const firstName =
+          user.first_name ||
+          null;
+
+        const lastName =
+          user.last_name ||
+          null;
+
+        const language =
+          user.language_code ||
+          null;
+
+        const premium =
+          Boolean(
+            user.is_premium
+          );
+
+        console.log(
+          "===================================="
+        );
+
+        console.log(
+          "✅ REAL TELEGRAM USER"
+        );
+
+        console.log(
+          "ID:",
+          realTelegramId
+        );
+
+        console.log(
+          "Username:",
+          realUsername
+        );
+
+        console.log(
+          "First name:",
+          firstName
+        );
+
+        console.log(
+          "Last name:",
+          lastName
+        );
+
+        console.log(
+          "Language:",
+          language
+        );
+
+        console.log(
+          "Premium:",
+          premium
+        );
+
+        console.log(
+          "===================================="
+        );
+
+        setTelegramId(
+          realTelegramId
+        );
+
+        setTelegramUsername(
+          realUsername
+        );
+
+        setIsTelegramWebApp(
+          true
+        );
+
+        saveUserDataToStorage({
+          telegramId:
+            realTelegramId,
+
+          telegramUsername:
+            realUsername,
+
+          isTelegram: true,
+        });
+
+        // Also save separately
+        try {
+          localStorage.setItem(
+            "telegram_id",
+            String(realTelegramId)
+          );
+
+          localStorage.setItem(
+            "telegram_username",
+            realUsername || ""
+          );
+        } catch {}
+
+        setDebugData((prev) => ({
+          ...prev,
+          telegramId:
+            realTelegramId,
+
+          telegramUsername:
+            realUsername,
+
+          firstName,
+
+          lastName,
+
+          language,
+
+          isPremium:
+            premium,
+
+          isTelegramWebApp:
+            true,
+
+          user,
+        }));
+      } else {
+        console.warn(
+          "⚠️ Telegram WebApp exists but user is missing"
+        );
+
+        setIsTelegramWebApp(
+          true
+        );
+
+        setDebugData((prev) => ({
+          ...prev,
+          isTelegramWebApp: true,
+          error:
+            "Telegram WebApp exists but initDataUnsafe.user is missing",
+        }));
+      }
+
+      // ==================================================
+      // Referral
+      // ==================================================
+
+      const startParam =
+        initDataUnsafe.start_param ||
+        null;
+
+      let referral =
+        startParam;
+
+      // If Telegram has start_param
+      if (
+        referral &&
+        referral.startsWith(
+          "ref_"
+        )
+      ) {
+        referral =
+          referral.substring(4);
+      }
+
+      // Existing helper
+      if (!referral) {
+        try {
+          referral =
+            captureInviterCode() ||
+            null;
+        } catch (err) {
+          console.warn(
+            "captureInviterCode error:",
+            err
+          );
+        }
+      }
+
+      if (!referral) {
+        try {
+          referral =
+            getInviterCode() ||
+            null;
+        } catch (err) {
+          console.warn(
+            "getInviterCode error:",
+            err
+          );
+        }
+      }
+
+      if (referral) {
+        console.log(
+          "🎯 Referral code:",
+          referral
+        );
+
+        setInviterCode(
+          referral
+        );
+
+        try {
+          localStorage.setItem(
+            "inviter_code",
+            referral
+          );
+        } catch {}
+      } else {
+        setInviterCode(null);
+      }
+
+      setTelegramReady(true);
+      setReferralReady(true);
+
+      console.log(
+        "✅ Telegram initialization complete"
+      );
+    }
+
+    initializeTelegram();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // ====================================================
+  // Save wallet
+  // ====================================================
+
+  useEffect(() => {
+    if (!address) return;
+
+    saveUserDataToStorage({
+      walletAddress: address,
+    });
+  }, [address]);
+
+  // ====================================================
+  // Register
+  // ====================================================
+
+  useEffect(() => {
     if (!address) {
-      console.log("⏳ [REGISTER] No wallet - waiting...");
       setMyCode(null);
       setRefCount(null);
-      setError("");
+      return;
+    }
+
+    if (!telegramReady) {
+      console.log(
+        "⏳ Waiting for Telegram initialization..."
+      );
       return;
     }
 
     if (!referralReady) {
-      console.log("⏳ [REGISTER] Waiting for referral detection...");
+      console.log(
+        "⏳ Waiting for referral initialization..."
+      );
       return;
     }
 
-    if (hasFetched.current) {
-      console.log("⛔️ [REGISTER] Already registered - skipping");
+    // ==================================================
+    // Determine Telegram data
+    // ==================================================
+
+    let finalTelegramId;
+    let finalTelegramUsername;
+    let source;
+
+    if (
+      isTelegramWebApp &&
+      telegramId &&
+      Number(telegramId) > 0
+    ) {
+      // REAL TELEGRAM USER
+      finalTelegramId =
+        Number(telegramId);
+
+      finalTelegramUsername =
+        telegramUsername ||
+        null;
+
+      source = "telegram";
+
+      console.log(
+        "✅ Using REAL Telegram ID:",
+        finalTelegramId
+      );
+
+      console.log(
+        "✅ Using REAL Telegram username:",
+        finalTelegramUsername
+      );
+    } else {
+      // Browser fallback
+      finalTelegramId =
+        browserTelegramId;
+
+      finalTelegramUsername =
+        `user_${address.slice(
+          0,
+          8
+        )}`;
+
+      source = "browser";
+
+      console.log(
+        "🌐 Using browser fallback ID:",
+        finalTelegramId
+      );
+    }
+
+    const finalInviterCode =
+      inviterCode ||
+      getInviterCode() ||
+      null;
+
+    const registerKey = [
+      address,
+      finalTelegramId,
+      finalInviterCode || "",
+    ].join("|");
+
+    if (
+      registerKey.current ===
+      registerKey
+    ) {
       return;
     }
+
+    registerKey.current =
+      registerKey;
 
     let cancelled = false;
-    hasFetched.current = true;
 
-    async function fetchData() {
+    async function registerUser() {
       try {
         setLoading(true);
         setError("");
 
-        const storedInviter = getInviterCode();
-        const finalInviterCode = inviterCode || storedInviter || null;
-
-        const savedData = loadUserDataFromStorage();
-
-        let finalTelegramId;
-        let finalTelegramUsername = null;
-
-        console.log("=========================================");
-        console.log("🐛 [REGISTER] Telegram detection decision:");
-        console.log("=========================================");
-        console.log(`📂 savedData?.telegramId: ${savedData?.telegramId}`);
-        console.log(`📂 savedData?.telegramUsername: ${savedData?.telegramUsername}`);
-        console.log(`📱 telegramId (state): ${telegramId}`);
-        console.log(`📱 telegramUsername (state): ${telegramUsername}`);
-        console.log(`📱 isTelegramWebApp: ${isTelegramWebApp}`);
-        console.log(`🌐 browserTelegramId: ${browserTelegramId}`);
-        console.log("=========================================");
-
-        if (savedData?.telegramId && savedData.telegramId > 0) {
-          finalTelegramId = savedData.telegramId;
-          finalTelegramUsername = savedData.telegramUsername || null;
-          console.log(`✅ [REGISTER] Using Telegram ID from storage: ${finalTelegramId}`);
-        } else if (isTelegramWebApp && telegramId && telegramId > 0) {
-          finalTelegramId = telegramId;
-          finalTelegramUsername = telegramUsername;
-          console.log(`✅ [REGISTER] Using real Telegram ID: ${finalTelegramId}`);
-          console.log(`✅ [REGISTER] Using real Telegram username: ${finalTelegramUsername}`);
-        } else {
-          finalTelegramId = browserTelegramId;
-          finalTelegramUsername = `user_${address.slice(0, 8)}`;
-          console.log(`⚠️ [REGISTER] Using browser Telegram ID: ${finalTelegramId}`);
-          console.log(`⚠️ [REGISTER] Using browser username: ${finalTelegramUsername}`);
-        }
-
-        setDebugData(prev => ({
-          ...prev,
-          finalTelegramId,
-          finalTelegramUsername,
-          source: savedData?.telegramId ? 'storage' : (isTelegramWebApp ? 'telegram' : 'browser'),
-        }));
-
         const payload = {
-          wallet_address: address,
-          inviter_code: finalInviterCode,
-          telegram_id: finalTelegramId,
-          telegram_username: finalTelegramUsername,
-          is_telegram: isTelegramWebApp || savedData?.isTelegram || false,
+          wallet_address:
+            address,
+
+          inviter_code:
+            finalInviterCode,
+
+          telegram_id:
+            finalTelegramId,
+
+          telegram_username:
+            finalTelegramUsername,
+
+          is_telegram:
+            source === "telegram",
         };
 
-        console.log("=========================================");
-        console.log("📤 [REGISTER] FINAL PAYLOAD:");
-        console.log(JSON.stringify(payload, null, 2));
-        console.log("=========================================");
-
-        setDebugData(prev => ({
-          ...prev,
-          payload: payload,
-        }));
-
-        console.log("🚀 [REGISTER] Sending POST /connect/ ...");
-
-        const res = await api.post("/connect/", payload);
-
-        if (cancelled) return;
-
-        console.log("=========================================");
-        console.log("✅ [REGISTER] Backend response received:");
-        console.log(`  Status: ${res.status}`);
-        console.log(`  Data:`, res.data);
-        console.log("=========================================");
-
-        setBackendResponse(res.data);
-        setDebugData(prev => ({
-          ...prev,
-          backendResponse: res.data,
-        }));
-
-        const returnedCode = res.data?.user?.referral_code || null;
-        console.log(`🎟️ [REGISTER] My referral code: ${returnedCode}`);
-        setMyCode(returnedCode);
-
-        console.log("🔄 [REGISTER] Fetching referral count...");
-        const countRes = await api.get("/referrals/count/", {
-          params: { wallet_address: address },
-        });
-
-        if (cancelled) return;
-
-        const count = countRes.data?.count ?? 0;
-        console.log(`👥 [REGISTER] Referral count: ${count}`);
-        setRefCount(count);
-
-      } catch (error) {
-        if (cancelled) return;
-        
-        console.error("=========================================");
-        console.error("❌ [REGISTER] CONNECT ERROR");
-        console.error("=========================================");
-        console.error("❌ Error:", error);
-        console.error("❌ Error message:", error?.message);
-        console.error("❌ HTTP status:", error?.response?.status);
-        console.error("❌ Backend response:", error?.response?.data);
-        console.error("=========================================");
-        
-        setError(
-          error?.response?.data?.error ||
-            error?.response?.data?.detail ||
-            error?.message ||
-            "Failed to fetch referral information."
+        console.log(
+          "===================================="
         );
+
+        console.log(
+          "📤 FINAL /connect/ PAYLOAD"
+        );
+
+        console.log(
+          JSON.stringify(
+            payload,
+            null,
+            2
+          )
+        );
+
+        console.log(
+          "===================================="
+        );
+
+        setDebugData((prev) => ({
+          ...prev,
+
+          finalTelegramId,
+
+          finalTelegramUsername,
+
+          source,
+
+          payload,
+        }));
+
+        const response =
+          await api.post(
+            "/connect/",
+            payload
+          );
+
+        if (cancelled) return;
+
+        console.log(
+          "✅ /connect/ response:",
+          response.data
+        );
+
+        setBackendResponse(
+          response.data
+        );
+
+        setDebugData((prev) => ({
+          ...prev,
+          backendResponse:
+            response.data,
+        }));
+
+        const returnedCode =
+          response.data?.user
+            ?.referral_code ||
+          response.data
+            ?.referral_code ||
+          null;
+
+        setMyCode(
+          returnedCode
+        );
+
+        // ==================================================
+        // Referral count
+        // ==================================================
+
+        try {
+          const countResponse =
+            await api.get(
+              "/referrals/count/",
+              {
+                params: {
+                  wallet_address:
+                    address,
+                },
+              }
+            );
+
+          if (cancelled) return;
+
+          setRefCount(
+            countResponse.data
+              ?.count ?? 0
+          );
+        } catch (countError) {
+          console.error(
+            "Referral count error:",
+            countError
+          );
+
+          setRefCount(0);
+        }
+      } catch (err) {
+        if (cancelled) return;
+
+        console.error(
+          "===================================="
+        );
+
+        console.error(
+          "❌ REGISTER ERROR"
+        );
+
+        console.error(
+          "Status:",
+          err?.response?.status
+        );
+
+        console.error(
+          "Backend:",
+          err?.response?.data
+        );
+
+        console.error(
+          "Message:",
+          err?.message
+        );
+
+        console.error(
+          "===================================="
+        );
+
+        setError(
+          err?.response?.data
+            ?.error ||
+            err?.response?.data
+              ?.detail ||
+            err?.message ||
+            "Failed to register user."
+        );
+
+        // Allow retry
+        registerKey.current =
+          null;
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -694,179 +1287,288 @@ export default function Referrals() {
       }
     }
 
-    fetchData();
+    registerUser();
 
     return () => {
       cancelled = true;
     };
-  }, [address, referralReady, inviterCode, telegramId, telegramUsername, isTelegramWebApp, browserTelegramId]);
+  }, [
+    address,
+    telegramReady,
+    referralReady,
+    telegramId,
+    telegramUsername,
+    isTelegramWebApp,
+    inviterCode,
+    browserTelegramId,
+  ]);
 
-  // ==========================================
-  // Fetch Referral Levels
-  // ==========================================
+  // ====================================================
+  // Referral Levels
+  // ====================================================
 
   useEffect(() => {
     if (!address) return;
 
-    console.log("🔄 [LEVELS] Fetching referral levels...");
+    let cancelled = false;
 
     async function fetchLevels() {
       try {
-        const response = await api.get("/referral/levels/", {
-          params: { wallet_address: address },
-        });
+        const response =
+          await api.get(
+            "/referral/levels/",
+            {
+              params: {
+                wallet_address:
+                  address,
+              },
+            }
+          );
 
-        console.log("✅ [LEVELS] Response:", response.data);
-        setLevels(response.data?.levels || {});
-        setTotalReferrals(response.data?.total_referrals || 0);
+        if (cancelled) return;
 
-        const firstLevel = response.data?.levels?.level_1;
-        if (firstLevel?.users && firstLevel.users.length > 0) {
-          console.log("📊 [LEVELS] First user in level 1:", firstLevel.users[0]);
-          setDebugData(prev => ({
+        const returnedLevels =
+          response.data?.levels ||
+          {};
+
+        setLevels(
+          returnedLevels
+        );
+
+        setTotalReferrals(
+          response.data
+            ?.total_referrals || 0
+        );
+
+        const firstLevel =
+          returnedLevels.level_1;
+
+        if (
+          firstLevel?.users?.length
+        ) {
+          setDebugData((prev) => ({
             ...prev,
-            firstLevelUser: firstLevel.users[0],
+            firstLevelUser:
+              firstLevel.users[0],
           }));
         }
-
-      } catch (error) {
-        console.error("❌ [LEVELS] Failed:", error);
-        console.error("❌ [LEVELS] Backend:", error?.response?.data);
+      } catch (err) {
+        console.error(
+          "❌ Levels error:",
+          err?.response?.data ||
+            err
+        );
       }
     }
 
     fetchLevels();
+
+    return () => {
+      cancelled = true;
+    };
   }, [address]);
 
-  // ==========================================
-  // Test Data
-  // ==========================================
+  // ====================================================
+  // Test data
+  // ====================================================
 
   async function fetchTestData() {
     if (!address) return;
 
     try {
       setLoading(true);
-      const response = await api.get("/referral/levels/", {
-        params: {
-          wallet_address: address,
-          test: "true",
-        },
-      });
+      setError("");
 
-      setTestData(response.data?.levels || {});
+      const response =
+        await api.get(
+          "/referral/levels/",
+          {
+            params: {
+              wallet_address:
+                address,
+
+              test: "true",
+            },
+          }
+        );
+
+      setTestData(
+        response.data?.levels ||
+          {}
+      );
+
       setShowTestTable(true);
-    } catch (error) {
-      console.error("❌ [TEST] Failed:", error);
+    } catch (err) {
       setError(
-        `Failed to load test data: ${
-          error?.response?.data?.error ||
-          error?.message ||
-          "Unknown error"
-        }`
+        err?.response?.data
+          ?.error ||
+          err?.message ||
+          "Failed to load test data."
       );
     } finally {
       setLoading(false);
     }
   }
 
-  // ==========================================
-  // Telegram Mini App Referral Link
-  // ==========================================
+  // ====================================================
+  // Referral link
+  // ====================================================
 
-  const getMiniAppLink = () => {
+  const referralLink = useMemo(() => {
     if (!myCode) return "";
-    return `https://t.me/${BOT_USERNAME}/app?startapp=ref_${encodeURIComponent(myCode)}`;
-  };
 
-  const referralLink = getMiniAppLink();
+    return (
+      `https://t.me/${BOT_USERNAME}` +
+      `/app?startapp=ref_` +
+      encodeURIComponent(
+        myCode
+      )
+    );
+  }, [myCode]);
 
-  // ==========================================
-  // Open Mini App
-  // ==========================================
+  // ====================================================
+  // Open referral
+  // ====================================================
 
   function openReferralLink() {
     if (!referralLink) return;
-    const tg = getTelegramWebApp();
 
-    if (tg && typeof tg.openTelegramLink === "function") {
-      tg.openTelegramLink(referralLink);
+    const tg =
+      getTelegramWebApp();
+
+    if (
+      tg &&
+      typeof tg.openTelegramLink ===
+        "function"
+    ) {
+      tg.openTelegramLink(
+        referralLink
+      );
     } else {
-      window.open(referralLink, "_blank", "noopener,noreferrer");
+      window.open(
+        referralLink,
+        "_blank",
+        "noopener,noreferrer"
+      );
     }
   }
 
-  // ==========================================
+  // ====================================================
   // Share Telegram
-  // ==========================================
+  // ====================================================
 
   function shareOnTelegram() {
     if (!referralLink) return;
 
-    const message =
+    const text =
       `🎯 Join me on AI PolyNet!\n\n` +
       `🚀 Open the Mini App using my referral link:\n\n` +
       `${referralLink}\n\n` +
       `💎 Don't miss out on the rewards!`;
 
     const shareUrl =
-      `https://t.me/share/url` +
-      `?url=${encodeURIComponent(referralLink)}` +
-      `&text=${encodeURIComponent(message)}`;
+      "https://t.me/share/url" +
+      `?url=${encodeURIComponent(
+        referralLink
+      )}` +
+      `&text=${encodeURIComponent(
+        text
+      )}`;
 
-    const tg = getTelegramWebApp();
+    const tg =
+      getTelegramWebApp();
 
-    if (tg && typeof tg.openTelegramLink === "function") {
+    if (
+      tg &&
+      typeof tg.openTelegramLink ===
+        "function"
+    ) {
       try {
-        tg.openTelegramLink(shareUrl);
-      } catch (error) {
-        window.open(shareUrl, "_blank", "noopener,noreferrer");
+        tg.openTelegramLink(
+          shareUrl
+        );
+      } catch {
+        window.open(
+          shareUrl,
+          "_blank",
+          "noopener,noreferrer"
+        );
       }
     } else {
-      window.open(shareUrl, "_blank", "noopener,noreferrer");
+      window.open(
+        shareUrl,
+        "_blank",
+        "noopener,noreferrer"
+      );
     }
   }
 
-  // ==========================================
-  // Copy Referral Link
-  // ==========================================
+  // ====================================================
+  // Copy
+  // ====================================================
 
   async function copyReferralLink() {
     if (!referralLink) return;
 
     try {
-      await navigator.clipboard.writeText(referralLink);
-      alert("✅ Telegram referral link copied!");
-    } catch (error) {
-      console.error("❌ Copy failed:", error);
+      await navigator.clipboard.writeText(
+        referralLink
+      );
+
+      alert(
+        "✅ Telegram referral link copied!"
+      );
+    } catch (err) {
+      console.error(
+        "Copy failed:",
+        err
+      );
     }
   }
 
-  // ==========================================
-  // 🖼️ Render Level Table
-  // ==========================================
+  // ====================================================
+  // Level table
+  // ====================================================
 
-  function renderLevelTable(level, data) {
+  function renderLevelTable(
+    level,
+    data
+  ) {
     if (!data) {
       return (
         <div className="level-table">
           <div className="level-header">
-            <h4>⭐ Level {level}</h4>
+            <h4>
+              ⭐ Level {level}
+            </h4>
           </div>
-          <div className="empty-message">No data available</div>
+
+          <div className="empty-message">
+            No data available
+          </div>
         </div>
       );
     }
 
-    const users = data.users || [];
-    const count = data.count || 0;
-    const displayUsers = users.slice(0, 10);
+    const users =
+      data.users || [];
+
+    const count =
+      data.count || 0;
+
+    const displayUsers =
+      users.slice(0, 10);
 
     return (
       <div className="level-table">
         <div className="level-header">
-          <h4>⭐ Level {level}</h4>
-          <span className="level-count">Total: {count}</span>
+          <h4>
+            ⭐ Level {level}
+          </h4>
+
+          <span className="level-count">
+            Total: {count}
+          </span>
         </div>
 
         <div className="table-wrapper">
@@ -875,213 +1577,470 @@ export default function Referrals() {
               <tr>
                 <th>#</th>
                 <th>User</th>
-                <th>Investment (TON)</th>
+                <th>
+                  Investment (TON)
+                </th>
                 <th>Profit</th>
               </tr>
             </thead>
+
             <tbody>
-              {displayUsers.length === 0 ? (
+              {displayUsers.length ===
+              0 ? (
                 <tr>
-                  <td colSpan="4" className="empty-message">
-                    No users in this level
+                  <td
+                    colSpan="4"
+                    className="empty-message"
+                  >
+                    No users in this
+                    level
                   </td>
                 </tr>
               ) : (
-                displayUsers.map((user, index) => {
-                  const isString = typeof user === "string";
-                  
-                  const userTelegramId = isString ? null : user.telegram_id;
-                  const userTelegramUsername = isString ? null : user.telegram_username;
-                  const userWallet = isString ? user : user.wallet || "-";
-                  const investment = isString ? 0 : user.investment || 0;
-                  const profit = isString ? 0 : user.profit || 0;
-                  
-                  let displayName = '';
-                  let displayUsername = null;
-                  
-                  if (userTelegramUsername && 
-                      userTelegramUsername !== 'browser' && 
-                      !userTelegramUsername.startsWith('browser_') &&
-                      userTelegramUsername !== 'null' && 
-                      userTelegramUsername !== 'undefined' &&
-                      userTelegramUsername !== '') {
-                    displayName = userTelegramUsername;
-                    displayUsername = `@${userTelegramUsername}`;
-                  } else if (userTelegramId && 
-                           userTelegramId !== '-' && 
-                           userTelegramId !== 'browser' && 
-                           typeof userTelegramId === 'number' && 
-                           userTelegramId > 0) {
-                    displayName = String(userTelegramId);
-                  } else if (userWallet && userWallet !== '-') {
-                    if (userWallet.startsWith('user_')) {
-                      displayName = userWallet.replace('user_', 'User ');
-                    } else if (userWallet.length > 10) {
-                      displayName = `${userWallet.slice(0, 6)}...${userWallet.slice(-4)}`;
-                    } else {
-                      displayName = userWallet;
-                    }
-                  } else {
-                    displayName = 'Anonymous User';
-                  }
-                  
-                  const avatarUrl = getTelegramAvatar(userTelegramId, userTelegramUsername);
+                displayUsers.map(
+                  (
+                    user,
+                    index
+                  ) => {
+                    const isString =
+                      typeof user ===
+                      "string";
 
-                  return (
-                    <tr key={index}>
-                      <td>{index + 1}</td>
-                      <td className="user-cell">
-                        <div className="user-avatar-wrapper">
-                          <img
-                            src={avatarUrl}
-                            alt={displayName}
-                            className="user-avatar"
-                            onError={(e) => {
-                              e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=random&size=32&rounded=true`;
-                            }}
-                          />
-                          <div className="user-info">
-                            <span className="user-name">{displayName}</span>
-                            {displayUsername && (
-                              <span className="user-username">{displayUsername}</span>
-                            )}
+                    const userTelegramId =
+                      isString
+                        ? null
+                        : user.telegram_id;
+
+                    const userTelegramUsername =
+                      isString
+                        ? null
+                        : user.telegram_username;
+
+                    const userWallet =
+                      isString
+                        ? user
+                        : user.wallet ||
+                          "-";
+
+                    const investment =
+                      isString
+                        ? 0
+                        : user.investment ||
+                          0;
+
+                    const profit =
+                      isString
+                        ? 0
+                        : user.profit ||
+                          0;
+
+                    let displayName =
+                      "Anonymous User";
+
+                    let displayUsername =
+                      null;
+
+                    if (
+                      userTelegramUsername &&
+                      userTelegramUsername !==
+                        "browser" &&
+                      !userTelegramUsername.startsWith(
+                        "browser_"
+                      )
+                    ) {
+                      displayName =
+                        userTelegramUsername;
+
+                      displayUsername =
+                        `@${userTelegramUsername}`;
+                    } else if (
+                      userTelegramId &&
+                      Number(
+                        userTelegramId
+                      ) > 0
+                    ) {
+                      displayName =
+                        String(
+                          userTelegramId
+                        );
+                    } else if (
+                      userWallet &&
+                      userWallet !== "-"
+                    ) {
+                      if (
+                        userWallet.startsWith(
+                          "user_"
+                        )
+                      ) {
+                        displayName =
+                          userWallet.replace(
+                            "user_",
+                            "User "
+                          );
+                      } else if (
+                        userWallet.length >
+                        10
+                      ) {
+                        displayName =
+                          `${userWallet.slice(
+                            0,
+                            6
+                          )}...${userWallet.slice(
+                            -4
+                          )}`;
+                      } else {
+                        displayName =
+                          userWallet;
+                      }
+                    }
+
+                    const avatarUrl =
+                      getTelegramAvatar(
+                        userTelegramId,
+                        userTelegramUsername
+                      );
+
+                    return (
+                      <tr
+                        key={`${index}-${userTelegramId || userWallet}`}
+                      >
+                        <td>
+                          {index + 1}
+                        </td>
+
+                        <td className="user-cell">
+                          <div className="user-avatar-wrapper">
+                            <img
+                              src={
+                                avatarUrl
+                              }
+                              alt={
+                                displayName
+                              }
+                              className="user-avatar"
+                              onError={(
+                                e
+                              ) => {
+                                e.currentTarget.src =
+                                  `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                                    displayName
+                                  )}&background=random&size=64&rounded=true`;
+                              }}
+                            />
+
+                            <div className="user-info">
+                              <span className="user-name">
+                                {
+                                  displayName
+                                }
+                              </span>
+
+                              {displayUsername && (
+                                <span className="user-username">
+                                  {
+                                    displayUsername
+                                  }
+                                </span>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="investment-cell">{investment}</td>
-                      <td className="profit-cell">+ {profit}</td>
-                    </tr>
-                  );
-                })
+                        </td>
+
+                        <td className="investment-cell">
+                          {
+                            investment
+                          }
+                        </td>
+
+                        <td className="profit-cell">
+                          + {profit}
+                        </td>
+                      </tr>
+                    );
+                  }
+                )
               )}
             </tbody>
           </table>
         </div>
 
         {users.length > 10 && (
-          <div className="show-more">+ {users.length - 10} more users</div>
+          <div className="show-more">
+            + {users.length - 10} more
+            users
+          </div>
         )}
       </div>
     );
   }
 
-  // ==========================================
-  // Wallet Not Connected
-  // ==========================================
+  // ====================================================
+  // Wallet required
+  // ====================================================
 
   if (!address) {
     return (
       <div className="wallet-required">
-        🔌 Please connect your wallet first.
+        🔌 Please connect your wallet
+        first.
       </div>
     );
   }
 
-  // ==========================================
-  // Main Render
-  // ==========================================
+  // ====================================================
+  // Render
+  // ====================================================
 
   return (
     <div className="referral-dashboard">
-      <DebugPanel data={debugData} />
+      <DebugPanel
+        data={debugData}
+      />
 
-      <h2>🎯 Referral Dashboard</h2>
+      <h2>
+        🎯 Referral Dashboard
+      </h2>
 
-      {loading && <div className="loading-spinner">Loading...</div>}
-      {error && <div className="error-message">❌ {error}</div>}
-      {!referralReady && <div className="loading-spinner">🔗 Preparing referral...</div>}
+      {!telegramReady && (
+        <div className="loading-spinner">
+          📱 Detecting Telegram...
+        </div>
+      )}
+
+      {loading && (
+        <div className="loading-spinner">
+          Loading...
+        </div>
+      )}
+
+      {error && (
+        <div className="error-message">
+          ❌ {error}
+        </div>
+      )}
+
+      {!referralReady && (
+        <div className="loading-spinner">
+          🔗 Preparing referral...
+        </div>
+      )}
 
       {myCode ? (
         <>
           <div className="referral-link-section">
-            <p className="referral-link-label">🔗 Telegram Mini App Invite Link</p>
+            <p className="referral-link-label">
+              🔗 Telegram Mini App
+              Invite Link
+            </p>
 
             <div className="link-actions">
-              <input value={referralLink} readOnly className="link-input" />
-              <button onClick={openReferralLink} disabled={!referralLink} className="btn-open">
+              <input
+                value={referralLink}
+                readOnly
+                className="link-input"
+              />
+
+              <button
+                onClick={
+                  openReferralLink
+                }
+                disabled={
+                  !referralLink
+                }
+                className="btn-open"
+              >
                 🚀 Open Mini App
               </button>
-              <button onClick={copyReferralLink} disabled={!referralLink} className="btn-copy">
+
+              <button
+                onClick={
+                  copyReferralLink
+                }
+                disabled={
+                  !referralLink
+                }
+                className="btn-copy"
+              >
                 📋 Copy
               </button>
-              <button onClick={shareOnTelegram} disabled={!referralLink} className="btn-share-telegram">
+
+              <button
+                onClick={
+                  shareOnTelegram
+                }
+                disabled={
+                  !referralLink
+                }
+                className="btn-share-telegram"
+              >
                 📤 Share on Telegram
               </button>
             </div>
 
             <div className="stats-box">
               <div className="stat-item">
-                <span className="stat-label">👥 Direct Invites</span>
-                <span className="stat-value">{refCount === null ? "..." : refCount}</span>
+                <span className="stat-label">
+                  👥 Direct Invites
+                </span>
+
+                <span className="stat-value">
+                  {refCount === null
+                    ? "..."
+                    : refCount}
+                </span>
               </div>
+
               <div className="stat-item">
-                <span className="stat-label">🌳 Total Tree</span>
-                <span className="stat-value">{totalReferrals}</span>
+                <span className="stat-label">
+                  🌳 Total Tree
+                </span>
+
+                <span className="stat-value">
+                  {totalReferrals}
+                </span>
               </div>
             </div>
 
             <div className="telegram-status">
-              {isTelegramWebApp ? (
-                <span className="status-active">✅ Connected to Telegram</span>
+              {isTelegramWebApp &&
+              telegramId ? (
+                <span className="status-active">
+                  ✅ Connected to
+                  Telegram
+                </span>
               ) : (
-                <span className="status-inactive">🌐 Browser Mode</span>
+                <span className="status-inactive">
+                  🌐 Browser Mode
+                </span>
               )}
             </div>
 
+            {telegramId &&
+              isTelegramWebApp && (
+                <div className="info-note">
+                  👤 Telegram ID:{" "}
+                  <b>
+                    {telegramId}
+                  </b>
+
+                  {telegramUsername && (
+                    <>
+                      {" "}
+                      · @{telegramUsername}
+                    </>
+                  )}
+                </div>
+              )}
+
             {inviterCode && (
               <div className="info-note">
-                🎁 Invited by: <b>{inviterCode}</b>
+                🎁 Invited by:{" "}
+                <b>
+                  {inviterCode}
+                </b>
               </div>
             )}
 
             <div className="info-note">
-              💡 This link opens the Telegram Mini App and keeps the referral code.
+              💡 This link opens the
+              Telegram Mini App and
+              keeps the referral code.
             </div>
           </div>
 
           <div className="levels-section">
-            <h3>🔺 Referral Tree (5 Levels)</h3>
+            <h3>
+              🔺 Referral Tree (5
+              Levels)
+            </h3>
 
             <div className="levels-grid">
-              {[1, 2, 3, 4, 5].map((level) => (
-                <div key={level} className="level-card">
-                  {renderLevelTable(level, levels?.[`level_${level}`])}
-                </div>
-              ))}
+              {[1, 2, 3, 4, 5].map(
+                (level) => (
+                  <div
+                    key={level}
+                    className="level-card"
+                  >
+                    {renderLevelTable(
+                      level,
+                      levels?.[
+                        `level_${level}`
+                      ]
+                    )}
+                  </div>
+                )
+              )}
             </div>
 
             <div className="test-actions">
-              <button onClick={fetchTestData} className="btn-test" disabled={loading}>
+              <button
+                onClick={
+                  fetchTestData
+                }
+                className="btn-test"
+                disabled={loading}
+              >
                 🧪 Show Test Table
               </button>
             </div>
 
-            {showTestTable && testData && (
-              <div className="test-table-section">
-                <div className="test-header">
-                  <h3>🧪 Test Data (5 Levels)</h3>
-                  <button onClick={() => setShowTestTable(false)} className="btn-close">
-                    ✕ Close
-                  </button>
-                </div>
+            {showTestTable &&
+              testData && (
+                <div className="test-table-section">
+                  <div className="test-header">
+                    <h3>
+                      🧪 Test Data (5
+                      Levels)
+                    </h3>
 
-                <div className="levels-grid">
-                  {[1, 2, 3, 4, 5].map((level) => (
-                    <div key={`test-${level}`} className="level-card test-card">
-                      {renderLevelTable(level, testData?.[`level_${level}`])}
-                    </div>
-                  ))}
-                </div>
+                    <button
+                      onClick={() =>
+                        setShowTestTable(
+                          false
+                        )
+                      }
+                      className="btn-close"
+                    >
+                      ✕ Close
+                    </button>
+                  </div>
 
-                <div className="test-note">
-                  ⚡ This is test data showing how the referral tree will look with sample users.
+                  <div className="levels-grid">
+                    {[
+                      1, 2, 3, 4, 5,
+                    ].map(
+                      (level) => (
+                        <div
+                          key={`test-${level}`}
+                          className="level-card test-card"
+                        >
+                          {renderLevelTable(
+                            level,
+                            testData?.[
+                              `level_${level}`
+                            ]
+                          )}
+                        </div>
+                      )
+                    )}
+                  </div>
+
+                  <div className="test-note">
+                    ⚡ This is test
+                    data showing
+                    how the referral
+                    tree will look
+                    with sample
+                    users.
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
           </div>
         </>
       ) : (
-        <div className="loading-spinner">Loading referral data...</div>
+        <div className="loading-spinner">
+          Loading referral data...
+        </div>
       )}
     </div>
   );
