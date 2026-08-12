@@ -43,13 +43,14 @@ body,
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 24px;
   filter: drop-shadow(0 0 12px #00e1ff);
   text-align: center;
 }
 
 .hamburger-menu {
   position: relative;
+  margin-right: 4px;
   display: flex;
   align-items: center;
 }
@@ -103,29 +104,31 @@ body,
 
 .hamburger-dropdown {
   position: absolute;
-  top: calc(100% + 12px);
+  top: calc(100% + 16px);
   left: 0;
-  width: 235px;
-  padding: 9px;
-  border: 1px solid rgba(125, 211, 252, 0.28);
-  border-radius: 17px;
-  background: rgba(5, 24, 48, 0.96);
-  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.4), 0 0 28px rgba(56, 189, 248, 0.14);
-  backdrop-filter: blur(22px);
-  -webkit-backdrop-filter: blur(22px);
+  width: 270px;
+  padding: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(186, 230, 253, 0.38);
+  border-radius: 20px;
+  background: linear-gradient(145deg, rgba(125, 211, 252, 0.18), rgba(3, 24, 48, 0.64));
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 0 32px rgba(56, 189, 248, 0.2);
+  backdrop-filter: blur(24px) saturate(145%);
+  -webkit-backdrop-filter: blur(24px) saturate(145%);
   animation: menu-open 0.2s ease-out;
 }
 
 .menu-shopping,
 .menu-support {
   width: 100%;
-  min-height: 48px;
-  padding: 10px 11px;
+  min-height: 58px;
+  padding: 12px 14px;
   border: 0;
   border-radius: 12px;
   color: #e0f2fe;
   font-family: inherit;
-  font-size: 14px;
+  font-size: 15px;
+  font-weight: 650;
   text-align: left;
   display: flex;
   align-items: center;
@@ -134,23 +137,27 @@ body,
 }
 
 .menu-shopping {
-  opacity: 0.78;
+  margin-bottom: 7px;
+  background: rgba(255, 255, 255, 0.055);
+  opacity: 0.86;
   cursor: not-allowed;
 }
 
 .menu-support {
-  background: transparent;
+  border: 1px solid transparent;
+  background: rgba(56, 189, 248, 0.055);
   cursor: pointer;
   transition: 0.2s ease;
 }
 
 .menu-support:hover {
   background: rgba(56, 189, 248, 0.13);
+  border-color: rgba(125, 211, 252, 0.22);
   color: #fff;
 }
 
 .coming-soon {
-  padding: 4px 7px;
+  padding: 5px 8px;
   border: 1px solid rgba(125, 211, 252, 0.26);
   border-radius: 999px;
   background: rgba(56, 189, 248, 0.1);
@@ -319,6 +326,10 @@ body,
     padding: calc(30px + 24px) 12px 90px;
   }
 
+  .header {
+    gap: 18px;
+  }
+
   .header img {
     width: 56px;
   }
@@ -330,7 +341,8 @@ body,
   }
 
   .hamburger-dropdown {
-    width: min(225px, 78vw);
+    left: -4px;
+    width: min(270px, calc(100vw - 24px));
   }
 
   .header h1 {
