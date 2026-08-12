@@ -23,7 +23,6 @@ const BOT_USERNAME = "Aipolynetbot";
 const loadUserDataFromStorage = () => {
   try {
     const data = localStorage.getItem(USER_DATA_KEY);
-    console.log("💾 [DEBUG] loadUserDataFromStorage:", data);
     return data ? JSON.parse(data) : null;
   } catch (error) {
     console.error("❌ Error parsing localStorage:", error);
@@ -36,7 +35,6 @@ const saveUserDataToStorage = (newData) => {
     const currentData = loadUserDataFromStorage() || {};
     const mergedData = { ...currentData, ...newData };
     localStorage.setItem(USER_DATA_KEY, JSON.stringify(mergedData));
-    console.log("💾 [DEBUG] User data saved:", mergedData);
   } catch (error) {
     console.error("❌ Error saving localStorage:", error);
   }
@@ -47,9 +45,7 @@ const saveUserDataToStorage = (newData) => {
 // ==========================================
 
 const getTelegramWebApp = () => {
-  const tg = window.Telegram?.WebApp || null;
-  console.log("📱 [DEBUG] getTelegramWebApp():", tg);
-  return tg;
+  return window.Telegram?.WebApp || null;
 };
 
 // ==========================================
@@ -57,34 +53,187 @@ const getTelegramWebApp = () => {
 // ==========================================
 
 const getTelegramAvatar = (telegramId, username) => {
-  console.log(`🖼️ [AVATAR] telegramId: ${telegramId}, username: ${username}`);
-  
-  // اگر username داشته باشه، از avatar.bot استفاده میکنیم
   if (username && 
       username !== 'browser' && 
       !username.startsWith('browser_') &&
       username !== 'null' && 
       username !== 'undefined' &&
       username !== '') {
-    const url = `https://t.me/i/userpic/320/${username}.jpg`;
-    console.log(`✅ [AVATAR] Using Telegram avatar: ${url}`);
-    return url;
+    return `https://t.me/i/userpic/320/${username}.jpg`;
   }
   
-  // اگر telegramId داشته باشه، از ui-avatars استفاده میکنیم
   if (telegramId && 
       telegramId !== '-' && 
       telegramId !== 'browser' && 
       typeof telegramId === 'number' && 
       telegramId > 0) {
-    const url = `https://ui-avatars.com/api/?name=${telegramId}&background=random&size=32&rounded=true`;
-    console.log(`✅ [AVATAR] Using UI Avatar: ${url}`);
-    return url;
+    return `https://ui-avatars.com/api/?name=${telegramId}&background=random&size=32&rounded=true`;
   }
   
-  // fallback
-  console.log(`⚠️ [AVATAR] Using fallback avatar`);
   return `https://ui-avatars.com/api/?name=User&background=random&size=32&rounded=true`;
+};
+
+// ==========================================
+// 🐛 کامپوننت دیباگ روی صفحه
+// ==========================================
+
+const DebugPanel = ({ data }) => {
+  const [isOpen, setIsOpen] = useState(true);
+  
+  if (!isOpen) {
+    return (
+      <button 
+        onClick={() => setIsOpen(true)}
+        style={{
+          position: 'fixed',
+          bottom: '20px',
+          right: '20px',
+          zIndex: 99999,
+          padding: '10px 16px',
+          background: '#dc3545',
+          color: 'white',
+          border: 'none',
+          borderRadius: '8px',
+          cursor: 'pointer',
+          fontSize: '14px',
+          fontWeight: 'bold',
+        }}
+      >
+        🐛 Show Debug
+      </button>
+    );
+  }
+  
+  return (
+    <div style={{
+      position: 'fixed',
+      top: '10px',
+      right: '10px',
+      zIndex: 99999,
+      width: '480px',
+      maxHeight: '80vh',
+      background: '#1a1a2e',
+      color: '#e0e0e0',
+      borderRadius: '12px',
+      padding: '16px',
+      boxShadow: '0 8px 32px rgba(0,0,0,0.9)',
+      fontFamily: 'monospace',
+      fontSize: '12px',
+      overflow: 'auto',
+      border: '1px solid #333',
+    }}>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '12px',
+        borderBottom: '1px solid #333',
+        paddingBottom: '8px',
+      }}>
+        <span style={{ color: '#4CAF50', fontWeight: 'bold' }}>
+          🐛 Telegram Username Debug
+        </span>
+        <button 
+          onClick={() => setIsOpen(false)}
+          style={{
+            background: 'transparent',
+            color: '#888',
+            border: 'none',
+            cursor: 'pointer',
+            fontSize: '18px',
+          }}
+        >
+          ✕
+        </button>
+      </div>
+      
+      <div style={{ marginBottom: '8px' }}>
+        <div style={{ color: '#FFD93D', fontWeight: 'bold', marginBottom: '4px' }}>
+          📱 Telegram User Info
+        </div>
+        <div style={{ paddingLeft: '12px', fontSize: '11px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+            <span style={{ color: '#888' }}>Telegram ID:</span>
+            <span style={{ color: '#4CAF50' }}>{data?.telegramId || '❌ Not found'}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+            <span style={{ color: '#888' }}>Username:</span>
+            <span style={{ color: '#4CAF50' }}>{data?.telegramUsername || '❌ Not found'}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+            <span style={{ color: '#888' }}>Is Telegram WebApp:</span>
+            <span style={{ color: data?.isTelegramWebApp ? '#4CAF50' : '#FF6B6B' }}>
+              {data?.isTelegramWebApp ? '✅ Yes' : '❌ No'}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: '8px', borderTop: '1px solid #333', paddingTop: '8px' }}>
+        <div style={{ color: '#2196F3', fontWeight: 'bold', marginBottom: '4px' }}>
+          📤 Payload to Backend
+        </div>
+        <div style={{ 
+          background: '#0d0d1a', 
+          padding: '8px', 
+          borderRadius: '4px',
+          fontSize: '10px',
+          overflow: 'auto',
+          maxHeight: '150px',
+        }}>
+          <pre style={{ margin: 0, color: '#d4d4d4' }}>
+            {JSON.stringify(data?.payload, null, 2) || 'Not sent yet'}
+          </pre>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: '8px', borderTop: '1px solid #333', paddingTop: '8px' }}>
+        <div style={{ color: '#00BCD4', fontWeight: 'bold', marginBottom: '4px' }}>
+          📥 Backend Response
+        </div>
+        <div style={{ 
+          background: '#0d0d1a', 
+          padding: '8px', 
+          borderRadius: '4px',
+          fontSize: '10px',
+          overflow: 'auto',
+          maxHeight: '100px',
+        }}>
+          <pre style={{ margin: 0, color: '#d4d4d4' }}>
+            {JSON.stringify(data?.backendResponse, null, 2) || 'Not received yet'}
+          </pre>
+        </div>
+      </div>
+
+      <div style={{ borderTop: '1px solid #333', paddingTop: '8px' }}>
+        <div style={{ color: '#FF9800', fontWeight: 'bold', marginBottom: '4px' }}>
+          📊 Level Data (First User)
+        </div>
+        <div style={{ 
+          background: '#0d0d1a', 
+          padding: '8px', 
+          borderRadius: '4px',
+          fontSize: '10px',
+          overflow: 'auto',
+          maxHeight: '100px',
+        }}>
+          <pre style={{ margin: 0, color: '#d4d4d4' }}>
+            {JSON.stringify(data?.firstLevelUser, null, 2) || 'No users yet'}
+          </pre>
+        </div>
+      </div>
+
+      <div style={{ borderTop: '1px solid #333', paddingTop: '8px', marginTop: '8px' }}>
+        <div style={{ color: '#9C27B0', fontWeight: 'bold', marginBottom: '4px' }}>
+          💾 localStorage
+        </div>
+        <div style={{ fontSize: '10px', color: '#888' }}>
+          <div>inviter_code: {localStorage.getItem('inviter_code') || 'null'}</div>
+          <div>telegram_username: {localStorage.getItem('telegram_username') || 'null'}</div>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 // ==========================================
@@ -117,139 +266,73 @@ export default function Referrals() {
 
   const [inviterCode, setInviterCode] = useState(null);
   const [referralReady, setReferralReady] = useState(false);
+  const [debugData, setDebugData] = useState({});
+  const [backendResponse, setBackendResponse] = useState(null);
 
   const hasFetched = useRef(false);
 
   // ==========================================
-  // 🔍 دیباگ: نمایش state ها
+  // Telegram Initialization
   // ==========================================
 
   useEffect(() => {
-    console.log("==================================================");
-    console.log("🔍 [STATE DEBUG] CURRENT STATE");
-    console.log("==================================================");
-    console.log("📱 telegramId:", telegramId);
-    console.log("📱 telegramUsername:", telegramUsername);
-    console.log("📱 isTelegramWebApp:", isTelegramWebApp);
-    console.log("💰 address:", address);
-    console.log("🔗 inviterCode:", inviterCode);
-    console.log("==================================================");
-  }, [telegramId, telegramUsername, isTelegramWebApp, address, inviterCode]);
-
-  // ==========================================
-  // Wallet Debug
-  // ==========================================
-
-  useEffect(() => {
-    console.log("==================================================");
-    console.log("💰 [REFERRAL DEBUG] WALLET CHANGED");
-    console.log("==================================================");
-    console.log("💰 TON Wallet:", tonWallet);
-    console.log("💰 Wallet address:", address);
-    console.log("🔗 Referral ready:", referralReady);
-    console.log("🎯 Current inviterCode:", inviterCode);
-    console.log("==================================================");
-  }, [tonWallet, address, referralReady, inviterCode]);
-
-  // ==========================================
-  // Telegram Initialization + DEBUG
-  // ==========================================
-
-  useEffect(() => {
-    console.log("==================================================");
-    console.log("🔵 [REFERRAL DEBUG] STEP 1 - INIT");
-    console.log("==================================================");
-    console.log("🌐 Current URL:", window.location.href);
-    console.log("🌐 Current pathname:", window.location.pathname);
-    console.log("🌐 Current search:", window.location.search);
-
     const tg = getTelegramWebApp();
-    console.log("📱 Telegram WebApp object:", tg);
 
     if (!tg) {
-      console.log("⚠️ [REFERRAL DEBUG] STEP 2 - Telegram NOT detected");
       setIsTelegramWebApp(false);
-
       const savedReferral = getInviterCode();
-      console.log("💾 Stored referral:", savedReferral);
-
       setInviterCode(savedReferral || false);
       setReferralReady(true);
-      console.log("✅ Browser mode referral ready");
+      
+      setDebugData(prev => ({
+        ...prev,
+        isTelegramWebApp: false,
+        telegramId: null,
+        telegramUsername: null,
+      }));
+      
       return;
     }
 
-    console.log("✅ [REFERRAL DEBUG] STEP 2 - Telegram detected");
     tg.ready();
     tg.expand();
     setIsTelegramWebApp(true);
 
-    console.log("📦 Telegram initDataUnsafe:", tg.initDataUnsafe);
-    console.log("📦 Telegram initData:", tg.initData);
-
     const user = tg.initDataUnsafe?.user || null;
-    console.log("👤 Telegram user object:", user);
 
     if (user) {
       const tgId = user.id;
       const tgUsername = user.username || null;
 
-      console.log("==================================================");
-      console.log("🔍 [TELEGRAM USER DEBUG]");
-      console.log("==================================================");
-      console.log("✅ Telegram ID:", tgId);
-      console.log("✅ Telegram Username:", tgUsername);
-      console.log("✅ Telegram First Name:", user.first_name);
-      console.log("✅ Telegram Last Name:", user.last_name);
-      console.log("✅ Telegram Language:", user.language_code);
-      console.log("✅ Full user object:", user);
-      console.log("==================================================");
-
       setTelegramId(tgId);
       setTelegramUsername(tgUsername);
+
+      setDebugData(prev => ({
+        ...prev,
+        isTelegramWebApp: true,
+        telegramId: tgId,
+        telegramUsername: tgUsername,
+        user: user,
+      }));
 
       saveUserDataToStorage({
         telegramId: tgId,
         telegramUsername: tgUsername,
         isTelegram: true,
       });
-
-      console.log("💾 Saved to localStorage:");
-      console.log("  - telegramId:", tgId);
-      console.log("  - telegramUsername:", tgUsername);
     } else {
-      console.warn("⚠️ Telegram user not available in initDataUnsafe");
-      console.log("📦 Full initDataUnsafe:", tg.initDataUnsafe);
+      setDebugData(prev => ({
+        ...prev,
+        isTelegramWebApp: true,
+        telegramId: null,
+        telegramUsername: null,
+        error: 'No user in initDataUnsafe',
+      }));
     }
 
-    console.log("==================================================");
-    console.log("🟡 [REFERRAL DEBUG] STEP 3 - START PARAM");
-    console.log("==================================================");
-
-    const startParam = tg.initDataUnsafe?.start_param || null;
-    console.log("🎯 tg.initDataUnsafe.start_param:", startParam);
-
-    const urlParams = new URLSearchParams(window.location.search);
-    const tgWebAppStartParam = urlParams.get("tgWebAppStartParam");
-    console.log("🎯 URL tgWebAppStartParam:", tgWebAppStartParam);
-    console.log("🎯 URL parameters:", Object.fromEntries(urlParams.entries()));
-
-    console.log("==================================================");
-    console.log("🟠 [REFERRAL DEBUG] STEP 4 - CAPTURE");
-    console.log("==================================================");
-
     const capturedCode = captureInviterCode();
-    console.log("🎯 captureInviterCode() returned:", capturedCode);
-
-    const storedAfterCapture = getInviterCode();
-    console.log("💾 getInviterCode() after capture:", storedAfterCapture);
-    console.log("💾 Raw localStorage inviter_code:", localStorage.getItem("inviter_code"));
-
     setInviterCode(capturedCode || false);
     setReferralReady(true);
-
-    console.log("✅ [REFERRAL DEBUG] Referral detection READY");
-    console.log("==================================================");
   }, []);
 
   // ==========================================
@@ -257,16 +340,8 @@ export default function Referrals() {
   // ==========================================
 
   useEffect(() => {
-    if (!address) {
-      console.log("💰 [DEBUG] No wallet address yet");
-      return;
-    }
-
-    console.log("💰 [DEBUG] Saving wallet address:", address);
-    saveUserDataToStorage({
-      walletAddress: address,
-    });
-    console.log("💾 Wallet address saved:", address);
+    if (!address) return;
+    saveUserDataToStorage({ walletAddress: address });
   }, [address]);
 
   // ==========================================
@@ -275,9 +350,7 @@ export default function Referrals() {
 
   const browserTelegramId = useMemo(() => {
     if (!address) {
-      const generated = Math.floor(Date.now() / 1000) + 2000000000000;
-      console.log("🌐 [DEBUG] Generated browser Telegram ID:", generated);
-      return generated;
+      return Math.floor(Date.now() / 1000) + 2000000000000;
     }
 
     let hash = 0;
@@ -287,9 +360,7 @@ export default function Referrals() {
       hash = hash & hash;
     }
 
-    const generated = Math.abs(hash) + 1000000000000;
-    console.log("🌐 [DEBUG] Browser Telegram ID:", generated);
-    return generated;
+    return Math.abs(hash) + 1000000000000;
   }, [address]);
 
   // ==========================================
@@ -297,33 +368,7 @@ export default function Referrals() {
   // ==========================================
 
   useEffect(() => {
-    console.log("==================================================");
-    console.log("🔴 [REFERRAL DEBUG] REGISTER EFFECT");
-    console.log("==================================================");
-    console.log("💰 address:", address);
-    console.log("🔗 referralReady:", referralReady);
-    console.log("🎯 inviterCode:", inviterCode);
-    console.log("📱 telegramId:", telegramId);
-    console.log("📱 telegramUsername:", telegramUsername);
-    console.log("📱 isTelegramWebApp:", isTelegramWebApp);
-
-    if (!address) {
-      console.log("⏳ [REGISTER] No wallet - waiting...");
-      setMyCode(null);
-      setRefCount(null);
-      setError("");
-      return;
-    }
-
-    if (!referralReady) {
-      console.log("⏳ [REGISTER] Waiting for referral detection...");
-      return;
-    }
-
-    if (hasFetched.current) {
-      console.log("⛔️ [REGISTER] Already registered - skipping");
-      return;
-    }
+    if (!address || !referralReady || hasFetched.current) return;
 
     let cancelled = false;
     hasFetched.current = true;
@@ -334,55 +379,46 @@ export default function Referrals() {
         setError("");
 
         const storedInviter = getInviterCode();
-        console.log("💾 [REGISTER] storedInviter:", storedInviter);
-
         const finalInviterCode = inviterCode || storedInviter || null;
-        console.log("🎯 [REGISTER] FINAL INVITER CODE:", finalInviterCode);
 
         const savedData = loadUserDataFromStorage();
-        console.log("📂 [REGISTER] Saved user data:", savedData);
 
         let finalTelegramId;
         let finalTelegramUsername = null;
 
-        console.log("==================================================");
-        console.log("🔍 [TELEGRAM DETECTION DEBUG]");
-        console.log("==================================================");
-        console.log("📂 savedData?.telegramId:", savedData?.telegramId);
-        console.log("📂 savedData?.telegramUsername:", savedData?.telegramUsername);
-        console.log("📱 telegramId (state):", telegramId);
-        console.log("📱 telegramUsername (state):", telegramUsername);
-        console.log("📱 isTelegramWebApp:", isTelegramWebApp);
-        console.log("🌐 browserTelegramId:", browserTelegramId);
-        console.log("==================================================");
+        // ==========================================
+        // 🐛 دیباگ: تصمیم‌گیری برای Telegram ID
+        // ==========================================
+        console.log('🐛 [DEBUG] Telegram detection decision:');
+        console.log('  savedData?.telegramId:', savedData?.telegramId);
+        console.log('  savedData?.telegramUsername:', savedData?.telegramUsername);
+        console.log('  telegramId (state):', telegramId);
+        console.log('  telegramUsername (state):', telegramUsername);
+        console.log('  isTelegramWebApp:', isTelegramWebApp);
 
         if (savedData?.telegramId && savedData.telegramId > 0) {
           finalTelegramId = savedData.telegramId;
           finalTelegramUsername = savedData.telegramUsername || null;
-          console.log("📂 Using Telegram ID from storage:", finalTelegramId);
-          console.log("📂 Using Telegram username from storage:", finalTelegramUsername);
+          console.log('✅ Using Telegram ID from storage:', finalTelegramId);
         } else if (isTelegramWebApp && telegramId && telegramId > 0) {
           finalTelegramId = telegramId;
           finalTelegramUsername = telegramUsername;
-          console.log("📱 Using real Telegram ID:", finalTelegramId);
-          console.log("📱 Using real Telegram username:", finalTelegramUsername);
+          console.log('✅ Using real Telegram ID:', finalTelegramId);
         } else {
           finalTelegramId = browserTelegramId;
-          finalTelegramUsername = `browser_${address.slice(0, 8)}`;
-          console.log("🌐 Using browser Telegram ID:", finalTelegramId);
-          console.log("🌐 Using browser Telegram username:", finalTelegramUsername);
+          finalTelegramUsername = null;
+          console.log('⚠️ Using browser Telegram ID:', finalTelegramId);
         }
 
         // ==========================================
-        // 🚨 CRITICAL DEBUG: نمایش نهایی
+        // 🐛 به‌روزرسانی دیباگ
         // ==========================================
-        console.log("==================================================");
-        console.log("🔴 [FINAL TELEGRAM DATA]");
-        console.log("==================================================");
-        console.log("✅ FINAL Telegram ID:", finalTelegramId);
-        console.log("✅ FINAL Telegram Username:", finalTelegramUsername);
-        console.log("✅ FINAL Is Telegram:", isTelegramWebApp || savedData?.isTelegram || false);
-        console.log("==================================================");
+        setDebugData(prev => ({
+          ...prev,
+          finalTelegramId,
+          finalTelegramUsername,
+          source: savedData?.telegramId ? 'storage' : (isTelegramWebApp ? 'telegram' : 'browser'),
+        }));
 
         const payload = {
           wallet_address: address,
@@ -392,62 +428,46 @@ export default function Referrals() {
           is_telegram: isTelegramWebApp || savedData?.isTelegram || false,
         };
 
-        console.log("📦 FULL /connect/ PAYLOAD:");
-        console.log(JSON.stringify(payload, null, 2));
-        console.log("🚀 Sending POST /connect/ ...");
+        // ==========================================
+        // 🐛 ذخیره payload در دیباگ
+        // ==========================================
+        setDebugData(prev => ({
+          ...prev,
+          payload: payload,
+        }));
+
+        console.log('📤 Sending payload:', payload);
 
         const res = await api.post("/connect/", payload);
 
-        if (cancelled) {
-          console.log("⚠️ Request cancelled");
-          return;
-        }
+        if (cancelled) return;
 
-        console.log("==================================================");
-        console.log("🟢 [REFERRAL DEBUG] STEP 6 - BACKEND RESPONSE");
-        console.log("==================================================");
-        console.log("✅ HTTP status:", res.status);
-        console.log("📥 Backend response:", res.data);
-        console.log("👤 Returned user:", res.data?.user);
-        console.log("🎯 Returned referral code:", res.data?.user?.referral_code);
-        console.log("🎯 Returned telegram_username:", res.data?.user?.telegram_username);
-        console.log("==================================================");
+        // ==========================================
+        // 🐛 ذخیره پاسخ در دیباگ
+        // ==========================================
+        setBackendResponse(res.data);
+        setDebugData(prev => ({
+          ...prev,
+          backendResponse: res.data,
+        }));
+
+        console.log('✅ Backend response:', res.data);
 
         const returnedCode = res.data?.user?.referral_code || null;
-        console.log("🎟️ My referral code:", returnedCode);
         setMyCode(returnedCode);
 
-        console.log("🔄 Fetching referral count...");
         const countRes = await api.get("/referrals/count/", {
-          params: {
-            wallet_address: address,
-          },
+          params: { wallet_address: address },
         });
 
-        if (cancelled) {
-          console.log("⚠️ Referral count request cancelled");
-          return;
-        }
+        if (cancelled) return;
 
         const count = countRes.data?.count ?? 0;
-        console.log("👥 Referral count:", count);
         setRefCount(count);
 
       } catch (error) {
-        if (cancelled) {
-          console.log("⚠️ Error occurred after cancellation");
-          return;
-        }
-
-        console.error("==================================================");
-        console.error("❌ [REFERRAL DEBUG] CONNECT ERROR");
-        console.error("==================================================");
-        console.error("❌ Error:", error);
-        console.error("❌ Error message:", error?.message);
-        console.error("❌ HTTP status:", error?.response?.status);
-        console.error("❌ Backend response:", error?.response?.data);
-        console.error("==================================================");
-
+        if (cancelled) return;
+        console.error('❌ Error:', error);
         setError(
           error?.response?.data?.error ||
             error?.response?.data?.detail ||
@@ -466,15 +486,7 @@ export default function Referrals() {
     return () => {
       cancelled = true;
     };
-  }, [
-    address,
-    referralReady,
-    inviterCode,
-    telegramId,
-    telegramUsername,
-    isTelegramWebApp,
-    browserTelegramId,
-  ]);
+  }, [address, referralReady, inviterCode, telegramId, telegramUsername, isTelegramWebApp, browserTelegramId]);
 
   // ==========================================
   // Fetch Referral Levels
@@ -483,41 +495,28 @@ export default function Referrals() {
   useEffect(() => {
     if (!address) return;
 
-    console.log("🔄 [LEVELS] Fetching referral levels...");
-
     async function fetchLevels() {
       try {
         const response = await api.get("/referral/levels/", {
-          params: {
-            wallet_address: address,
-          },
+          params: { wallet_address: address },
         });
 
-        console.log("✅ [LEVELS] Response:", response.data);
-        console.log("🔍 [LEVELS] Checking for telegram_username in data:");
-        
-        // بررسی اینکه telegram_username در داده‌ها هست
-        if (response.data?.levels) {
-          for (let i = 1; i <= 5; i++) {
-            const levelData = response.data.levels[`level_${i}`];
-            if (levelData?.users && levelData.users.length > 0) {
-              console.log(`📊 Level ${i} users:`, levelData.users);
-              levelData.users.forEach((user, index) => {
-                console.log(`  User ${index + 1}:`, {
-                  telegram_id: user.telegram_id,
-                  telegram_username: user.telegram_username,
-                  wallet: user.wallet,
-                });
-              });
-            }
-          }
-        }
-        
         setLevels(response.data?.levels || {});
         setTotalReferrals(response.data?.total_referrals || 0);
+
+        // ==========================================
+        // 🐛 استخراج اولین کاربر برای دیباگ
+        // ==========================================
+        const firstLevel = response.data?.levels?.level_1;
+        if (firstLevel?.users && firstLevel.users.length > 0) {
+          setDebugData(prev => ({
+            ...prev,
+            firstLevelUser: firstLevel.users[0],
+          }));
+        }
+
       } catch (error) {
         console.error("❌ [LEVELS] Failed:", error);
-        console.error("❌ [LEVELS] Backend:", error?.response?.data);
       }
     }
 
@@ -531,11 +530,8 @@ export default function Referrals() {
   async function fetchTestData() {
     if (!address) return;
 
-    console.log("🧪 [TEST] Fetching test referral data...");
-
     try {
       setLoading(true);
-
       const response = await api.get("/referral/levels/", {
         params: {
           wallet_address: address,
@@ -543,12 +539,10 @@ export default function Referrals() {
         },
       });
 
-      console.log("🧪 [TEST] Response:", response.data);
       setTestData(response.data?.levels || {});
       setShowTestTable(true);
     } catch (error) {
       console.error("❌ [TEST] Failed:", error);
-      console.error("❌ [TEST] Backend:", error?.response?.data);
       setError(
         `Failed to load test data: ${
           error?.response?.data?.error ||
@@ -567,9 +561,7 @@ export default function Referrals() {
 
   const getMiniAppLink = () => {
     if (!myCode) return "";
-    const link = `https://t.me/${BOT_USERNAME}/app?startapp=ref_${encodeURIComponent(myCode)}`;
-    console.log("🔗 [REFERRAL] Generated referral link:", link);
-    return link;
+    return `https://t.me/${BOT_USERNAME}/app?startapp=ref_${encodeURIComponent(myCode)}`;
   };
 
   const referralLink = getMiniAppLink();
@@ -579,19 +571,12 @@ export default function Referrals() {
   // ==========================================
 
   function openReferralLink() {
-    if (!referralLink) {
-      console.warn("⚠️ [REFERRAL] No referral link");
-      return;
-    }
-
+    if (!referralLink) return;
     const tg = getTelegramWebApp();
-    console.log("🚀 [REFERRAL] Opening link:", referralLink);
 
     if (tg && typeof tg.openTelegramLink === "function") {
-      console.log("📱 Opening via Telegram openTelegramLink");
       tg.openTelegramLink(referralLink);
     } else {
-      console.log("🌐 Opening via browser");
       window.open(referralLink, "_blank", "noopener,noreferrer");
     }
   }
@@ -614,15 +599,12 @@ export default function Referrals() {
       `?url=${encodeURIComponent(referralLink)}` +
       `&text=${encodeURIComponent(message)}`;
 
-    console.log("📤 [REFERRAL] Telegram share URL:", shareUrl);
-
     const tg = getTelegramWebApp();
 
     if (tg && typeof tg.openTelegramLink === "function") {
       try {
         tg.openTelegramLink(shareUrl);
       } catch (error) {
-        console.error("❌ Telegram share failed:", error);
         window.open(shareUrl, "_blank", "noopener,noreferrer");
       }
     } else {
@@ -639,7 +621,6 @@ export default function Referrals() {
 
     try {
       await navigator.clipboard.writeText(referralLink);
-      console.log("📋 [REFERRAL] Link copied:", referralLink);
       alert("✅ Telegram referral link copied!");
     } catch (error) {
       console.error("❌ Copy failed:", error);
@@ -647,7 +628,7 @@ export default function Referrals() {
   }
 
   // ==========================================
-  // 🖼️ Render Level Table - اصلاح شده با دیباگ
+  // 🖼️ Render Level Table
   // ==========================================
 
   function renderLevelTable(level, data) {
@@ -665,15 +646,6 @@ export default function Referrals() {
     const users = data.users || [];
     const count = data.count || 0;
     const displayUsers = users.slice(0, 10);
-
-    console.log(`📊 [RENDER] Level ${level}:`, {
-      count,
-      users: users.map(u => ({
-        telegram_id: u.telegram_id,
-        telegram_username: u.telegram_username,
-        wallet: u.wallet,
-      }))
-    });
 
     return (
       <div className="level-table">
@@ -703,24 +675,16 @@ export default function Referrals() {
                 displayUsers.map((user, index) => {
                   const isString = typeof user === "string";
                   
-                  // استخراج اطلاعات کاربر
                   const userTelegramId = isString ? null : user.telegram_id;
                   const userTelegramUsername = isString ? null : user.telegram_username;
                   const userWallet = isString ? user : user.wallet || "-";
                   const investment = isString ? 0 : user.investment || 0;
                   const profit = isString ? 0 : user.profit || 0;
                   
-                  console.log(`👤 [USER ${index + 1}] Level ${level}:`, {
-                    telegram_id: userTelegramId,
-                    telegram_username: userTelegramUsername,
-                    wallet: userWallet,
-                  });
-                  
                   // ✅ اولویت نمایش: username > telegram_id > wallet
                   let displayName = '';
                   let displayUsername = null;
                   
-                  // 1. اول از telegram_username استفاده کن
                   if (userTelegramUsername && 
                       userTelegramUsername !== 'browser' && 
                       !userTelegramUsername.startsWith('browser_') &&
@@ -729,33 +693,22 @@ export default function Referrals() {
                       userTelegramUsername !== '') {
                     displayName = userTelegramUsername;
                     displayUsername = `@${userTelegramUsername}`;
-                    console.log(`✅ [DISPLAY] Using username: ${displayName}`);
-                  } 
-                  // 2. اگر username نداشت، از telegram_id استفاده کن
-                  else if (userTelegramId && 
+                  } else if (userTelegramId && 
                            userTelegramId !== '-' && 
                            userTelegramId !== 'browser' && 
                            typeof userTelegramId === 'number' && 
                            userTelegramId > 0) {
                     displayName = String(userTelegramId);
-                    console.log(`✅ [DISPLAY] Using telegram_id: ${displayName}`);
-                  } 
-                  // 3. اگر هیچکدام نبود، از wallet استفاده کن (با کوتاه کردن)
-                  else if (userWallet && userWallet !== '-') {
+                  } else if (userWallet && userWallet !== '-') {
                     if (userWallet.length > 10) {
                       displayName = `${userWallet.slice(0, 6)}...${userWallet.slice(-4)}`;
                     } else {
                       displayName = userWallet;
                     }
-                    console.log(`✅ [DISPLAY] Using wallet: ${displayName}`);
-                  } 
-                  // 4. در نهایت fallback
-                  else {
+                  } else {
                     displayName = 'Anonymous User';
-                    console.log(`⚠️ [DISPLAY] Using fallback: ${displayName}`);
                   }
                   
-                  // عکس کاربر
                   const avatarUrl = getTelegramAvatar(userTelegramId, userTelegramUsername);
 
                   return (
@@ -814,6 +767,11 @@ export default function Referrals() {
 
   return (
     <div className="referral-dashboard">
+      {/* ==========================================
+          🐛 دیباگ روی صفحه
+          ========================================== */}
+      <DebugPanel data={debugData} />
+
       <h2>🎯 Referral Dashboard</h2>
 
       {loading && <div className="loading-spinner">Loading...</div>}
