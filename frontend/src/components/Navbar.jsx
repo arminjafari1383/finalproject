@@ -1,147 +1,305 @@
-import React, { useState, useEffect } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { NavLink } from "react-router-dom";
 import { useTonWallet } from "@tonconnect/ui-react";
 import { useWallet } from "../context/WalletContext";
 import "./Navbar.css";
 
-import Wallet from "../assets/wallet.png";
-import Stake from "../assets/stake.png";
-import Mine from "../assets/mine.png";
-import Friend from "../assets/friends.png";
-import Aboutus from "../assets/aboutus.png";
+import WalletIcon from "../assets/wallet.png";
+import StakeIcon from "../assets/stake.png";
+import MineIcon from "../assets/mine.png";
+import FriendIcon from "../assets/friends.png";
+import AboutUsIcon from "../assets/aboutus.png";
+
+const AUTO_CLOSE_DELAY = 5000;
+
+const navItems = [
+  {
+    to: "/Timer",
+    label: "Mine",
+    icon: MineIcon,
+    protected: true,
+  },
+  {
+    to: "/stake",
+    label: "Stake",
+    icon: StakeIcon,
+    protected: true,
+  },
+  {
+    to: "/referrals",
+    label: "Friends",
+    icon: FriendIcon,
+    protected: true,
+  },
+  {
+    to: "/Aboutus",
+    label: "About Us",
+    icon: AboutUsIcon,
+    protected: true,
+  },
+  {
+    to: "/",
+    label: "Wallets",
+    icon: WalletIcon,
+    protected: false,
+  },
+];
 
 const Navbar = () => {
   const tonWallet = useTonWallet();
-  const { isWalletValid } = useWallet();
-  
-  const isWalletConnected = !!tonWallet?.account?.address;
-  const isNavbarActive = isWalletConnected && isWalletValid;
 
-  // State برای کنترل نمایش Popup
-  const [showPopup, setShowPopup] = useState(false);
-  const [popupMessage, setPopupMessage] = useState("");
-  const [popupType, setPopupType] = useState(""); // "valid" یا "invalid"
+  /*
+   * اگر داخل WalletContext متغیر isWalletLoading داری،
+   * همین نام را استفاده کن.
+   */
+  const {
+    isWalletValid,
+    isWalletLoading = false,
+  } = useWallet();
 
-  // بررسی وضعیت ولت و نمایش Popup
+  const walletAddress = tonWallet?.account?.address || null;
+  const isWalletConnected = Boolean(walletAddress);
+
+  const isValidationFinished =
+    isWalletConnected &&
+    !isWalletLoading &&
+    typeof isWalletValid === "boolean";
+
+  const isNavbarActive =
+    isValidationFinished && isWalletValid === true;
+
+  const [popup, setPopup] = useState({
+    visible: false,
+    type: "invalid",
+    message: "",
+  });
+
+  const popupTimerRef = useRef(null);
+  const previousWalletAddressRef = useRef(null);
+  const lastValidationRef = useRef(null);
+
+  const clearPopupTimer = useCallback(() => {
+    if (popupTimerRef.current) {
+      clearTimeout(popupTimerRef.current);
+      popupTimerRef.current = null;
+    }
+  }, []);
+
+  const closePopup = useCallback(() => {
+    clearPopupTimer();
+
+    setPopup((previousPopup) => ({
+      ...previousPopup,
+      visible: false,
+    }));
+  }, [clearPopupTimer]);
+
+  const openPopup = useCallback(
+    (type, message) => {
+      clearPopupTimer();
+
+      setPopup({
+        visible: true,
+        type,
+        message,
+      });
+
+      popupTimerRef.current = setTimeout(() => {
+        setPopup((previousPopup) => ({
+          ...previousPopup,
+          visible: false,
+        }));
+
+        popupTimerRef.current = null;
+      }, AUTO_CLOSE_DELAY);
+    },
+    [clearPopupTimer]
+  );
+
+  /*
+   * پیام اتصال فقط پس از پایان اعتبارسنجی نمایش داده می‌شود.
+   * برای هر وضعیت نیز تنها یک‌بار Popup باز می‌شود.
+   */
   useEffect(() => {
-    if (isWalletConnected) {
-      if (isWalletValid) {
-        setPopupType("valid");
-        setPopupMessage("✅ Your wallet is valid and connected!");
-        setShowPopup(true);
-      } else {
-        setPopupType("invalid");
-        setPopupMessage("❌ This wallet is not registered. Please use your registered wallet.");
-        setShowPopup(true);
+    if (!isWalletConnected) {
+      previousWalletAddressRef.current = null;
+      lastValidationRef.current = null;
+      closePopup();
+      return;
+    }
+
+    if (!isValidationFinished) {
+      return;
+    }
+
+    const validationKey =
+      `${walletAddress}:${String(isWalletValid)}`;
+
+    if (lastValidationRef.current === validationKey) {
+      return;
+    }
+
+    const walletChanged =
+      previousWalletAddressRef.current !== walletAddress;
+
+    previousWalletAddressRef.current = walletAddress;
+    lastValidationRef.current = validationKey;
+
+    if (!walletChanged && isWalletValid !== false) {
+      return;
+    }
+
+    if (isWalletValid === true) {
+      openPopup(
+        "valid",
+        "Your wallet is valid and connected!"
+      );
+    } else {
+      openPopup(
+        "invalid",
+        "This wallet is not registered. Please use your registered wallet."
+      );
+    }
+  }, [
+    walletAddress,
+    isWalletConnected,
+    isValidationFinished,
+    isWalletValid,
+    openPopup,
+    closePopup,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      clearPopupTimer();
+    };
+  }, [clearPopupTimer]);
+
+  const handleProtectedNavigation = useCallback(
+    (event, item) => {
+      if (!item.protected) {
+        return;
       }
-    }
-  }, [isWalletConnected, isWalletValid]);
 
-  // بستن Popup بعد از 5 ثانیه
-  useEffect(() => {
-    if (showPopup) {
-      const timer = setTimeout(() => {
-        setShowPopup(false);
-      }, 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [showPopup]);
+      if (!isWalletConnected) {
+        event.preventDefault();
 
-  // تابع برای مدیریت کلیک روی آیتم‌های غیرفعال
-  const handleDisabledClick = (e, to) => {
-    if (to === '/') return; 
-    
-    if (!isNavbarActive) {
-      e.preventDefault();
-      setPopupType("invalid");
-      setPopupMessage("⚠️ Please connect with your registered wallet first!");
-      setShowPopup(true);
-      
-      // بستن خودکار بعد از 5 ثانیه
-      setTimeout(() => setShowPopup(false), 5000);
-    }
-  };
+        openPopup(
+          "invalid",
+          "Please connect your wallet first!"
+        );
 
-  // بستن Popup با کلیک
-  const closePopup = () => {
-    setShowPopup(false);
-  };
+        return;
+      }
+
+      if (isWalletLoading || !isValidationFinished) {
+        event.preventDefault();
+
+        openPopup(
+          "invalid",
+          "Please wait while your wallet is being verified."
+        );
+
+        return;
+      }
+
+      if (!isWalletValid) {
+        event.preventDefault();
+
+        openPopup(
+          "invalid",
+          "Please connect with your registered wallet first!"
+        );
+      }
+    },
+    [
+      isWalletConnected,
+      isWalletLoading,
+      isValidationFinished,
+      isWalletValid,
+      openPopup,
+    ]
+  );
 
   return (
     <>
-      <nav className="navbar">
-        {/* ========== Mine ========== */}
-        <NavLink 
-          to="/Timer" 
-          className={({ isActive }) => 
-            `nav-item ${isActive ? 'active' : ''} ${!isNavbarActive ? 'disabled' : ''}`
-          }
-          onClick={(e) => handleDisabledClick(e, '/Timer')}
-        >
-          <img src={Mine} alt="Mine icon" />
-          <span>Mine</span>
-        </NavLink>
+      <nav className="navbar" aria-label="Main navigation">
+        {navItems.map((item) => {
+          const isDisabled =
+            item.protected && !isNavbarActive;
 
-        {/* ========== Stake ========== */}
-        <NavLink 
-          to="/stake" 
-          className={({ isActive }) => 
-            `nav-item ${isActive ? 'active' : ''} ${!isNavbarActive ? 'disabled' : ''}`
-          }
-          onClick={(e) => handleDisabledClick(e, '/stake')}
-        >
-          <img src={Stake} alt="Stake icon" />
-          <span>Stake</span>
-        </NavLink>
+          return (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.to === "/"}
+              className={({ isActive }) =>
+                [
+                  "nav-item",
+                  isActive ? "active" : "",
+                  isDisabled ? "disabled" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")
+              }
+              onClick={(event) =>
+                handleProtectedNavigation(event, item)
+              }
+              aria-disabled={isDisabled}
+            >
+              <img
+                src={item.icon}
+                alt=""
+                aria-hidden="true"
+              />
 
-        {/* ========== Friends ========== */}
-        <NavLink 
-          to="/referrals" 
-          className={({ isActive }) => 
-            `nav-item ${isActive ? 'active' : ''} ${!isNavbarActive ? 'disabled' : ''}`
-          }
-          onClick={(e) => handleDisabledClick(e, '/referrals')}
-        >
-          <img src={Friend} alt="Friends icon" />
-          <span>Friends</span>
-        </NavLink>
-
-        {/* ========== About Us ========== */}
-        <NavLink 
-          to="/Aboutus" 
-          className={({ isActive }) => 
-            `nav-item ${isActive ? 'active' : ''} ${!isNavbarActive ? 'disabled' : ''}`
-          }
-          onClick={(e) => handleDisabledClick(e, '/Aboutus')}
-        >
-          <img src={Aboutus} alt="Aboutus icon" />
-          <span>About Us</span>
-        </NavLink>
-
-        {/* ========== Wallets (همیشه فعال) ========== */}
-        <NavLink 
-          to="/" 
-          className={({ isActive }) => 
-            `nav-item ${isActive ? 'active' : ''}`
-          }
-        >
-          <img src={Wallet} alt="Wallets icon" />
-          <span>Wallets</span>
-        </NavLink>
+              <span>{item.label}</span>
+            </NavLink>
+          );
+        })}
       </nav>
 
-      {/* ============================================================
-          POPUP - خارج از Navbar
-          ============================================================ */}
-      {showPopup && (
-        <div className={`popup-overlay ${popupType}`} onClick={closePopup}>
-          <div className="popup-content" onClick={(e) => e.stopPropagation()}>
-            <button className="popup-close" onClick={closePopup}>✕</button>
-            <div className="popup-icon">
-              {popupType === "valid" ? "✅" : "❌"}
+      {popup.visible && (
+        <div
+          className={`popup-overlay ${popup.type}`}
+          onClick={closePopup}
+          role="presentation"
+        >
+          <div
+            className="popup-content"
+            role="alertdialog"
+            aria-modal="true"
+            aria-live="assertive"
+            aria-label="Wallet status"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="popup-close"
+              onClick={closePopup}
+              aria-label="Close popup"
+            >
+              ✕
+            </button>
+
+            <div className="popup-icon" aria-hidden="true">
+              {popup.type === "valid" ? "✅" : "❌"}
             </div>
-            <p className="popup-message">{popupMessage}</p>
-            <button className="popup-button" onClick={closePopup}>
+
+            <p className="popup-message">
+              {popup.message}
+            </p>
+
+            <button
+              type="button"
+              className="popup-button"
+              onClick={closePopup}
+            >
               Got it
             </button>
           </div>
