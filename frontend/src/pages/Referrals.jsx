@@ -138,40 +138,32 @@ function getTelegramAvatar(
   telegramId,
   username
 ) {
+  const cleanUsername = String(
+    username || ""
+  )
+    .trim()
+    .replace(/^@/, "");
+
   if (
-    username &&
-    username !== "browser" &&
-    !username.startsWith(
+    cleanUsername &&
+    cleanUsername !== "browser" &&
+    !cleanUsername.startsWith(
       "browser_"
     )
   ) {
     return (
       `https://t.me/i/userpic/320/` +
       `${encodeURIComponent(
-        username
+        cleanUsername
       )}.jpg`
-    );
-  }
-
-  if (
-    telegramId &&
-    Number(telegramId) > 0
-  ) {
-    return (
-      `https://ui-avatars.com/api/` +
-      `?name=${encodeURIComponent(
-        String(telegramId)
-      )}` +
-      `&background=random` +
-      `&size=64` +
-      `&rounded=true`
     );
   }
 
   return (
     "https://ui-avatars.com/api/" +
-    "?name=User" +
-    "&background=random" +
+    "?name=%F0%9F%91%A4" +
+    "&background=273043" +
+    "&color=ffffff" +
     "&size=64" +
     "&rounded=true"
   );
@@ -1841,88 +1833,35 @@ export default function Referrals() {
                         : user?.profit ||
                           0;
 
-                    let displayName =
-                      "Anonymous User";
-
-                    let displayUsername =
-                      null;
-
-                    if (
-                      userTelegramUsername &&
-                      userTelegramUsername !==
-                        "browser" &&
-                      !userTelegramUsername.startsWith(
-                        "browser_"
+                    const cleanUsername =
+                      String(
+                        userTelegramUsername ||
+                          ""
                       )
-                    ) {
-                      displayName =
-                        userTelegramUsername;
-
-                      displayUsername =
-                        `@${userTelegramUsername}`;
-                    } else if (
-                      userTelegramId &&
-                      Number(
-                        userTelegramId
-                      ) > 0
-                    ) {
-                      displayName =
-                        String(
-                          userTelegramId
+                        .trim()
+                        .replace(
+                          /^@/,
+                          ""
                         );
-                    } else if (
-                      userWallet &&
-                      userWallet !== "-"
-                    ) {
-                      if (
-                        String(
-                          userWallet
-                        ).startsWith(
-                          "user_"
-                        )
-                      ) {
-                        displayName =
-                          String(
-                            userWallet
-                          ).replace(
-                            "user_",
-                            "User "
-                          );
-                      } else if (
-                        String(
-                          userWallet
-                        ).length >
-                        10
-                      ) {
-                        const wallet =
-                          String(
-                            userWallet
-                          );
 
-                        displayName =
-                          `${wallet.slice(
-                            0,
-                            6
-                          )}...${wallet.slice(
-                            -4
-                          )}`;
-                      } else {
-                        displayName =
-                          String(
-                            userWallet
-                          );
-                      }
-                    }
-
-                    const userTelegramPhotoUrl = isString
-                    ? null
-                    : user?.telegram_photo_url || user?.photo_url || null;
+                    const userTelegramPhotoUrl =
+                      isString
+                        ? null
+                        : user?.telegram_photo_url ||
+                          user?.photo_url ||
+                          null;
 
                     const avatarUrl =
                       userTelegramPhotoUrl ||
                       getTelegramAvatar(
                         userTelegramId,
-                        userTelegramUsername
+                        cleanUsername
+                      );
+
+                    const fallbackAvatar =
+                      getTelegramAvatar(
+                        null,
+                        null
                       );
 
                     return (
@@ -1940,34 +1879,20 @@ export default function Referrals() {
                                 avatarUrl
                               }
                               alt={
-                                displayName
+                                cleanUsername
+                                  ? `@${cleanUsername}`
+                                  : "Telegram avatar"
                               }
                               className="user-avatar"
                               onError={(
                                 event
                               ) => {
+                                event.currentTarget.onerror =
+                                  null;
                                 event.currentTarget.src =
-                                  `https://ui-avatars.com/api/?name=${encodeURIComponent(
-                                    displayName
-                                  )}&background=random&size=64&rounded=true`;
+                                  fallbackAvatar;
                               }}
                             />
-
-                            <div className="user-info">
-                              <span className="user-name">
-                                {
-                                  displayName
-                                }
-                              </span>
-
-                              {displayUsername && (
-                                <span className="user-username">
-                                  {
-                                    displayUsername
-                                  }
-                                </span>
-                              )}
-                            </div>
                           </div>
                         </td>
 
