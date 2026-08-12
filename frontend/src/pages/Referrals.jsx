@@ -57,17 +57,33 @@ const getTelegramWebApp = () => {
 // ==========================================
 
 const getTelegramAvatar = (telegramId, username) => {
+  console.log(`🖼️ [AVATAR] telegramId: ${telegramId}, username: ${username}`);
+  
   // اگر username داشته باشه، از avatar.bot استفاده میکنیم
-  if (username) {
-    return `https://t.me/i/userpic/320/${username}.jpg`;
+  if (username && 
+      username !== 'browser' && 
+      !username.startsWith('browser_') &&
+      username !== 'null' && 
+      username !== 'undefined' &&
+      username !== '') {
+    const url = `https://t.me/i/userpic/320/${username}.jpg`;
+    console.log(`✅ [AVATAR] Using Telegram avatar: ${url}`);
+    return url;
   }
   
-  // اگر telegramId داشته باشه، از گراواتار استفاده میکنیم
-  if (telegramId && telegramId !== '-' && telegramId !== 'browser') {
-    return `https://ui-avatars.com/api/?name=${telegramId}&background=random&size=32&rounded=true`;
+  // اگر telegramId داشته باشه، از ui-avatars استفاده میکنیم
+  if (telegramId && 
+      telegramId !== '-' && 
+      telegramId !== 'browser' && 
+      typeof telegramId === 'number' && 
+      telegramId > 0) {
+    const url = `https://ui-avatars.com/api/?name=${telegramId}&background=random&size=32&rounded=true`;
+    console.log(`✅ [AVATAR] Using UI Avatar: ${url}`);
+    return url;
   }
   
   // fallback
+  console.log(`⚠️ [AVATAR] Using fallback avatar`);
   return `https://ui-avatars.com/api/?name=User&background=random&size=32&rounded=true`;
 };
 
@@ -103,6 +119,22 @@ export default function Referrals() {
   const [referralReady, setReferralReady] = useState(false);
 
   const hasFetched = useRef(false);
+
+  // ==========================================
+  // 🔍 دیباگ: نمایش state ها
+  // ==========================================
+
+  useEffect(() => {
+    console.log("==================================================");
+    console.log("🔍 [STATE DEBUG] CURRENT STATE");
+    console.log("==================================================");
+    console.log("📱 telegramId:", telegramId);
+    console.log("📱 telegramUsername:", telegramUsername);
+    console.log("📱 isTelegramWebApp:", isTelegramWebApp);
+    console.log("💰 address:", address);
+    console.log("🔗 inviterCode:", inviterCode);
+    console.log("==================================================");
+  }, [telegramId, telegramUsername, isTelegramWebApp, address, inviterCode]);
 
   // ==========================================
   // Wallet Debug
@@ -156,11 +188,22 @@ export default function Referrals() {
     console.log("📦 Telegram initData:", tg.initData);
 
     const user = tg.initDataUnsafe?.user || null;
-    console.log("👤 Telegram user:", user);
+    console.log("👤 Telegram user object:", user);
 
     if (user) {
       const tgId = user.id;
       const tgUsername = user.username || null;
+
+      console.log("==================================================");
+      console.log("🔍 [TELEGRAM USER DEBUG]");
+      console.log("==================================================");
+      console.log("✅ Telegram ID:", tgId);
+      console.log("✅ Telegram Username:", tgUsername);
+      console.log("✅ Telegram First Name:", user.first_name);
+      console.log("✅ Telegram Last Name:", user.last_name);
+      console.log("✅ Telegram Language:", user.language_code);
+      console.log("✅ Full user object:", user);
+      console.log("==================================================");
 
       setTelegramId(tgId);
       setTelegramUsername(tgUsername);
@@ -171,10 +214,12 @@ export default function Referrals() {
         isTelegram: true,
       });
 
-      console.log("👤 Telegram ID:", tgId);
-      console.log("👤 Telegram Username:", tgUsername);
+      console.log("💾 Saved to localStorage:");
+      console.log("  - telegramId:", tgId);
+      console.log("  - telegramUsername:", tgUsername);
     } else {
-      console.warn("⚠️ Telegram user not available");
+      console.warn("⚠️ Telegram user not available in initDataUnsafe");
+      console.log("📦 Full initDataUnsafe:", tg.initDataUnsafe);
     }
 
     console.log("==================================================");
@@ -300,19 +345,44 @@ export default function Referrals() {
         let finalTelegramId;
         let finalTelegramUsername = null;
 
+        console.log("==================================================");
+        console.log("🔍 [TELEGRAM DETECTION DEBUG]");
+        console.log("==================================================");
+        console.log("📂 savedData?.telegramId:", savedData?.telegramId);
+        console.log("📂 savedData?.telegramUsername:", savedData?.telegramUsername);
+        console.log("📱 telegramId (state):", telegramId);
+        console.log("📱 telegramUsername (state):", telegramUsername);
+        console.log("📱 isTelegramWebApp:", isTelegramWebApp);
+        console.log("🌐 browserTelegramId:", browserTelegramId);
+        console.log("==================================================");
+
         if (savedData?.telegramId && savedData.telegramId > 0) {
           finalTelegramId = savedData.telegramId;
           finalTelegramUsername = savedData.telegramUsername || null;
           console.log("📂 Using Telegram ID from storage:", finalTelegramId);
+          console.log("📂 Using Telegram username from storage:", finalTelegramUsername);
         } else if (isTelegramWebApp && telegramId && telegramId > 0) {
           finalTelegramId = telegramId;
           finalTelegramUsername = telegramUsername;
           console.log("📱 Using real Telegram ID:", finalTelegramId);
+          console.log("📱 Using real Telegram username:", finalTelegramUsername);
         } else {
           finalTelegramId = browserTelegramId;
           finalTelegramUsername = `browser_${address.slice(0, 8)}`;
           console.log("🌐 Using browser Telegram ID:", finalTelegramId);
+          console.log("🌐 Using browser Telegram username:", finalTelegramUsername);
         }
+
+        // ==========================================
+        // 🚨 CRITICAL DEBUG: نمایش نهایی
+        // ==========================================
+        console.log("==================================================");
+        console.log("🔴 [FINAL TELEGRAM DATA]");
+        console.log("==================================================");
+        console.log("✅ FINAL Telegram ID:", finalTelegramId);
+        console.log("✅ FINAL Telegram Username:", finalTelegramUsername);
+        console.log("✅ FINAL Is Telegram:", isTelegramWebApp || savedData?.isTelegram || false);
+        console.log("==================================================");
 
         const payload = {
           wallet_address: address,
@@ -322,18 +392,8 @@ export default function Referrals() {
           is_telegram: isTelegramWebApp || savedData?.isTelegram || false,
         };
 
-        console.log("==================================================");
-        console.log("🔴 [REFERRAL DEBUG] STEP 5 - BEFORE CONNECT");
-        console.log("==================================================");
-        console.log("💰 Wallet address:", address);
-        console.log("🎯 React inviterCode:", inviterCode);
-        console.log("🎯 Stored inviterCode:", storedInviter);
-        console.log("🎯 FINAL inviterCode:", finalInviterCode);
-        console.log("📱 Telegram ID:", finalTelegramId);
-        console.log("📱 Telegram username:", finalTelegramUsername);
-        console.log("📱 Is Telegram:", isTelegramWebApp);
-        console.log("📦 FULL /connect/ PAYLOAD:", payload);
-        console.log("📦 JSON PAYLOAD:", JSON.stringify(payload, null, 2));
+        console.log("📦 FULL /connect/ PAYLOAD:");
+        console.log(JSON.stringify(payload, null, 2));
         console.log("🚀 Sending POST /connect/ ...");
 
         const res = await api.post("/connect/", payload);
@@ -350,10 +410,8 @@ export default function Referrals() {
         console.log("📥 Backend response:", res.data);
         console.log("👤 Returned user:", res.data?.user);
         console.log("🎯 Returned referral code:", res.data?.user?.referral_code);
-        console.log("🎯 Returned inviter:", res.data?.user?.inviter);
-        console.log("🎯 Returned parent:", res.data?.user?.parent);
+        console.log("🎯 Returned telegram_username:", res.data?.user?.telegram_username);
         console.log("==================================================");
-        console.log("✅ /connect/ SUCCESS:", res.data);
 
         const returnedCode = res.data?.user?.referral_code || null;
         console.log("🎟️ My referral code:", returnedCode);
@@ -372,7 +430,6 @@ export default function Referrals() {
         }
 
         const count = countRes.data?.count ?? 0;
-        console.log("👥 Referral count response:", countRes.data);
         console.log("👥 Referral count:", count);
         setRefCount(count);
 
@@ -389,7 +446,6 @@ export default function Referrals() {
         console.error("❌ Error message:", error?.message);
         console.error("❌ HTTP status:", error?.response?.status);
         console.error("❌ Backend response:", error?.response?.data);
-        console.error("❌ Backend headers:", error?.response?.headers);
         console.error("==================================================");
 
         setError(
@@ -438,6 +494,25 @@ export default function Referrals() {
         });
 
         console.log("✅ [LEVELS] Response:", response.data);
+        console.log("🔍 [LEVELS] Checking for telegram_username in data:");
+        
+        // بررسی اینکه telegram_username در داده‌ها هست
+        if (response.data?.levels) {
+          for (let i = 1; i <= 5; i++) {
+            const levelData = response.data.levels[`level_${i}`];
+            if (levelData?.users && levelData.users.length > 0) {
+              console.log(`📊 Level ${i} users:`, levelData.users);
+              levelData.users.forEach((user, index) => {
+                console.log(`  User ${index + 1}:`, {
+                  telegram_id: user.telegram_id,
+                  telegram_username: user.telegram_username,
+                  wallet: user.wallet,
+                });
+              });
+            }
+          }
+        }
+        
         setLevels(response.data?.levels || {});
         setTotalReferrals(response.data?.total_referrals || 0);
       } catch (error) {
@@ -572,7 +647,7 @@ export default function Referrals() {
   }
 
   // ==========================================
-  // 🖼️ Render Level Table - اصلاح شده
+  // 🖼️ Render Level Table - اصلاح شده با دیباگ
   // ==========================================
 
   function renderLevelTable(level, data) {
@@ -590,6 +665,15 @@ export default function Referrals() {
     const users = data.users || [];
     const count = data.count || 0;
     const displayUsers = users.slice(0, 10);
+
+    console.log(`📊 [RENDER] Level ${level}:`, {
+      count,
+      users: users.map(u => ({
+        telegram_id: u.telegram_id,
+        telegram_username: u.telegram_username,
+        wallet: u.wallet,
+      }))
+    });
 
     return (
       <div className="level-table">
@@ -626,10 +710,49 @@ export default function Referrals() {
                   const investment = isString ? 0 : user.investment || 0;
                   const profit = isString ? 0 : user.profit || 0;
                   
-                  // تعیین نام نمایشی
-                  let displayName = userTelegramUsername || userTelegramId || userWallet;
-                  if (isString) {
-                    displayName = user;
+                  console.log(`👤 [USER ${index + 1}] Level ${level}:`, {
+                    telegram_id: userTelegramId,
+                    telegram_username: userTelegramUsername,
+                    wallet: userWallet,
+                  });
+                  
+                  // ✅ اولویت نمایش: username > telegram_id > wallet
+                  let displayName = '';
+                  let displayUsername = null;
+                  
+                  // 1. اول از telegram_username استفاده کن
+                  if (userTelegramUsername && 
+                      userTelegramUsername !== 'browser' && 
+                      !userTelegramUsername.startsWith('browser_') &&
+                      userTelegramUsername !== 'null' && 
+                      userTelegramUsername !== 'undefined' &&
+                      userTelegramUsername !== '') {
+                    displayName = userTelegramUsername;
+                    displayUsername = `@${userTelegramUsername}`;
+                    console.log(`✅ [DISPLAY] Using username: ${displayName}`);
+                  } 
+                  // 2. اگر username نداشت، از telegram_id استفاده کن
+                  else if (userTelegramId && 
+                           userTelegramId !== '-' && 
+                           userTelegramId !== 'browser' && 
+                           typeof userTelegramId === 'number' && 
+                           userTelegramId > 0) {
+                    displayName = String(userTelegramId);
+                    console.log(`✅ [DISPLAY] Using telegram_id: ${displayName}`);
+                  } 
+                  // 3. اگر هیچکدام نبود، از wallet استفاده کن (با کوتاه کردن)
+                  else if (userWallet && userWallet !== '-') {
+                    if (userWallet.length > 10) {
+                      displayName = `${userWallet.slice(0, 6)}...${userWallet.slice(-4)}`;
+                    } else {
+                      displayName = userWallet;
+                    }
+                    console.log(`✅ [DISPLAY] Using wallet: ${displayName}`);
+                  } 
+                  // 4. در نهایت fallback
+                  else {
+                    displayName = 'Anonymous User';
+                    console.log(`⚠️ [DISPLAY] Using fallback: ${displayName}`);
                   }
                   
                   // عکس کاربر
@@ -648,10 +771,12 @@ export default function Referrals() {
                               e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=random&size=32&rounded=true`;
                             }}
                           />
-                          <span className="user-name">{displayName}</span>
-                          {userTelegramUsername && (
-                            <span className="user-username">@{userTelegramUsername}</span>
-                          )}
+                          <div className="user-info">
+                            <span className="user-name">{displayName}</span>
+                            {displayUsername && (
+                              <span className="user-username">{displayUsername}</span>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td className="investment-cell">{investment}</td>
