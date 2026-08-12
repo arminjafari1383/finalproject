@@ -1961,10 +1961,6 @@ export default function Referrals() {
 
   return (
     <div className="referral-dashboard">
-      <DebugPanel
-        data={debugData}
-      />
-
       <h2>
         🎯 Referral Dashboard
       </h2>
@@ -2003,18 +1999,6 @@ export default function Referrals() {
                 readOnly
                 className="link-input"
               />
-
-              <button
-                onClick={
-                  openReferralLink
-                }
-                disabled={
-                  !referralLink
-                }
-                className="btn-open"
-              >
-                🚀 Open Mini App
-              </button>
 
               <button
                 onClick={
@@ -2068,42 +2052,6 @@ export default function Referrals() {
               </div>
             </div>
 
-            <div className="telegram-status">
-              {isTelegramWebApp &&
-              telegramId ? (
-                <span className="status-active">
-                  ✅ Connected to
-                  Telegram
-                </span>
-              ) : (
-                <span className="status-inactive">
-                  🌐 Browser Mode
-                </span>
-              )}
-            </div>
-
-            {telegramId &&
-              isTelegramWebApp && (
-                <div className="info-note">
-                  👤 Telegram ID:{" "}
-                  <b>
-                    {
-                      telegramId
-                    }
-                  </b>
-
-                  {telegramUsername && (
-                    <>
-                      {" "}
-                      · @
-                      {
-                        telegramUsername
-                      }
-                    </>
-                  )}
-                </div>
-              )}
-
             {inviterCode && (
               <div className="info-note">
                 🎁 Invited by:{" "}
@@ -2113,11 +2061,6 @@ export default function Referrals() {
               </div>
             )}
 
-            <div className="info-note">
-              💡 The referral code is
-              preserved when opening
-              the Telegram Mini App.
-            </div>
           </div>
 
           <div className="levels-section">
@@ -2144,19 +2087,8 @@ export default function Referrals() {
               )}
             </div>
 
-            <div className="test-actions">
-              <button
-                onClick={
-                  fetchTestData
-                }
-                className="btn-test"
-                disabled={loading}
-              >
-                🧪 Show Test Table
-              </button>
-            </div>
-
-            {showTestTable &&
+            {false &&
+              showTestTable &&
               testData && (
                 <div className="test-table-section">
                   <div className="test-header">
