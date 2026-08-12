@@ -25,23 +25,6 @@ export default function Purchase() {
 
   const ECG_PER_USDT = 312;
 
-  // Mock Invoice
-  const mockTestInvoice = useMemo(
-    () => ({
-      id: "test-invoice-1",
-      invoice_no: "TEST-001",
-      ton_amount: "10",
-      ecg_value: "5000",
-      usdt_value: "16.02", // 5000 / 312 = 16.02
-      self_profit_5: "250",
-      principal_unlock_at: "2026-12-01",
-      self_profit_unlock_at: "2026-12-05",
-      ton_tx_hash: "TEST_TX_FRONTEND",
-      currency: "TON"
-    }),
-    []
-  );
-
   function showSuccess(msg) {
     setSuccessMessage(msg);
     setTimeout(() => setSuccessMessage(""), 4000);
@@ -145,36 +128,10 @@ export default function Purchase() {
     }
   }
 
-  // Test Stake
-  async function testStake() {
-    if (!address) return alert("Wallet is not connected.");
-    
-    setLoading(true);
-    
-    try {
-      const payload = {
-        wallet_address: address,
-        ton_amount: tonAmount,
-        ton_tx_hash: "TEST_TX_" + Date.now(),
-        is_test: true,
-      };
-
-      await api.post("/purchase/create/", payload);
-      await loadInvoices();
-      showSuccess(`🧪 Test stake successful! You received ${outputValue} ${outputLabel}`);
-    } catch (error) {
-      console.error("Test stake error:", error);
-      alert(`❌ Test failed: ${error.response?.data?.error || error.message}`);
-    } finally {
-      setLoading(false);
-    }
-  }
-
   // ترکیب فاکتورها
   const allInvoices = useMemo(() => {
-    const tonList = invoices.map(i => ({ ...i, currency: "TON" }));
-    return [mockTestInvoice, ...tonList];
-  }, [mockTestInvoice, invoices]);
+    return invoices.map((invoice) => ({ ...invoice, currency: "TON" }));
+  }, [invoices]);
 
   // Row Component
   function Row({ label, value }) {
@@ -329,14 +286,6 @@ export default function Purchase() {
               {loading ? "Processing..." : `Stake TON → ${outputLabel}`}
             </button>
 
-            {/* ====== Test Button ====== */}
-            <button
-              onClick={testStake}
-              className="test-btn"
-              disabled={loading}
-            >
-              🧪 Test Stake
-            </button>
           </div>
 
           {/* ====== Invoices Section ====== */}
