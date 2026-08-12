@@ -40,7 +40,7 @@ def ensure_user_has_wallet(user: AppUser) -> Wallet:
 
 
 # ==========================================
-# دریافت یا ایجاد کاربر
+# دریافت یا ایجاد کاربر (اصلاح شده)
 # ==========================================
 def get_or_create_user(wallet_address: str, telegram_id: int = None, is_telegram: bool = False) -> AppUser:
     """
@@ -54,16 +54,19 @@ def get_or_create_user(wallet_address: str, telegram_id: int = None, is_telegram
         user = AppUser.objects.filter(wallet_address=wallet_address).first()
         if user:
             logger.info(f"✅ User found by wallet_address: {user.wallet_address}")
-            # آپدیت is_active
             user.is_active = True
             user.last_active = timezone.now()
-            user.save()
             
-            # اطمینان از وجود کیف پول
+            # ✅ اگر username نداشت یا browser_ بود، اصلاح کن
+            if not user.telegram_username or user.telegram_username.startswith('browser_'):
+                user.telegram_username = f"user_{wallet_address[:8]}"
+                logger.info(f"✅ Fixed username for wallet user: {user.telegram_username}")
+            
+            user.save()
             ensure_user_has_wallet(user)
             return user
         
-        # ایجاد کاربر جدید با مقداردهی کامل
+        # ایجاد کاربر جدید
         user = AppUser.objects.create(
             wallet_address=wallet_address,
             telegram_id=None,
@@ -72,8 +75,8 @@ def get_or_create_user(wallet_address: str, telegram_id: int = None, is_telegram
             wallet_locked=False,
             is_active=True,
             is_admin=False,
+            telegram_username=f"user_{wallet_address[:8]}",  # ✅ username پیش‌فرض
         )
-        # ایجاد کیف پول
         Wallet.objects.create(user=user)
         logger.info(f"✅ New user created with wallet only: {wallet_address}")
         return user
@@ -83,10 +86,18 @@ def get_or_create_user(wallet_address: str, telegram_id: int = None, is_telegram
     
     if existing_user_by_telegram:
         logger.info(f"✅ User found by telegram_id: {existing_user_by_telegram.wallet_address}")
-        
-        # آپدیت is_active
         existing_user_by_telegram.is_active = True
         existing_user_by_telegram.last_active = timezone.now()
+        
+        # ✅ اصلاح username
+        if not existing_user_by_telegram.telegram_username or existing_user_by_telegram.telegram_username.startswith('browser_'):
+            if is_telegram:
+                existing_user_by_telegram.telegram_username = str(telegram_id)
+                logger.info(f"✅ Using telegram_id as username: {telegram_id}")
+            else:
+                existing_user_by_telegram.telegram_username = f"user_{wallet_address[:8]}"
+                logger.info(f"✅ Using wallet as username: {existing_user_by_telegram.telegram_username}")
+            existing_user_by_telegram.save(update_fields=["telegram_username"])
         
         if existing_user_by_telegram.wallet_locked:
             if existing_user_by_telegram.wallet_address != wallet_address:
@@ -100,10 +111,7 @@ def get_or_create_user(wallet_address: str, telegram_id: int = None, is_telegram
                 existing_user_by_telegram.wallet_locked = True
         
         existing_user_by_telegram.save()
-        
-        # اطمینان از وجود کیف پول
         ensure_user_has_wallet(existing_user_by_telegram)
-        
         return existing_user_by_telegram
     
     # جستجو با wallet_address
@@ -111,10 +119,17 @@ def get_or_create_user(wallet_address: str, telegram_id: int = None, is_telegram
     
     if existing_user_by_wallet:
         logger.info(f"⚠️ Wallet address already registered with telegram_id: {existing_user_by_wallet.telegram_id}")
-        
-        # آپدیت is_active
         existing_user_by_wallet.is_active = True
         existing_user_by_wallet.last_active = timezone.now()
+        
+        # ✅ اصلاح username
+        if not existing_user_by_wallet.telegram_username or existing_user_by_wallet.telegram_username.startswith('browser_'):
+            if is_telegram:
+                existing_user_by_wallet.telegram_username = str(telegram_id)
+            else:
+                existing_user_by_wallet.telegram_username = f"user_{wallet_address[:8]}"
+            existing_user_by_wallet.save(update_fields=["telegram_username"])
+            logger.info(f"✅ Fixed username: {existing_user_by_wallet.telegram_username}")
         
         if existing_user_by_wallet.wallet_locked:
             if not existing_user_by_wallet.telegram_id:
@@ -123,11 +138,8 @@ def get_or_create_user(wallet_address: str, telegram_id: int = None, is_telegram
                 existing_user_by_wallet.telegram_verified = True
                 existing_user_by_wallet.wallet_locked = True
                 existing_user_by_wallet.save()
-                logger.info(f"🔒 Wallet locked for existing user (previously unlinked): {existing_user_by_wallet.wallet_address}")
-                
-                # اطمینان از وجود کیف پول
+                logger.info(f"🔒 Wallet locked for existing user: {existing_user_by_wallet.wallet_address}")
                 ensure_user_has_wallet(existing_user_by_wallet)
-                
                 return existing_user_by_wallet
             
             raise ValueError("This wallet is already linked to another Telegram account (Locked)")
@@ -137,14 +149,11 @@ def get_or_create_user(wallet_address: str, telegram_id: int = None, is_telegram
             existing_user_by_wallet.telegram_verified = True
             existing_user_by_wallet.wallet_locked = True
             existing_user_by_wallet.save()
-            logger.info(f"✅ Wallet paired with Telegram ID successfully: {existing_user_by_wallet.wallet_address}")
-            
-            # اطمینان از وجود کیف پول
+            logger.info(f"✅ Wallet paired with Telegram ID: {existing_user_by_wallet.wallet_address}")
             ensure_user_has_wallet(existing_user_by_wallet)
-            
             return existing_user_by_wallet
 
-    # ایجاد کاربر جدید با مقداردهی کامل
+    # ایجاد کاربر جدید
     user = AppUser.objects.create(
         wallet_address=wallet_address,
         telegram_id=telegram_id,
@@ -153,9 +162,9 @@ def get_or_create_user(wallet_address: str, telegram_id: int = None, is_telegram
         wallet_locked=True,
         is_active=True,
         is_admin=False,
+        telegram_username=str(telegram_id) if is_telegram else f"user_{wallet_address[:8]}",
     )
     
-    # ایجاد کیف پول
     Wallet.objects.create(user=user)
     logger.info(f"✅ New user created with locked wallet: {wallet_address}")
     
@@ -201,7 +210,6 @@ def give_referral_bonus(inviter: AppUser, new_user: AppUser):
     """پاداش ۳ توکن به دعوت‌کننده"""
     try:
         with transaction.atomic():
-            # اطمینان از وجود کیف پول
             ensure_user_has_wallet(inviter)
             
             Wallet.objects.filter(user=inviter).update(
@@ -221,7 +229,7 @@ def give_referral_bonus(inviter: AppUser, new_user: AppUser):
 
 
 # ==========================================
-# ✅ اصلاح شده: اضافه کردن telegram_username به سطوح
+# ✅ اصلاح شده نهایی: بروزرسانی سطوح با username مناسب
 # ==========================================
 def update_referral_levels(new_user: AppUser, direct_inviter: AppUser):
     """
@@ -234,10 +242,24 @@ def update_referral_levels(new_user: AppUser, direct_inviter: AppUser):
     while current and level <= 5:
         level_obj, created = ReferralLevel.objects.get_or_create(user=current)
 
-        # ✅ اضافه کردن telegram_username
+        # ==========================================
+        # ✅ تعیین username مناسب
+        # ==========================================
+        username = None
+        
+        # 1. اگر telegram_username داره و browser_ نیست
+        if new_user.telegram_username and not new_user.telegram_username.startswith('browser_'):
+            username = new_user.telegram_username
+        # 2. اگر telegram_id داره
+        elif new_user.telegram_id:
+            username = str(new_user.telegram_id)
+        # 3. اگر هیچکدام نبود، از wallet استفاده کن
+        else:
+            username = new_user.wallet_address[:8] if new_user.wallet_address else 'Unknown'
+
         user_data = {
             "telegram_id": new_user.telegram_id,
-            "telegram_username": new_user.telegram_username or None,  # ✅ اضافه شد
+            "telegram_username": username,
             "wallet": new_user.wallet_address,
             "investment": 0,
             "profit": 0
@@ -300,7 +322,7 @@ def update_user_investment(user: AppUser, amount: Decimal):
                 if u.get("wallet") == user.wallet_address:
                     users[i]["investment"] = float(amount)
                     # ✅ حفظ telegram_username
-                    if user.telegram_username:
+                    if user.telegram_username and not user.telegram_username.startswith('browser_'):
                         users[i]["telegram_username"] = user.telegram_username
                     break
             
@@ -367,7 +389,7 @@ def fetch_bnb_usd_rate() -> Decimal:
 
 
 # ==========================================
-# توابع ثبت خرید
+# توابع ثبت خرید (بدون تغییر)
 # ==========================================
 @transaction.atomic
 def register_purchase(user: AppUser, ton_amount: Decimal, ton_tx_hash: str, is_test: bool = False) -> Purchase:
@@ -405,7 +427,6 @@ def register_purchase(user: AppUser, ton_amount: Decimal, ton_tx_hash: str, is_t
         self_profit_unlock_at=self_profit_unlock_at,
     )
 
-    # اطمینان از وجود کیف پول
     ensure_user_has_wallet(user)
     
     Wallet.objects.select_for_update().filter(user=user).update(
@@ -419,7 +440,6 @@ def register_purchase(user: AppUser, ton_amount: Decimal, ton_tx_hash: str, is_t
                           meta={"invoice": invoice_no, "tx": ton_tx_hash, "currency": "TON", "is_test": is_test})
 
     if user.inviter_id:
-        # اطمینان از وجود کیف پول دعوت‌کننده
         ensure_user_has_wallet(user.inviter)
         
         Wallet.objects.filter(user=user.inviter).update(
@@ -438,7 +458,6 @@ def register_purchase(user: AppUser, ton_amount: Decimal, ton_tx_hash: str, is_t
     if level_obj and level_obj.level_5_count > 0:
         distribute_level_5_purchase(user, ecg_value)
 
-    # بروزرسانی total_investment کاربر
     update_user_total_investment(user)
 
     return p
@@ -478,7 +497,6 @@ def register_purchase_usdt(user: AppUser, usdt_amount: Decimal, usdt_tx_hash: st
         self_profit_unlock_at=self_profit_unlock_at,
     )
 
-    # اطمینان از وجود کیف پول
     ensure_user_has_wallet(user)
     
     Wallet.objects.select_for_update().filter(user=user).update(
@@ -492,7 +510,6 @@ def register_purchase_usdt(user: AppUser, usdt_amount: Decimal, usdt_tx_hash: st
                           meta={"invoice": invoice_no, "tx": usdt_tx_hash, "currency": "USDT", "is_test": is_test})
 
     if user.inviter_id:
-        # اطمینان از وجود کیف پول دعوت‌کننده
         ensure_user_has_wallet(user.inviter)
         
         Wallet.objects.filter(user=user.inviter).update(
@@ -511,7 +528,6 @@ def register_purchase_usdt(user: AppUser, usdt_amount: Decimal, usdt_tx_hash: st
     if level_obj and level_obj.level_5_count > 0:
         distribute_level_5_purchase(user, ecg_value)
 
-    # بروزرسانی total_investment کاربر
     update_user_total_investment(user)
 
     return p
@@ -551,7 +567,6 @@ def register_purchase_bnb(user: AppUser, bnb_amount: Decimal, bnb_tx_hash: str, 
         self_profit_unlock_at=self_profit_unlock_at,
     )
 
-    # اطمینان از وجود کیف پول
     ensure_user_has_wallet(user)
     
     Wallet.objects.select_for_update().filter(user=user).update(
@@ -565,7 +580,6 @@ def register_purchase_bnb(user: AppUser, bnb_amount: Decimal, bnb_tx_hash: str, 
                           meta={"invoice": invoice_no, "tx": bnb_tx_hash, "currency": "BNB", "is_test": is_test})
 
     if user.inviter_id:
-        # اطمینان از وجود کیف پول دعوت‌کننده
         ensure_user_has_wallet(user.inviter)
         
         Wallet.objects.filter(user=user.inviter).update(
@@ -584,7 +598,6 @@ def register_purchase_bnb(user: AppUser, bnb_amount: Decimal, bnb_tx_hash: str, 
     if level_obj and level_obj.level_5_count > 0:
         distribute_level_5_purchase(user, ecg_value)
 
-    # بروزرسانی total_investment کاربر
     update_user_total_investment(user)
 
     return p
@@ -619,7 +632,6 @@ def distribute_level_5_purchase(user: AppUser, purchase_amount: Decimal):
 
     while current and level <= 4:
         with transaction.atomic():
-            # اطمینان از وجود کیف پول
             ensure_user_has_wallet(current)
             
             Wallet.objects.filter(user=current).update(
@@ -656,7 +668,6 @@ def update_user_total_investment(user: AppUser):
     """
     بروزرسانی کل سرمایه‌گذاری کاربر
     """
-    # محاسبه کل خریدهای تکمیل شده
     total_purchase_ton = Purchase.objects.filter(user=user).aggregate(
         total=Sum('ecg_value')
     )['total'] or Decimal('0')
@@ -671,7 +682,6 @@ def update_user_total_investment(user: AppUser):
     
     total_investment = total_purchase_ton + total_purchase_usdt + total_purchase_bnb
     
-    # بروزرسانی کاربر
     user.total_investment = total_investment
     user.save(update_fields=['total_investment'])
     
@@ -684,7 +694,6 @@ def update_user_total_earned(user: AppUser):
     """
     بروزرسانی کل سود کسب شده کاربر
     """
-    # محاسبه کل سود از Ledger
     total_earned = Ledger.objects.filter(
         user=user,
         typ__in=['DAILY_UNLOCK', 'SELF_PROFIT_UNLOCK', 'DOWNLINE_PROFIT', 'REF_BONUS', 'LEVEL5_BONUS']

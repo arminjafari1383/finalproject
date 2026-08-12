@@ -55,11 +55,28 @@ def connect_wallet(request):
     try:
         user = get_or_create_user(wallet_address, telegram_id, is_telegram)
         
-        # ذخیره telegram_username
-        if telegram_username and user.telegram_username != telegram_username:
-            user.telegram_username = telegram_username
+        # ==========================================
+        # ✅ اصلاح: ذخیره telegram_username با اولویت
+        # ==========================================
+        final_username = None
+        
+        # 1. اگر username واقعی از تلگرام اومده
+        if telegram_username and not telegram_username.startswith('browser_'):
+            final_username = telegram_username
+            logger.info(f"✅ Using real telegram_username: {final_username}")
+        # 2. اگر کاربر تلگرامی هست ولی username نداره
+        elif is_telegram and telegram_id:
+            final_username = str(telegram_id)
+            logger.info(f"✅ Using telegram_id as username: {final_username}")
+        # 3. اگر کاربر از مرورگر هست
+        elif not is_telegram:
+            final_username = f"user_{wallet_address[:8]}"
+            logger.info(f"✅ Generated username from wallet: {final_username}")
+        
+        if final_username:
+            user.telegram_username = final_username
             user.save(update_fields=["telegram_username"])
-            logger.info(f"✅ Updated telegram_username: {telegram_username}")
+            logger.info(f"✅ Saved username: {final_username}")
         
         if inviter_code and not user.inviter_id:
             apply_referral(inviter_code, user)
@@ -345,7 +362,6 @@ def tick(request):
     logger.info(f"📥 Request data: {request.data}")
     logger.info(f"📥 Request headers: {dict(request.headers)}")
     
-    # دریافت wallet_address
     wallet_address = request.data.get("wallet_address")
     if not wallet_address:
         logger.error("❌ wallet_address required")
@@ -354,14 +370,12 @@ def tick(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    # دریافت telegram_id
     telegram_id = request.headers.get("X-Telegram-Id") or request.data.get("telegram_id")
     is_telegram = request.headers.get("X-Telegram") == "true" or request.data.get("is_telegram", False)
     
     logger.info(f"📊 wallet: {wallet_address}, telegram_id: {telegram_id}")
     
     try:
-        # دریافت یا ساخت کاربر
         if telegram_id:
             user = get_or_create_user(wallet_address, int(telegram_id), is_telegram)
         else:
@@ -378,7 +392,6 @@ def tick(request):
         now = timezone.now()
         next_at = user.next_daily_claim_at
 
-        # بررسی اینکه زمان گذشته یا نه
         if next_at and next_at > now:
             seconds_remaining = int((next_at - now).total_seconds())
             logger.info(f"⏳ Too early! {seconds_remaining}s remaining")
@@ -388,12 +401,10 @@ def tick(request):
                 "seconds_remaining": seconds_remaining,
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # اعمال پاداش روزانه
         logger.info(f"💰 Adding reward: {DAILY_REWARD} ECG")
         w.daily_reward_unlocked = w.daily_reward_unlocked + DAILY_REWARD
         w.save(update_fields=["daily_reward_unlocked"])
 
-        # ثبت در Ledger
         Ledger.objects.create(
             user=user,
             typ="DAILY_UNLOCK",
@@ -401,14 +412,12 @@ def tick(request):
             meta={"source": "timer"}
         )
 
-        # تنظیم زمان بعدی
         user.next_daily_claim_at = now + COOLDOWN
         user.save(update_fields=["next_daily_claim_at"])
 
         logger.info(f"✅ Reward claimed! Next claim at: {user.next_daily_claim_at}")
         logger.info("=" * 60)
 
-        # پاسخ موفق
         return Response({
             "status": "rewarded",
             "message": "1 ECG added to your wallet",
@@ -488,7 +497,7 @@ def get_referral_levels(request):
         for user_data in users:
             if isinstance(user_data, dict):
                 # اگر کاربر دیکشنری است و telegram_username ندارد
-                if 'telegram_username' not in user_data:
+                if 'telegram_username' not in user_data or not user_data.get('telegram_username'):
                     # تلاش برای پیدا کردن کاربر از دیتابیس
                     wallet = user_data.get('wallet')
                     if wallet:
@@ -497,7 +506,11 @@ def get_referral_levels(request):
                             if app_user and app_user.telegram_username:
                                 user_data['telegram_username'] = app_user.telegram_username
                             else:
-                                user_data['telegram_username'] = None
+                                # اگر در دیتابیس هم username نداشت، از telegram_id یا wallet استفاده کن
+                                if user_data.get('telegram_id'):
+                                    user_data['telegram_username'] = str(user_data.get('telegram_id'))
+                                else:
+                                    user_data['telegram_username'] = f"user_{wallet[:8]}" if wallet else "unknown"
                         except:
                             user_data['telegram_username'] = None
                     else:
@@ -546,13 +559,12 @@ def generate_test_data_with_columns():
         investment = round(random.uniform(1, 100), 2)
         profit = round(random.uniform(0.01, 5), 4)
         
-        # ✅ اضافه کردن telegram_username برای تست
         usernames = ['alex', 'john_doe', 'crypto_master', 'ton_fan', 'blockchain_dev', 'defi_expert', 'nft_collector']
         telegram_username = random.choice(usernames) + str(random.randint(1, 999))
         
         return {
             "telegram_id": telegram_id,
-            "telegram_username": telegram_username,  # ✅ اضافه شد
+            "telegram_username": telegram_username,
             "wallet": wallet,
             "investment": investment,
             "profit": profit
