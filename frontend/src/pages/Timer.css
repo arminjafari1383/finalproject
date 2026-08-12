@@ -343,6 +343,7 @@ body,
   .hamburger-dropdown {
     left: -4px;
     width: min(270px, calc(100vw - 24px));
+    height: 200px;
   }
 
   .header h1 {
