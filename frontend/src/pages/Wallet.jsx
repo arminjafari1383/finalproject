@@ -54,9 +54,13 @@ export default function Wallet() {
   const [errorType, setErrorType] = useState("none");
 
   const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
+  const [withdrawAsset, setWithdrawAsset] = useState("ECG");
+  const [destinationWallet, setDestinationWallet] = useState("");
   const [amount, setAmount] = useState("");
   const [withdrawError, setWithdrawError] = useState("");
   const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [withdrawHistory, setWithdrawHistory] = useState([]);
+  const [copiedHash, setCopiedHash] = useState("");
 
   // =============================================
   // 📋 مرحله 1: دریافت کد دعوت در اولین لود
@@ -343,6 +347,8 @@ export default function Wallet() {
   const openWithdraw = () => {
     setWithdrawError("");
     setAmount("");
+    setWithdrawAsset("ECG");
+    setDestinationWallet("");
     setIsWithdrawOpen(true);
   };
 
@@ -358,13 +364,34 @@ export default function Wallet() {
     if (!Number.isFinite(n)) return setWithdrawError("Invalid amount.");
     if (n < 60) return setWithdrawError("Minimum withdrawal is 60.");
     if (!address) return setWithdrawError("Please connect your wallet first.");
+    if (withdrawAsset === "TON") {
+      if (!destinationWallet.trim()) {
+        return setWithdrawError("Please enter your TON wallet address.");
+      }
+      const value = destinationWallet.trim();
+      const isRaw = /^-?\d:[0-9a-fA-F]{64}$/.test(value);
+      const isFriendly = /^[A-Za-z0-9_-]{48}$/.test(value);
+      if (!isRaw && !isFriendly) {
+        return setWithdrawError("Enter a valid TON wallet address. A wrong network can permanently lose funds.");
+      }
+    }
 
     try {
       setIsWithdrawing(true);
-      const payload = { wallet_address: address, scope: "ALL_WITHDRAWABLE", amount: n };
+      const payload = {
+        wallet_address: address,
+        destination_wallet:
+          withdrawAsset === "TON"
+            ? destinationWallet.trim()
+            : address,
+        asset: withdrawAsset,
+        scope: "ALL_WITHDRAWABLE",
+        amount: n,
+      };
       await api.post("/withdraw/request/", payload);
       const r = await api.get(`/wallet/${address}/`);
       setWallet(r.data);
+      await loadWithdrawHistory();
       setIsWithdrawOpen(false);
       console.log(`✅ Withdraw completed`);
     } catch (e) {
@@ -373,6 +400,29 @@ export default function Wallet() {
     } finally {
       setIsWithdrawing(false);
     }
+  };
+
+  const loadWithdrawHistory = useCallback(async () => {
+    if (!address) return;
+    try {
+      const response = await api.get("/withdraw/history/", {
+        params: { wallet_address: address },
+      });
+      setWithdrawHistory(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.error("Unable to load withdrawal history:", error);
+    }
+  }, [address]);
+
+  useEffect(() => {
+    loadWithdrawHistory();
+  }, [loadWithdrawHistory]);
+
+  const copyTxHash = async (hash) => {
+    if (!hash) return;
+    await navigator.clipboard.writeText(hash);
+    setCopiedHash(hash);
+    window.setTimeout(() => setCopiedHash(""), 1500);
   };
 
   return (
@@ -525,17 +575,77 @@ export default function Wallet() {
 
       </div>
 
+      {address && (
+        <section className="withdraw-history glass-panel">
+          <h2>Withdrawal History</h2>
+          {withdrawHistory.length === 0 ? (
+            <p className="history-empty">No withdrawals yet.</p>
+          ) : withdrawHistory.map((item) => (
+            <article className="history-row" key={item.id}>
+              <div className="history-topline">
+                <strong>{item.amount} ECG → {item.asset}</strong>
+                <span className={`status-pill status-${item.status.toLowerCase()}`}>
+                  {item.status}
+                </span>
+              </div>
+              <time>{new Date(item.created_at).toLocaleString()}</time>
+              {item.tx_hash && (
+                <button className="tx-copy-btn" onClick={() => copyTxHash(item.tx_hash)}>
+                  <span>{item.tx_hash}</span>
+                  <b>{copiedHash === item.tx_hash ? "Copied" : "Copy"}</b>
+                </button>
+              )}
+            </article>
+          ))}
+        </section>
+      )}
+
       {/* Withdraw Modal */}
       {isWithdrawOpen && (
         <div className="modal-backdrop" onClick={closeWithdraw}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Withdraw ECG</h3>
+              <h3>Withdraw</h3>
               <button className="modal-close" onClick={closeWithdraw} disabled={isWithdrawing}>×</button>
             </div>
             <div className="modal-body">
+              <label>Withdrawal Method</label>
+              <div className="asset-picker">
+                {["TON", "ECG"].map((asset) => (
+                  <button
+                    type="button"
+                    key={asset}
+                    className={withdrawAsset === asset ? "selected" : ""}
+                    onClick={() => {
+                      setWithdrawAsset(asset);
+                      setDestinationWallet(asset === "TON" ? address || "" : "");
+                      setWithdrawError("");
+                    }}
+                    disabled={isWithdrawing}
+                  >
+                    {asset === "TON" ? "Withdraw with TON" : "Withdraw with ECG"}
+                  </button>
+                ))}
+              </div>
+              {withdrawAsset === "TON" && (
+                <>
+                  <label htmlFor="ton-destination">TON Wallet Address</label>
+                  <input
+                    id="ton-destination"
+                    type="text"
+                    value={destinationWallet}
+                    onChange={(e) => setDestinationWallet(e.target.value)}
+                    placeholder="Enter TON wallet address"
+                    disabled={isWithdrawing}
+                    autoComplete="off"
+                  />
+                  <div className="wallet-warning">
+                    Only enter a TON Network address. A wrong network address may permanently lose your funds.
+                  </div>
+                </>
+              )}
               <label>Withdrawal Amount (ECG)</label>
-              <input type="number" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="e.g. 60" min="0" />
+              <input type="number" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Minimum 60" min="60" />
               {withdrawError && <div className="error-text">{withdrawError}</div>}
             </div>
             <div className="modal-footer">
