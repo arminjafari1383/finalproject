@@ -1,3 +1,5 @@
+# backend/core/views.py
+
 import logging
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -39,6 +41,7 @@ def connect_wallet(request):
     wallet_address = request.data.get("wallet_address")
     inviter_code = request.data.get("inviter_code")
     telegram_id = request.data.get("telegram_id")
+    telegram_username = request.data.get("telegram_username")
     is_telegram = request.data.get("is_telegram", False)
 
     if not wallet_address:
@@ -51,6 +54,12 @@ def connect_wallet(request):
 
     try:
         user = get_or_create_user(wallet_address, telegram_id, is_telegram)
+        
+        # ذخیره telegram_username
+        if telegram_username and user.telegram_username != telegram_username:
+            user.telegram_username = telegram_username
+            user.save(update_fields=["telegram_username"])
+            logger.info(f"✅ Updated telegram_username: {telegram_username}")
         
         if inviter_code and not user.inviter_id:
             apply_referral(inviter_code, user)
@@ -65,6 +74,7 @@ def connect_wallet(request):
     return Response({
         "user": {
             "telegram_id": user.telegram_id,
+            "telegram_username": user.telegram_username,
             "wallet_address": user.wallet_address,
             "referral_code": user.referral_code,
             "wallet_locked": user.wallet_locked
@@ -468,27 +478,54 @@ def get_referral_levels(request):
             "is_test": True
         }, status=status.HTTP_200_OK)
 
+    # ==========================================
+    # ✅ اصلاح شده: شامل telegram_username
+    # ==========================================
+    
+    def process_users(users):
+        """پردازش کاربران برای اضافه کردن telegram_username"""
+        processed = []
+        for user_data in users:
+            if isinstance(user_data, dict):
+                # اگر کاربر دیکشنری است و telegram_username ندارد
+                if 'telegram_username' not in user_data:
+                    # تلاش برای پیدا کردن کاربر از دیتابیس
+                    wallet = user_data.get('wallet')
+                    if wallet:
+                        try:
+                            app_user = AppUser.objects.filter(wallet_address=wallet).first()
+                            if app_user and app_user.telegram_username:
+                                user_data['telegram_username'] = app_user.telegram_username
+                            else:
+                                user_data['telegram_username'] = None
+                        except:
+                            user_data['telegram_username'] = None
+                    else:
+                        user_data['telegram_username'] = None
+            processed.append(user_data)
+        return processed
+
     return Response({
         "levels": {
             "level_1": {
                 "count": level_obj.level_1_count,
-                "users": level_obj.level_1_users[:20] if level_obj.level_1_users else []
+                "users": process_users(level_obj.level_1_users[:20]) if level_obj.level_1_users else []
             },
             "level_2": {
                 "count": level_obj.level_2_count,
-                "users": level_obj.level_2_users[:20] if level_obj.level_2_users else []
+                "users": process_users(level_obj.level_2_users[:20]) if level_obj.level_2_users else []
             },
             "level_3": {
                 "count": level_obj.level_3_count,
-                "users": level_obj.level_3_users[:20] if level_obj.level_3_users else []
+                "users": process_users(level_obj.level_3_users[:20]) if level_obj.level_3_users else []
             },
             "level_4": {
                 "count": level_obj.level_4_count,
-                "users": level_obj.level_4_users[:20] if level_obj.level_4_users else []
+                "users": process_users(level_obj.level_4_users[:20]) if level_obj.level_4_users else []
             },
             "level_5": {
                 "count": level_obj.level_5_count,
-                "users": level_obj.level_5_users[:20] if level_obj.level_5_users else []
+                "users": process_users(level_obj.level_5_users[:20]) if level_obj.level_5_users else []
             }
         },
         "is_test": False,
@@ -509,8 +546,13 @@ def generate_test_data_with_columns():
         investment = round(random.uniform(1, 100), 2)
         profit = round(random.uniform(0.01, 5), 4)
         
+        # ✅ اضافه کردن telegram_username برای تست
+        usernames = ['alex', 'john_doe', 'crypto_master', 'ton_fan', 'blockchain_dev', 'defi_expert', 'nft_collector']
+        telegram_username = random.choice(usernames) + str(random.randint(1, 999))
+        
         return {
             "telegram_id": telegram_id,
+            "telegram_username": telegram_username,  # ✅ اضافه شد
             "wallet": wallet,
             "investment": investment,
             "profit": profit
@@ -546,10 +588,6 @@ def generate_test_data_with_columns():
             "users": [generate_user(5) for _ in range(level_counts["level_5"])]
         }
     }
-
-
-def generate_test_data():
-    return generate_test_data_with_columns()
 
 
 # =======================

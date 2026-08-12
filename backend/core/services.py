@@ -220,10 +220,13 @@ def give_referral_bonus(inviter: AppUser, new_user: AppUser):
         logger.exception("[REF] failed to reward inviter: %s", e)
 
 
+# ==========================================
+# ✅ اصلاح شده: اضافه کردن telegram_username به سطوح
+# ==========================================
 def update_referral_levels(new_user: AppUser, direct_inviter: AppUser):
     """
     بروزرسانی سطوح ۱ تا ۵ برای همه بالاسری‌ها
-    هر سطح شامل: telegram_id, wallet, investment, profit
+    هر سطح شامل: telegram_id, telegram_username, wallet, investment, profit
     """
     current = direct_inviter
     level = 1
@@ -231,8 +234,10 @@ def update_referral_levels(new_user: AppUser, direct_inviter: AppUser):
     while current and level <= 5:
         level_obj, created = ReferralLevel.objects.get_or_create(user=current)
 
+        # ✅ اضافه کردن telegram_username
         user_data = {
             "telegram_id": new_user.telegram_id,
+            "telegram_username": new_user.telegram_username or None,  # ✅ اضافه شد
             "wallet": new_user.wallet_address,
             "investment": 0,
             "profit": 0
@@ -275,6 +280,9 @@ def update_referral_levels(new_user: AppUser, direct_inviter: AppUser):
         level += 1
 
 
+# ==========================================
+# ✅ اصلاح شده: حفظ telegram_username در بروزرسانی سرمایه‌گذاری
+# ==========================================
 def update_user_investment(user: AppUser, amount: Decimal):
     """
     بروزرسانی مبلغ سرمایه‌گذاری کاربر در جدول سطوح بالاسری‌ها
@@ -291,6 +299,9 @@ def update_user_investment(user: AppUser, amount: Decimal):
             for i, u in enumerate(users):
                 if u.get("wallet") == user.wallet_address:
                     users[i]["investment"] = float(amount)
+                    # ✅ حفظ telegram_username
+                    if user.telegram_username:
+                        users[i]["telegram_username"] = user.telegram_username
                     break
             
             setattr(level_obj, level_field, users)
@@ -300,6 +311,9 @@ def update_user_investment(user: AppUser, amount: Decimal):
         level += 1
 
 
+# ==========================================
+# ✅ اصلاح شده: حفظ telegram_username در بروزرسانی سود
+# ==========================================
 def update_level_profit(user: AppUser, level: int, from_wallet: str, profit: Decimal):
     """بروزرسانی سود در جدول سطوح"""
     level_obj = ReferralLevel.objects.filter(user=user).first()

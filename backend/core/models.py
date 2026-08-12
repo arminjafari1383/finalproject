@@ -1,3 +1,5 @@
+# backend/core/models.py
+
 from django.db import models
 from django.utils import timezone
 from django.db.models import F
@@ -5,6 +7,7 @@ import uuid
 
 class AppUser(models.Model):
     telegram_id = models.BigIntegerField(unique=True, null=True, blank=True)
+    telegram_username = models.CharField(max_length=100, null=True, blank=True, help_text="یوزرنیم تلگرام کاربر")
     wallet_address = models.CharField(max_length=128, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -18,7 +21,7 @@ class AppUser(models.Model):
     wallet_locked = models.BooleanField(default=False)
     
     # ==========================================
-    # ✅ فیلدهای جدید - اینها رو اضافه کن
+    # ✅ فیلدهای جدید
     # ==========================================
     is_admin = models.BooleanField(default=False, help_text="آیا کاربر ادمین است؟")
     is_active = models.BooleanField(default=True, help_text="آیا کاربر فعال است؟")
@@ -193,6 +196,9 @@ class ReferralLevel(models.Model):
     level_4_count = models.IntegerField(default=0)
     level_5_count = models.IntegerField(default=0)
 
+    # ==========================================
+    # ✅ ذخیره اطلاعات کامل کاربران
+    # ==========================================
     level_1_users = models.JSONField(default=list, blank=True)
     level_2_users = models.JSONField(default=list, blank=True)
     level_3_users = models.JSONField(default=list, blank=True)
