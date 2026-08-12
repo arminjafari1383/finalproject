@@ -65,7 +65,20 @@ export default function TimerPage() {
   const [rewardCount, setRewardCount] = useState(0);
 
   const [message, setMessage] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
   const intervalRef = useRef(null);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    const closeMenu = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", closeMenu);
+    return () => document.removeEventListener("pointerdown", closeMenu);
+  }, []);
 
   const stopTimer = () => {
     if (intervalRef.current) {
@@ -242,6 +255,41 @@ export default function TimerPage() {
   return (
     <div className="boost-page">
       <div className="header">
+        <div className="hamburger-menu" ref={menuRef}>
+          <button
+            type="button"
+            className={`hamburger-btn ${menuOpen ? "is-open" : ""}`}
+            onClick={() => setMenuOpen((open) => !open)}
+            aria-label="Open menu"
+            aria-expanded={menuOpen}
+          >
+            <span />
+            <span />
+            <span />
+          </button>
+
+          {menuOpen && (
+            <div className="hamburger-dropdown">
+              <div className="menu-shopping" aria-disabled="true">
+                <span className="menu-item-label">🛍️ Shopping</span>
+                <span className="coming-soon">Coming Soon</span>
+              </div>
+
+              <button
+                type="button"
+                className="menu-support"
+                onClick={() => {
+                  setMessage("💬 Support: Please contact our support team.");
+                  setMenuOpen(false);
+                }}
+              >
+                <span>🎧 Support</span>
+                <span className="menu-arrow">›</span>
+              </button>
+            </div>
+          )}
+        </div>
+
         <h1>AI POLIFY</h1>
         <img src={Logo} alt="AI POLIFY Logo" />
       </div>
