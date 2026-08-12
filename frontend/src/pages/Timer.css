@@ -66,12 +66,28 @@ body,
   50% { transform: translateY(-10px); }
 }
 
-.hourglass {
-  width: 240px;
-  max-width: 76vw;
+.lk {
+  width: 174px;
+  max-width: 70vw;
+  height: auto;
+  filter: drop-shadow(0 0 15px #00e1ff);
+}
+
+.fan-blades {
+  transform-origin: 200px 210px;
+  animation: spin 8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.countdown-hourglass {
+  width: 128px;
+  max-width: 42vw;
   height: auto;
   overflow: visible;
-  filter: drop-shadow(0 0 18px rgba(56, 189, 248, 0.75));
+  filter: drop-shadow(0 0 16px rgba(56, 189, 248, 0.75));
 }
 
 .hourglass-running {
@@ -185,9 +201,14 @@ body,
     letter-spacing: 1px;
   }
 
-  .hourglass {
-    width: 205px;
+  .lk {
+    width: 150px;
     max-width: 78vw;
+  }
+
+  .countdown-hourglass {
+    width: 112px;
+    max-width: 38vw;
   }
 
   .timer {

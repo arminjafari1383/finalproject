@@ -3,9 +3,56 @@ import { useTonWallet } from "@tonconnect/ui-react";
 import axios from "axios";
 import "./Timer.css";
 import Logo from "../assets/2.png";
+import Blade from "../assets/1.png";
 
 // ✅ استفاده از آدرس نسبی برای جلوگیری از مشکل CORS و Nginx
 const API = "/api/wallet";
+
+function CountdownHourglass({ remaining, topSandHeight, bottomSandHeight }) {
+  return (
+    <svg
+      viewBox="0 0 240 280"
+      xmlns="http://www.w3.org/2000/svg"
+      className={`countdown-hourglass ${remaining > 0 ? "hourglass-running" : "hourglass-ready"}`}
+      role="img"
+      aria-label="Daily reward countdown"
+    >
+      <defs>
+        <linearGradient id="miniHourglassFrame" x1="45" y1="25" x2="195" y2="240" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#dff7ff" />
+          <stop offset="50%" stopColor="#38bdf8" />
+          <stop offset="100%" stopColor="#2563eb" />
+        </linearGradient>
+        <linearGradient id="miniSand" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#fef3c7" />
+          <stop offset="55%" stopColor="#facc15" />
+          <stop offset="100%" stopColor="#f59e0b" />
+        </linearGradient>
+        <clipPath id="miniTopChamber">
+          <path d="M65 58 H175 L138 132 H102 Z" />
+        </clipPath>
+        <clipPath id="miniBottomChamber">
+          <path d="M102 142 H138 L175 216 H65 Z" />
+        </clipPath>
+      </defs>
+
+      <path d="M58 50 H182 M58 224 H182" stroke="url(#miniHourglassFrame)" strokeWidth="14" strokeLinecap="round" />
+      <path d="M69 61 C74 96 103 114 112 137 C103 158 74 181 69 213" fill="none" stroke="url(#miniHourglassFrame)" strokeWidth="7" strokeLinecap="round" />
+      <path d="M171 61 C166 96 137 114 128 137 C137 158 166 181 171 213" fill="none" stroke="url(#miniHourglassFrame)" strokeWidth="7" strokeLinecap="round" />
+      <path d="M65 58 H175 L138 132 H102 Z" fill="rgba(186,230,253,0.08)" stroke="rgba(186,230,253,0.28)" />
+      <path d="M102 142 H138 L175 216 H65 Z" fill="rgba(186,230,253,0.08)" stroke="rgba(186,230,253,0.28)" />
+
+      <rect x="62" y={132 - topSandHeight * 0.74} width="116" height={topSandHeight * 0.74} fill="url(#miniSand)" clipPath="url(#miniTopChamber)" />
+      <rect x="62" y={216 - bottomSandHeight * 0.74} width="116" height={bottomSandHeight * 0.74} fill="url(#miniSand)" clipPath="url(#miniBottomChamber)" />
+
+      {remaining > 0 && (
+        <path className="sand-stream" d="M120 130 V194" stroke="#facc15" strokeWidth="4" strokeLinecap="round" />
+      )}
+
+      <circle cx="120" cy="137" r="5" fill="#fef3c7" />
+    </svg>
+  );
+}
 
 export default function TimerPage() {
   const tonWallet = useTonWallet();
@@ -19,14 +66,6 @@ export default function TimerPage() {
 
   const [message, setMessage] = useState("");
   const intervalRef = useRef(null);
-
-  const formatTime = (sec) => {
-    if (sec === null || sec === undefined) return "--:--:--";
-    const h = String(Math.floor(sec / 3600)).padStart(2, "0");
-    const m = String(Math.floor((sec % 3600) / 60)).padStart(2, "0");
-    const s = String(sec % 60).padStart(2, "0");
-    return `${h}:${m}:${s}`;
-  };
 
   const stopTimer = () => {
     if (intervalRef.current) {
@@ -207,73 +246,35 @@ export default function TimerPage() {
         <img src={Logo} alt="AI POLIFY Logo" />
       </div>
 
-      <svg
-        viewBox="0 0 400 400"
-        xmlns="http://www.w3.org/2000/svg"
-        className={`hourglass ${remaining > 0 ? "hourglass-running" : "hourglass-ready"}`}
-        role="img"
-        aria-label="Daily reward countdown hourglass"
-      >
+      <svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" className="lk">
         <defs>
-          <linearGradient id="hourglassFrame" x1="100" y1="70" x2="300" y2="330" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#dff7ff" />
-            <stop offset="48%" stopColor="#38bdf8" />
-            <stop offset="100%" stopColor="#2563eb" />
+          <linearGradient id="frontEdgeGrad" x1="0" y1="100" x2="0" y2="320" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#00e1ff" />
+            <stop offset="100%" stopColor="#001833" />
           </linearGradient>
-          <linearGradient id="sandGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#fef3c7" />
-            <stop offset="55%" stopColor="#facc15" />
-            <stop offset="100%" stopColor="#f59e0b" />
-          </linearGradient>
-          <filter id="hourglassGlow" x="-60%" y="-60%" width="220%" height="220%">
-            <feGaussianBlur stdDeviation="10" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
+          <filter id="frontEdgeShadow" x="-5%" y="-5%" width="110%" height="110%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="2" result="blur" />
+            <feOffset dx="0" dy="1" result="offsetBlur" />
+            <feFlood floodColor="#001833" floodOpacity="0.5" />
+            <feComposite in2="offsetBlur" operator="in" result="shadow" />
+            <feMerge><feMergeNode in="shadow" /><feMergeNode in="SourceGraphic" /></feMerge>
           </filter>
-          <clipPath id="topChamber">
-            <path d="M125 105 H275 L220 195 H180 Z" />
-          </clipPath>
-          <clipPath id="bottomChamber">
-            <path d="M180 205 H220 L275 295 H125 Z" />
-          </clipPath>
+          <clipPath id="boxClip"><rect x="60" y="100" width="280" height="220" rx="10" ry="10" /></clipPath>
+          <filter id="centerBloom" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur in="SourceGraphic" stdDeviation="22" /></filter>
+          <mask id="mask-blades"><rect width="100%" height="100%" fill="white" /><circle cx="200" cy="210" r="40" fill="black" /></mask>
         </defs>
-
-        <ellipse cx="200" cy="205" rx="122" ry="142" fill="#38bdf8" opacity="0.08" filter="url(#hourglassGlow)" />
-
-        <path d="M120 100 H280 M120 300 H280" stroke="url(#hourglassFrame)" strokeWidth="18" strokeLinecap="round" />
-        <path d="M130 112 C135 155 175 178 190 200 C175 222 135 245 130 288" fill="none" stroke="url(#hourglassFrame)" strokeWidth="9" strokeLinecap="round" />
-        <path d="M270 112 C265 155 225 178 210 200 C225 222 265 245 270 288" fill="none" stroke="url(#hourglassFrame)" strokeWidth="9" strokeLinecap="round" />
-
-        <path d="M125 105 H275 L220 195 H180 Z" fill="rgba(186,230,253,0.08)" stroke="rgba(186,230,253,0.3)" strokeWidth="2" />
-        <path d="M180 205 H220 L275 295 H125 Z" fill="rgba(186,230,253,0.08)" stroke="rgba(186,230,253,0.3)" strokeWidth="2" />
-
-        <rect
-          x="120"
-          y={195 - topSandHeight}
-          width="160"
-          height={topSandHeight}
-          fill="url(#sandGradient)"
-          clipPath="url(#topChamber)"
-        />
-        <rect
-          x="120"
-          y={295 - bottomSandHeight}
-          width="160"
-          height={bottomSandHeight}
-          fill="url(#sandGradient)"
-          clipPath="url(#bottomChamber)"
-        />
-
-        {remaining > 0 && (
-          <path className="sand-stream" d="M200 192 V270" stroke="#facc15" strokeWidth="5" strokeLinecap="round" />
-        )}
-
-        <circle cx="200" cy="200" r="6" fill="#fef3c7" />
-        <text x="200" y="350" textAnchor="middle" fill="#bae6fd" fontSize="18" fontWeight="700">
-          DAILY REWARD
-        </text>
+        <path d="M80 80 L320 80 L340 100 L60 100 Z" fill="none" stroke="#00e1ff" strokeWidth="4" />
+        <rect x="60" y="100" width="280" height="220" rx="10" ry="10" fill="none" stroke="url(#frontEdgeGrad)" strokeWidth="4" filter="url(#frontEdgeShadow)" />
+        <circle cx="80" cy="120" r="5" fill="#00e1ff" /><circle cx="320" cy="120" r="5" fill="#00e1ff" />
+        <circle cx="80" cy="300" r="5" fill="#00e1ff" /><circle cx="320" cy="300" r="5" fill="#00e1ff" />
+        <rect x="130" y="320" width="40" height="10" rx="2" fill="none" stroke="#00e1ff" strokeWidth="3" />
+        <rect x="230" y="320" width="40" height="10" rx="2" fill="none" stroke="#00e1ff" strokeWidth="3" />
+        <g clipPath="url(#boxClip)"><g filter="url(#centerBloom)"><circle cx="200" cy="210" r="46" fill="#00e1ff" opacity="0.25" /></g><g filter="url(#centerBloom)"><circle cx="200" cy="210" r="90" fill="#00e1ff" opacity="0.08" /></g></g>
+        <image className="fan-blades" href={Blade} x="100" y="110" width="200" height="200" mask="url(#mask-blades)" />
+        <circle cx="200" cy="210" r="40" fill="#1a1448" stroke="#00e1ff" strokeWidth="3" />
+        <text x="200" y="205" textAnchor="middle" fill="white" fontSize="16" fontWeight="bold">MINER</text>
+        <path d="M180 215 H190 M190 215 Q192 208 194 215 T198 215 Q200 208 202 215 T206 215 Q208 208 210 215 H220" stroke="#ffffff" strokeWidth="2" fill="none" />
+        <text x="200" y="230" textAnchor="middle" fill="white" fontSize="16" fontWeight="bold">ECG</text>
       </svg>
 
       {!walletAddress ? (
@@ -283,7 +284,11 @@ export default function TimerPage() {
       ) : (
         <>
           <div className="b1">
-            <h2 className="timer">{formatTime(remaining)}</h2>
+            <CountdownHourglass
+              remaining={remaining}
+              topSandHeight={topSandHeight}
+              bottomSandHeight={bottomSandHeight}
+            />
           </div>
 
           <button
