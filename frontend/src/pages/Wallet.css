@@ -29,6 +29,7 @@ html, body {
   max-width: none;
   margin-left: calc(50% - 50vw);
   margin-right: calc(50% - 50vw);
+  margin-top: -24px;
   display: flex;
   justify-content: center;
   align-items: flex-start;
@@ -37,7 +38,7 @@ html, body {
     radial-gradient(circle at 80% 90%, rgba(15, 30, 70, 0.2), transparent 50%),
     linear-gradient(180deg, #060d1a 0%, #0a1a33 30%, #0d1f3d 60%, #09152b 100%);
   padding: 1rem;
-  padding-top: 2rem;
+  padding-top: calc(2rem + 24px);
   padding-bottom: 90px;
 }
 
@@ -717,7 +718,7 @@ html, body {
 @media (max-width: 768px) {
   .wallet-page-container {
     padding: 0.8rem;
-    padding-top: 1.5rem;
+    padding-top: calc(1.5rem + 24px);
     padding-bottom: 80px;
   }
 
@@ -749,7 +750,7 @@ html, body {
 @media (max-width: 480px) {
   .wallet-page-container {
     padding: 0.5rem;
-    padding-top: 1rem;
+    padding-top: calc(1rem + 24px);
     padding-bottom: 70px;
   }
 
