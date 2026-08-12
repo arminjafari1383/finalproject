@@ -386,9 +386,6 @@ export default function Referrals() {
         let finalTelegramId;
         let finalTelegramUsername = null;
 
-        // ==========================================
-        // 🐛 دیباگ: تصمیم‌گیری برای Telegram ID
-        // ==========================================
         console.log('🐛 [DEBUG] Telegram detection decision:');
         console.log('  savedData?.telegramId:', savedData?.telegramId);
         console.log('  savedData?.telegramUsername:', savedData?.telegramUsername);
@@ -406,13 +403,11 @@ export default function Referrals() {
           console.log('✅ Using real Telegram ID:', finalTelegramId);
         } else {
           finalTelegramId = browserTelegramId;
-          finalTelegramUsername = null;
+          // ✅ برای مرورگر هم username بفرست
+          finalTelegramUsername = `user_${address.slice(0, 8)}`;
           console.log('⚠️ Using browser Telegram ID:', finalTelegramId);
         }
 
-        // ==========================================
-        // 🐛 به‌روزرسانی دیباگ
-        // ==========================================
         setDebugData(prev => ({
           ...prev,
           finalTelegramId,
@@ -428,9 +423,6 @@ export default function Referrals() {
           is_telegram: isTelegramWebApp || savedData?.isTelegram || false,
         };
 
-        // ==========================================
-        // 🐛 ذخیره payload در دیباگ
-        // ==========================================
         setDebugData(prev => ({
           ...prev,
           payload: payload,
@@ -442,9 +434,6 @@ export default function Referrals() {
 
         if (cancelled) return;
 
-        // ==========================================
-        // 🐛 ذخیره پاسخ در دیباگ
-        // ==========================================
         setBackendResponse(res.data);
         setDebugData(prev => ({
           ...prev,
@@ -504,9 +493,6 @@ export default function Referrals() {
         setLevels(response.data?.levels || {});
         setTotalReferrals(response.data?.total_referrals || 0);
 
-        // ==========================================
-        // 🐛 استخراج اولین کاربر برای دیباگ
-        // ==========================================
         const firstLevel = response.data?.levels?.level_1;
         if (firstLevel?.users && firstLevel.users.length > 0) {
           setDebugData(prev => ({
@@ -628,7 +614,7 @@ export default function Referrals() {
   }
 
   // ==========================================
-  // 🖼️ Render Level Table
+  // 🖼️ Render Level Table - اصلاح شده
   // ==========================================
 
   function renderLevelTable(level, data) {
@@ -685,6 +671,7 @@ export default function Referrals() {
                   let displayName = '';
                   let displayUsername = null;
                   
+                  // 1. اول از telegram_username استفاده کن (اگر معتبر باشه)
                   if (userTelegramUsername && 
                       userTelegramUsername !== 'browser' && 
                       !userTelegramUsername.startsWith('browser_') &&
@@ -693,19 +680,28 @@ export default function Referrals() {
                       userTelegramUsername !== '') {
                     displayName = userTelegramUsername;
                     displayUsername = `@${userTelegramUsername}`;
-                  } else if (userTelegramId && 
+                  } 
+                  // 2. اگر username نداشت، از telegram_id استفاده کن
+                  else if (userTelegramId && 
                            userTelegramId !== '-' && 
                            userTelegramId !== 'browser' && 
                            typeof userTelegramId === 'number' && 
                            userTelegramId > 0) {
                     displayName = String(userTelegramId);
-                  } else if (userWallet && userWallet !== '-') {
-                    if (userWallet.length > 10) {
+                  } 
+                  // 3. اگر هیچکدام نبود، از wallet استفاده کن
+                  else if (userWallet && userWallet !== '-') {
+                    // اگر wallet با user_ شروع میشه، فقط بخش آخر رو نشون بده
+                    if (userWallet.startsWith('user_')) {
+                      displayName = userWallet.replace('user_', 'User ');
+                    } else if (userWallet.length > 10) {
                       displayName = `${userWallet.slice(0, 6)}...${userWallet.slice(-4)}`;
                     } else {
                       displayName = userWallet;
                     }
-                  } else {
+                  } 
+                  // 4. در نهایت fallback
+                  else {
                     displayName = 'Anonymous User';
                   }
                   
