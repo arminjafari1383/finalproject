@@ -15,7 +15,7 @@ html, body {
   width: 100%;
   margin: 0;
   padding: 0;
-  background: #0D1C36;
+  background: #060d1a;
   overflow-x: hidden;
 }
 
@@ -25,7 +25,10 @@ html, body {
 
 .wallet-page-container {
   min-height: 100vh;
-  width: 100%;
+  width: 100vw;
+  max-width: none;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
   display: flex;
   justify-content: center;
   align-items: flex-start;
