@@ -143,6 +143,10 @@ def create_purchase(request):
     wallet_address = request.data.get("wallet_address")
     ton_amount = request.data.get("ton_amount")
     ton_tx_hash = request.data.get("ton_tx_hash")
+    output_asset = str(request.data.get("output_asset", "ECG")).strip().upper()
+
+    if output_asset not in {"ECG", "USDT"}:
+        return Response({"error": "Invalid output asset"}, status=status.HTTP_400_BAD_REQUEST)
 
     if wallet_address is None or ton_amount is None or ton_tx_hash is None:
         logger.error("❌ Missing fields")
@@ -165,7 +169,7 @@ def create_purchase(request):
         user = get_or_create_user(wallet_address, telegram_id=None, is_telegram=False)
 
     try:
-        p = register_purchase(user, ton_amount, str(ton_tx_hash))
+        p = register_purchase(user, ton_amount, str(ton_tx_hash), output_asset=output_asset)
         logger.info(f"✅ Purchase created: {p.invoice_no}")
     except Exception as e:
         logger.error(f"❌ REGISTER ERROR: {e}")

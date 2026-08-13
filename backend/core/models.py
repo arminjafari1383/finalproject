@@ -68,7 +68,6 @@ class Wallet(models.Model):
             + self.downline_profit_instant
             + self.self_profit_unlocked
             + self.principal_unlocked
-            + self.self_profit_locked
         )
 
     def __str__(self):
@@ -99,6 +98,7 @@ class Ledger(models.Model):
 
 
 class Purchase(models.Model):
+    OUTPUT_ASSETS = [("ECG","ECG"),("USDT","USDT"),]
     """خرید ECG با TON"""
     user = models.ForeignKey(AppUser, on_delete=models.CASCADE, related_name="purchases")
     invoice_no = models.CharField(max_length=32, unique=True)
@@ -116,6 +116,11 @@ class Purchase(models.Model):
     self_profit_unlock_at = models.DateTimeField()
 
     created_at = models.DateTimeField(auto_now_add=True)
+
+    output_asset = models.CharField(max_length=8,choices=OUTPUT_ASSETS,default="ECG")
+    output_amount = models.DecimalField(max_digits=24,decimal_places=6,default=0)
+    profit_asset = models.CharField(max_length=8,choices=OUTPUT_ASSETS,default="ECG")
+    
 
     def __str__(self):
         return f"TON: {self.invoice_no} - {self.ton_amount} TON"

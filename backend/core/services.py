@@ -11,7 +11,7 @@ from decimal import Decimal, ROUND_DOWN
 
 logger = logging.getLogger(__name__)
 
-from .models import AppUser, Wallet, Ledger, Purchase, ReferralLevel, PurchaseUSDT, PurchaseBNB
+from .models import AppUser, Wallet, AssetBalance, Ledger, Purchase, ReferralLevel, PurchaseUSDT, PurchaseBNB
 
 
 # ثابت‌ها
@@ -393,7 +393,7 @@ def fetch_bnb_usd_rate() -> Decimal:
 # توابع ثبت خرید (بدون تغییر)
 # ==========================================
 @transaction.atomic
-def register_purchase(user: AppUser, ton_amount: Decimal, ton_tx_hash: str, is_test: bool = False) -> Purchase:
+def register_purchase(user: AppUser, ton_amount: Decimal, ton_tx_hash: str, output_asset: str = "ECG", is_test: bool = False) -> Purchase:
     """
     ثبت خرید کاربر با TON
     """
@@ -406,8 +406,12 @@ def register_purchase(user: AppUser, ton_amount: Decimal, ton_tx_hash: str, is_t
 
     rate = fetch_ton_usd_rate()
     usd_value = ton_amount * rate
+    output_asset = str(output_asset).upper()
+    if output_asset not in {"ECG", "USDT"}:
+        raise ValueError("Invalid output asset")
     ecg_value = usd_value * ECG_PER_USD
-    self_bonus = ecg_value * SELF_BONUS_RATE
+    output_amount = ecg_value if output_asset == "ECG" else usd_value
+    self_bonus = output_amount * SELF_BONUS_RATE
     upline_bonus = ecg_value * UPLINE_RATE
 
     now = timezone.now()
@@ -423,6 +427,9 @@ def register_purchase(user: AppUser, ton_amount: Decimal, ton_tx_hash: str, is_t
         ton_usd_rate=rate,
         usd_value=usd_value,
         ecg_value=ecg_value,
+        output_asset=output_asset,
+        output_amount=output_amount,
+        profit_asset=output_asset,
         self_profit_5=self_bonus,
         principal_unlock_at=principal_unlock_at,
         self_profit_unlock_at=self_profit_unlock_at,
@@ -430,15 +437,22 @@ def register_purchase(user: AppUser, ton_amount: Decimal, ton_tx_hash: str, is_t
 
     ensure_user_has_wallet(user)
     
-    Wallet.objects.select_for_update().filter(user=user).update(
-        principal_locked=F("principal_locked") + ecg_value,
-        self_profit_locked=F("self_profit_locked") + self_bonus
-    )
+    if output_asset == "ECG":
+        Wallet.objects.select_for_update().filter(user=user).update(
+            principal_locked=F("principal_locked") + output_amount,
+            self_profit_locked=F("self_profit_locked") + self_bonus,
+        )
+    else:
+        asset_balance, _ = AssetBalance.objects.select_for_update().get_or_create(user=user, asset="USDT")
+        AssetBalance.objects.filter(pk=asset_balance.pk).update(
+            principal_locked=F("principal_locked") + output_amount,
+            profit_locked=F("profit_locked") + self_bonus,
+        )
 
-    Ledger.objects.create(user=user, typ="BUY_PRINCIPAL", amount=ecg_value,
-                          meta={"invoice": invoice_no, "tx": ton_tx_hash, "currency": "TON", "is_test": is_test})
+    Ledger.objects.create(user=user, typ="BUY_PRINCIPAL", amount=output_amount,
+                          meta={"invoice": invoice_no, "tx": ton_tx_hash, "currency": "TON", "asset": output_asset, "is_test": is_test})
     Ledger.objects.create(user=user, typ="BUY_SELF_PROFIT", amount=self_bonus,
-                          meta={"invoice": invoice_no, "tx": ton_tx_hash, "currency": "TON", "is_test": is_test})
+                          meta={"invoice": invoice_no, "tx": ton_tx_hash, "currency": "TON", "asset": output_asset, "is_test": is_test})
 
     if user.inviter_id:
         ensure_user_has_wallet(user.inviter)

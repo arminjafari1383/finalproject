@@ -126,6 +126,7 @@ export default function Purchase() {
         wallet_address: address,
         ton_amount: tonAmount,
         ton_tx_hash: txHash,
+        output_asset: selectedOutput,
       };
 
       await api.post("/purchase/create/", payload);
