@@ -193,12 +193,6 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {treasury.error && (
-        <div className="treasury-alert">
-          Treasury error: {treasury.error}
-        </div>
-      )}
-
       <section className="summary-grid">
         <Stat
           label="Users"
