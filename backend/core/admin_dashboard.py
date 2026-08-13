@@ -6,7 +6,7 @@ from django.db.models import Sum
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-
+import secrets
 from .models import AppUser, AssetBalance, Ledger, Purchase, WithdrawRequest
 
 
@@ -14,19 +14,25 @@ def _money(value):
     return str(value or Decimal("0"))
 
 
+
 def _admin_allowed(request):
-    configured = os.getenv("ADMIN_DASHBOARD_TOKEN", "")
-    supplied = request.headers.get("X-Admin-Token", "")
-    wallet_address = request.headers.get("X-Admin-Wallet", "")
-    if not configured or supplied != configured or not wallet_address:
+    configured_token = os.getenv(
+        "ADMIN_DASHBOARD_TOKEN",
+        "",
+    ).strip()
+
+    supplied_token = request.headers.get(
+        "X-Admin-Token",
+        "",
+    ).strip()
+
+    if not configured_token or not supplied_token:
         return False
-    return AppUser.objects.filter(
-        wallet_address=wallet_address,
-        is_admin=True,
-        is_active=True,
-    ).exists()
 
-
+    return secrets.compare_digest(
+        supplied_token,
+        configured_token,
+    )
 def _treasury_balance():
     address = os.getenv("TREASURY_TON_ADDRESS", "").strip()
     if not address:
