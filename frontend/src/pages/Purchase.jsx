@@ -9,16 +9,11 @@ export default function Purchase() {
   const address = useMemo(() => tonWallet?.account?.address, [tonWallet]);
   const [tonConnectUI] = useTonConnectUI();
 
-  // ✅ فقط TON ورودی
   const [tonAmount, setTonAmount] = useState("1");
-  
-  // ✅ انتخاب خروجی: ECG یا USDT
-  const [selectedOutput, setSelectedOutput] = useState("ECG"); // "ECG" یا "USDT"
-  
+  const [selectedOutput, setSelectedOutput] = useState("ECG");
   const [invoices, setInvoices] = useState([]);
   const [successMessage, setSuccessMessage] = useState("");
   const [loading, setLoading] = useState(false);
-
   const [tonPrice, setTonPrice] = useState(null);
   const [priceError, setPriceError] = useState("");
 
@@ -29,10 +24,8 @@ export default function Purchase() {
     setTimeout(() => setSuccessMessage(""), 4000);
   }
 
-  // دریافت قیمت TON
   useEffect(() => {
     let cancelled = false;
-
     async function fetchPrices() {
       try {
         const res = await fetch(
@@ -46,12 +39,10 @@ export default function Purchase() {
         if (!cancelled) setPriceError("Failed to fetch TON price.");
       }
     }
-
     fetchPrices();
     return () => (cancelled = true);
   }, []);
 
-  // بارگذاری فاکتورها
   async function loadInvoices() {
     if (!address) return;
     try {
@@ -69,29 +60,50 @@ export default function Purchase() {
     loadInvoices();
   }, [address]);
 
-  // محاسبه خروجی
+  // محاسبه مقدار کل بر اساس ارز انتخاب شده
   const outputValue = useMemo(() => {
     const amt = Number(tonAmount);
     if (!tonPrice || !amt || amt <= 0) return "0.00";
     
-    const ecgValue = amt * tonPrice * ECG_PER_USDT;
+    const usdValue = amt * tonPrice;
+    const ecgValue = usdValue * ECG_PER_USDT;
     
     if (selectedOutput === "ECG") {
       return ecgValue.toFixed(2);
     } else {
-      // USDT: ECG / 312
-      return (ecgValue / ECG_PER_USDT).toFixed(2);
+      return usdValue.toFixed(2);
     }
   }, [tonAmount, tonPrice, selectedOutput]);
 
+  // محاسبه ۵٪ سود برای ECG
+  const ecgProfit = useMemo(() => {
+    const amt = Number(tonAmount);
+    if (!tonPrice || !amt || amt <= 0) return "0.00";
+    const usdValue = amt * tonPrice;
+    const ecgValue = usdValue * ECG_PER_USDT;
+    return (ecgValue * 0.05).toFixed(2);
+  }, [tonAmount, tonPrice]);
+
+  // محاسبه ۵٪ سود برای USDT
+  const usdtProfit = useMemo(() => {
+    const amt = Number(tonAmount);
+    if (!tonPrice || !amt || amt <= 0) return "0.00";
+    const usdValue = amt * tonPrice;
+    return (usdValue * 0.05).toFixed(2);
+  }, [tonAmount, tonPrice]);
+
+  // مقدار USD برای هر دو باکس
+  const usdValue = useMemo(() => {
+    const amt = Number(tonAmount);
+    if (!tonPrice || !amt || amt <= 0) return "0.00";
+    return (amt * tonPrice).toFixed(2);
+  }, [tonAmount, tonPrice]);
+
   const outputLabel = selectedOutput === "ECG" ? "ECG" : "USDT";
 
-  // تابع پرداخت
   async function payAndRegister() {
     if (!address) return alert("Wallet is not connected.");
-
     setLoading(true);
-
     try {
       const amount = Number(tonAmount);
       if (!amount || amount <= 0) {
@@ -127,12 +139,10 @@ export default function Purchase() {
     }
   }
 
-  // ترکیب فاکتورها
   const allInvoices = useMemo(() => {
     return invoices.map((invoice) => ({ ...invoice, currency: "TON" }));
   }, [invoices]);
 
-  // Row Component
   function Row({ label, value }) {
     return (
       <div style={{ 
@@ -183,7 +193,6 @@ export default function Purchase() {
               <div className="chart-source">Live market chart by TradingView</div>
             </div>
 
-            {/* ====== Price Display ====== */}
             {tonPrice && (
               <div className="price-box dark-subcard">
                 TON Price: <b>${tonPrice}</b> USD
@@ -191,7 +200,6 @@ export default function Purchase() {
             )}
             {priceError && <div className="error-text">{priceError}</div>}
 
-            {/* ====== Input TON ====== */}
             <p className="label-text">You Pay (TON)</p>
             <input
               className="input-box dark-input"
@@ -203,7 +211,6 @@ export default function Purchase() {
               disabled={loading}
             />
 
-            {/* ====== انتخاب خروجی ====== */}
             <div className="output-selector">
               <p className="output-label">💰 Select Output Currency:</p>
               <div className="output-buttons">
@@ -224,9 +231,8 @@ export default function Purchase() {
               </div>
             </div>
 
-            {/* ====== دو باکس خروجی مجزا ====== */}
             <div className="output-boxes">
-              {/* باکس ECG */}
+              {/* باکس ECG - همیشه مقدار ECG را نشان می‌دهد */}
               <div className={`output-box ecg-box ${selectedOutput === "ECG" ? "box-active" : "box-inactive"}`}>
                 <div className="box-header">
                   <span className="box-icon">⚡</span>
@@ -239,33 +245,24 @@ export default function Purchase() {
                   <div className="box-row">
                     <span className="box-label">Amount:</span>
                     <span className="box-value">
-                    {(
-                      Number(tonAmount || 0) *
-                      Number(tonPrice || 0) *
-                      ECG_PER_USDT *
-                      0.05
-                    ).toFixed(2)} ECG
+                      {selectedOutput === "ECG" ? 
+                        (Number(tonAmount) * Number(tonPrice) * ECG_PER_USDT).toFixed(2) :
+                        (Number(tonAmount) * Number(tonPrice) * ECG_PER_USDT).toFixed(2)
+                      } ECG
                     </span>
                   </div>
                   <div className="box-row">
                     <span className="box-label">≈ USD:</span>
-                    <span className="box-value">
-                      ${(Number(tonAmount) * tonPrice).toFixed(2)}
-                    </span>
+                    <span className="box-value">${usdValue}</span>
                   </div>
                   <div className="box-row">
                     <span className="box-label">5% Profit:</span>
-                    <span className="box-value">
-                      {selectedOutput === "ECG" ? 
-                        ((Number(tonAmount) * tonPrice * ECG_PER_USDT) * 0.05).toFixed(2) :
-                        ((Number(tonAmount) * tonPrice) * 0.05).toFixed(2)
-                      } {outputLabel}
-                    </span>
+                    <span className="box-value">{ecgProfit} ECG</span>
                   </div>
                 </div>
               </div>
 
-              {/* باکس USDT */}
+              {/* باکس USDT - همیشه مقدار USDT را نشان می‌دهد */}
               <div className={`output-box usdt-box ${selectedOutput === "USDT" ? "box-active" : "box-inactive"}`}>
                 <div className="box-header">
                   <span className="box-icon">💵</span>
@@ -278,27 +275,19 @@ export default function Purchase() {
                   <div className="box-row">
                     <span className="box-label">Amount:</span>
                     <span className="box-value">
-                      {(
-                        Number(tonAmount || 0) *
-                        Number(tonPrice || 0) *
-                        0.05
-                      ).toFixed(2)} USDT
+                      {selectedOutput === "USDT" ? 
+                        (Number(tonAmount) * Number(tonPrice)).toFixed(2) :
+                        (Number(tonAmount) * Number(tonPrice)).toFixed(2)
+                      } USDT
                     </span>
                   </div>
                   <div className="box-row">
                     <span className="box-label">≈ USD:</span>
-                    <span className="box-value">
-                      ${(Number(tonAmount) * tonPrice).toFixed(2)}
-                    </span>
+                    <span className="box-value">${usdValue}</span>
                   </div>
                   <div className="box-row">
                     <span className="box-label">5% Profit:</span>
-                    <span className="box-value">
-                      {selectedOutput === "USDT" ? 
-                        ((Number(tonAmount) * tonPrice) * 0.05).toFixed(2) :
-                        ((Number(tonAmount) * tonPrice * ECG_PER_USDT) * 0.05).toFixed(2)
-                      } {outputLabel}
-                    </span>
+                    <span className="box-value">{usdtProfit} USDT</span>
                   </div>
                 </div>
               </div>
@@ -310,7 +299,6 @@ export default function Purchase() {
 
           </div>
 
-          {/* ====== Invoices Section ====== */}
           <div className="invoices-section">
             <div className="invoices-header">
               <h3 className="invoices-title">My Invoices</h3>
@@ -323,7 +311,6 @@ export default function Purchase() {
               {allInvoices.map((item) => {
                 const isTest = item.ton_tx_hash?.startsWith("TEST_");
                 const currency = item.currency || "TON";
-                
                 const amount = item.ton_amount || "-";
                 const txHash = item.ton_tx_hash || "-";
 
