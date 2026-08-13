@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from .admin_dashboard import admin_system_dashboard
 
 urlpatterns = [
     # ========================
@@ -52,4 +53,8 @@ urlpatterns = [
     # Test
     # ========================
     path("test/", views.test_tick, name="test_tick"),
+    path(
+    "admin/system-dashboard/",
+    admin_system_dashboard,
+    name="admin-system-dashboard"),
 ]
