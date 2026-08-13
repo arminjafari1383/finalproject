@@ -239,8 +239,12 @@ export default function Purchase() {
                   <div className="box-row">
                     <span className="box-label">Amount:</span>
                     <span className="box-value">
-                      {selectedOutput === "ECG" ? outputValue : 
-                        (Number(tonAmount) * tonPrice * ECG_PER_USDT).toFixed(2)} ECG
+                    {(
+                      Number(tonAmount || 0) *
+                      Number(tonPrice || 0) *
+                      ECG_PER_USDT *
+                      0.05
+                    ).toFixed(2)} ECG
                     </span>
                   </div>
                   <div className="box-row">
@@ -274,8 +278,11 @@ export default function Purchase() {
                   <div className="box-row">
                     <span className="box-label">Amount:</span>
                     <span className="box-value">
-                      {selectedOutput === "USDT" ? outputValue :
-                        ((Number(tonAmount) * tonPrice * ECG_PER_USDT) / ECG_PER_USDT).toFixed(2)} USDT
+                      {(
+                        Number(tonAmount || 0) *
+                        Number(tonPrice || 0) *
+                        0.05
+                      ).toFixed(2)} USDT
                     </span>
                   </div>
                   <div className="box-row">
