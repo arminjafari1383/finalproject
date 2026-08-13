@@ -39,7 +39,10 @@ function AppContent() {
       <Route path="/stake" element={<ProtectedRoute><Purchase /></ProtectedRoute>} />
       <Route path="/Aboutus" element={<ProtectedRoute><AboutUs /></ProtectedRoute>} />
       <Route path="/Timer" element={<ProtectedRoute><Timer /></ProtectedRoute>} />
-      <Route path="/system-admin" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
+      <Route
+  path="/system-admin"
+  element={<AdminDashboard />}
+/>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
     <Navbar />
