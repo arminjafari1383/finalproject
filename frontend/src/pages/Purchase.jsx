@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useTonConnectUI, useTonWallet } from "@tonconnect/ui-react";
 import { api } from "../api";
 import { buildTonTransaction } from "../ton";
-import logo from "../assets/chart.jpg";
 import "./Purchase.css";
 
 export default function Purchase() {
@@ -164,8 +163,24 @@ export default function Purchase() {
             {successMessage && <div className="success-box">{successMessage}</div>}
             {loading && <div className="loading-text">Processing...</div>}
 
-            <div className="logo-box">
-              <img src={logo} alt="chart" className="logo-img" />
+            <div className="live-chart-box">
+              <div className="live-chart-header">
+                <div>
+                  <span className="live-dot" aria-hidden="true" />
+                  <span className="live-chart-title">USDT / USD</span>
+                </div>
+                <span className="live-chart-badge">LIVE</span>
+              </div>
+
+              <iframe
+                className="live-chart-frame"
+                title="Live USDT to USD chart"
+                src="https://s.tradingview.com/widgetembed/?frameElementId=tradingview_usdt&symbol=COINBASE%3AUSDTUSD&interval=15&hidesidetoolbar=1&symboledit=0&saveimage=0&toolbarbg=0f1d3b&studies=%5B%5D&theme=dark&style=1&timezone=Etc%2FUTC&withdateranges=1&hideideas=1&locale=en"
+                loading="lazy"
+                allowFullScreen
+              />
+
+              <div className="chart-source">Live market chart by TradingView</div>
             </div>
 
             {/* ====== Price Display ====== */}

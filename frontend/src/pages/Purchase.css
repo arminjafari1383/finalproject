@@ -51,24 +51,98 @@ body,
 }
 
 /* ============================================================
-   ✅ LOGO
+   ✅ LIVE USDT CHART
    ============================================================ */
-.logo-box {
+.live-chart-box {
   width: 90%;
   max-width: 500px;
   margin-bottom: 1.5rem;
   border-radius: 1rem;
   overflow: hidden;
-  box-shadow: 0 0 40px rgba(96, 165, 250, 0.08);
+  background: rgba(8, 18, 48, 0.78);
+  border: 1px solid rgba(125, 211, 252, 0.18);
+  box-shadow: 0 0 40px rgba(56, 189, 248, 0.11);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
-.logo-img {
+.live-chart-header {
+  min-height: 50px;
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(125, 211, 252, 0.12);
+  background: linear-gradient(90deg, rgba(37, 99, 235, 0.15), rgba(56, 189, 248, 0.06));
+}
+
+.live-chart-header > div {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.live-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #38bdf8;
+  box-shadow: 0 0 12px #38bdf8;
+  animation: live-pulse 1.6s ease-in-out infinite;
+}
+
+.live-chart-title {
+  color: #e0f2fe;
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+}
+
+.live-chart-badge {
+  padding: 4px 9px;
+  border: 1px solid rgba(56, 189, 248, 0.34);
+  border-radius: 999px;
+  color: #7dd3fc;
+  background: rgba(56, 189, 248, 0.1);
+  font-size: 0.66rem;
+  font-weight: 900;
+  letter-spacing: 1px;
+}
+
+.live-chart-frame {
   width: 100%;
-  height: auto;
+  height: 310px;
   display: block;
-  border-radius: 0.5rem;
-  object-fit: cover;
-  box-shadow: 0 0 20px rgba(0,0,30,0.4);
+  border: 0;
+  background: #0a0f2c;
+}
+
+.chart-source {
+  padding: 7px 12px 9px;
+  color: #64748b;
+  font-size: 0.68rem;
+  text-align: right;
+}
+
+@keyframes live-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.12); }
+}
+
+@media (max-width: 480px) {
+  .live-chart-box {
+    width: 94%;
+    border-radius: 14px;
+  }
+
+  .live-chart-frame {
+    height: 270px;
+  }
+
+  .live-chart-header {
+    min-height: 46px;
+    padding: 0 11px;
+  }
 }
 
 /* ============================================================
@@ -701,7 +775,7 @@ body,
     padding: 1rem;
   }
 
-  .logo-box {
+  .live-chart-box {
     max-width: 100%;
   }
 }
