@@ -73,6 +73,69 @@ class Wallet(models.Model):
     def __str__(self):
         return f"Wallet: {self.user.wallet_address[:8]}..."
 
+class AssetBalance(models.Model):
+    ASSET_CHOICES = [
+        ("USDT", "USDT"),
+    ]
+
+    user = models.ForeignKey(
+        AppUser,
+        on_delete=models.CASCADE,
+        related_name="asset_balances",
+    )
+
+    asset = models.CharField(
+        max_length=8,
+        choices=ASSET_CHOICES,
+    )
+
+    principal_locked = models.DecimalField(
+        max_digits=24,
+        decimal_places=6,
+        default=0,
+    )
+
+    principal_unlocked = models.DecimalField(
+        max_digits=24,
+        decimal_places=6,
+        default=0,
+    )
+
+    profit_locked = models.DecimalField(
+        max_digits=24,
+        decimal_places=6,
+        default=0,
+    )
+
+    profit_unlocked = models.DecimalField(
+        max_digits=24,
+        decimal_places=6,
+        default=0,
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True,
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "asset"],
+                name="unique_user_asset_balance",
+            )
+        ]
+
+    def withdrawable_total(self):
+        return (
+            self.principal_unlocked
+            + self.profit_unlocked
+        )
+
+    def __str__(self):
+        return (
+            f"{self.user.wallet_address[:8]}..."
+            f" - {self.asset}"
+        )
 
 class Ledger(models.Model):
     TYPE_CHOICES = [
@@ -120,7 +183,7 @@ class Purchase(models.Model):
     output_asset = models.CharField(max_length=8,choices=OUTPUT_ASSETS,default="ECG")
     output_amount = models.DecimalField(max_digits=24,decimal_places=6,default=0)
     profit_asset = models.CharField(max_length=8,choices=OUTPUT_ASSETS,default="ECG")
-    
+
 
     def __str__(self):
         return f"TON: {self.invoice_no} - {self.ton_amount} TON"
