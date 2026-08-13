@@ -9,6 +9,7 @@ export default function Purchase() {
   const address = useMemo(() => tonWallet?.account?.address, [tonWallet]);
   const [tonConnectUI] = useTonConnectUI();
 
+  // ✅ فقط TON ورودی
   const [tonAmount, setTonAmount] = useState("1");
   
   // ✅ انتخاب خروجی: ECG یا USDT
