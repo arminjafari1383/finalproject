@@ -328,7 +328,7 @@ button {
 
 .fan-blades {
   transform-origin: 200px 210px;
-  animation: spin 8s linear infinite;
+  animation: spin 6s linear infinite;
 }
 
 @keyframes spin {
