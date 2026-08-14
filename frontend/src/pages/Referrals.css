@@ -355,16 +355,51 @@
 /* ====== REFERRAL PROFIT NOTE ====== */
 .level-profit-note {
   margin: 0 0 8px;
+
   padding: 6px 9px;
-  border: 1px solid rgba(96, 165, 250, 0.12);
+
+  border: 1px solid rgba(255,255,255,0.15);
+
   border-radius: 7px;
-  background: rgba(96, 165, 250, 0.05);
-  color: #94a3b8;
+
+  background: rgba(255,255,255,0.06);
+
+  color: #ffffff;
+
   font-size: 9px;
-  font-weight: 600;
+
+  font-weight: 900;
+
   line-height: 1.3;
+
   text-align: center;
+
   white-space: nowrap;
+
+  text-shadow:
+    0 0 6px rgba(255,255,255,.8),
+    0 0 12px rgba(255,255,255,.4);
+
+  animation: referral-note-blink 1.8s ease-in-out infinite;
+}
+
+
+/* حالت اصلی چشمک ریز */
+
+@keyframes referral-note-blink {
+
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+
+  50% {
+    opacity: .55;
+    transform: scale(1.02);
+  }
+
 }
 
 .level-profit-main {
