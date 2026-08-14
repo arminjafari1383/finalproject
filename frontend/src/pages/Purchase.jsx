@@ -9,7 +9,7 @@ export default function Purchase() {
   const address = useMemo(() => tonWallet?.account?.address, [tonWallet]);
   const [tonConnectUI] = useTonConnectUI();
 
-  const [tonAmount, setTonAmount] = useState("1");
+  const [tonAmount, setTonAmount] = useState("0");
   const [selectedOutput, setSelectedOutput] = useState("ECG");
   const [invoices, setInvoices] = useState([]);
   const [successMessage, setSuccessMessage] = useState("");
