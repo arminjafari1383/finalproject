@@ -1731,6 +1731,11 @@ export default function Referrals() {
     level,
     data
   ) {
+    const levelProfitMessage =
+      level === 1
+        ? "Invite your friends and earn 5% profit from their activity."
+        : "Earn 1% profit from referrals in this level.";
+
     if (!data) {
       return (
         <div className="level-table">
@@ -1739,6 +1744,16 @@ export default function Referrals() {
               ⭐ Level {level}
             </h4>
           </div>
+
+          <p
+            className={`level-profit-note ${
+              level === 1
+                ? "level-profit-main"
+                : ""
+            }`}
+          >
+            {levelProfitMessage}
+          </p>
 
           <div className="empty-message">
             No data available
@@ -1767,6 +1782,16 @@ export default function Referrals() {
             Total: {count}
           </span>
         </div>
+
+        <p
+          className={`level-profit-note ${
+            level === 1
+              ? "level-profit-main"
+              : ""
+          }`}
+        >
+          {levelProfitMessage}
+        </p>
 
         <div className="table-wrapper">
           <table>

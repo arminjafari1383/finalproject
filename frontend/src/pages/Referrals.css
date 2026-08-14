@@ -351,6 +351,28 @@
   font-weight: 600;
 }
 
+
+/* ====== REFERRAL PROFIT NOTE ====== */
+.level-profit-note {
+  margin: 0 0 8px;
+  padding: 6px 9px;
+  border: 1px solid rgba(96, 165, 250, 0.12);
+  border-radius: 7px;
+  background: rgba(96, 165, 250, 0.05);
+  color: #94a3b8;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.level-profit-main {
+  border-color: rgba(250, 204, 21, 0.18);
+  background: rgba(250, 204, 21, 0.06);
+  color: #facc15;
+}
+
 /* ====== TABLE - کوچکتر برای موبایل ====== */
 .table-wrapper {
   overflow-x: auto;
@@ -859,6 +881,11 @@
   .btn-test {
     padding: 6px 14px;
     font-size: 10px;
+  }
+
+  .level-profit-note {
+    padding: 5px 6px;
+    font-size: 7.5px;
   }
 
   .test-header h3 {
