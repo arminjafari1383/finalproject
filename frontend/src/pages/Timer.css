@@ -1023,3 +1023,50 @@ button {
     margin-top: 10px !important;
   }
 }
+
+
+/* ===== Timer full blue background + clean navbar ===== */
+
+html,
+body,
+#root {
+  background: #071a33 !important;
+}
+
+.boost-page {
+  width: 100vw !important;
+  max-width: none !important;
+  margin-left: calc(50% - 50vw) !important;
+  margin-right: calc(50% - 50vw) !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  background: #071a33 !important;
+}
+
+/* remove navbar extra edge */
+.bottom-nav {
+  border: none !important;
+  border-radius: 0 !important;
+  left: 0 !important;
+  transform: none !important;
+  width: 100% !important;
+  bottom: 0 !important;
+}
+
+/* claim directly above timer/status */
+.claim-btn {
+  margin-top: 10px !important;
+  margin-bottom: 8px !important;
+}
+
+.claim-loading {
+  opacity: .65;
+  cursor: not-allowed;
+  animation: claim-pulse 1.5s infinite;
+}
+
+@keyframes claim-pulse {
+  50% {
+    opacity: .35;
+  }
+}

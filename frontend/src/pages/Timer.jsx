@@ -2598,20 +2598,17 @@ export default function TimerPage() {
             CLAIM BUTTON
         ===================================================== */}
 
-        {canClaim &&
-          walletAddress && (
+        {walletAddress && (
 
-            <button
-              className="claim-btn"
-              onClick={
-                claimReward
-              }
-            >
-              Claim 1 ECG
-            </button>
+          <button
+            className={`claim-btn ${!canClaim ? "claim-loading" : ""}`}
+            onClick={canClaim ? claimReward : undefined}
+            disabled={!canClaim}
+          >
+            {canClaim ? "Claim 1 ECG" : "Mining..."}
+          </button>
 
-          )
-        }
+        )}
 
 
 
