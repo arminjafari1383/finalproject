@@ -6,6 +6,8 @@ from decimal import Decimal
 
 import requests
 
+import pyotp
+
 from django.db.models import Count, Sum
 
 from rest_framework import status
@@ -39,28 +41,40 @@ def _money(value):
 
 def _admin_allowed(request):
     """
-    دسترسی فقط با ADMIN_DASHBOARD_TOKEN کنترل می‌شود.
+    دسترسی ادمین با Google Authenticator (TOTP) کنترل می‌شود.
     """
-    configured_token = os.getenv(
-        "ADMIN_DASHBOARD_TOKEN",
+
+    otp_code = request.headers.get(
+        "X-Admin-OTP",
         "",
     ).strip()
 
-    supplied_token = request.headers.get(
-        "X-Admin-Token",
+    secret = os.getenv(
+        "ADMIN_2FA_SECRET",
         "",
     ).strip()
 
-    if not configured_token:
+
+    if not secret:
         return False
 
-    if not supplied_token:
+
+    if not otp_code:
         return False
 
-    return secrets.compare_digest(
-        supplied_token,
-        configured_token,
-    )
+
+    try:
+
+        totp = pyotp.TOTP(secret)
+
+        return totp.verify(
+            otp_code,
+            valid_window=1,
+        )
+
+    except Exception:
+        return False
+
 
 
 # =========================================================

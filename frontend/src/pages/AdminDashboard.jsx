@@ -44,10 +44,10 @@ const number = (value) => {
 
 
 export default function AdminDashboard() {
-  const [token, setToken] = useState(() => {
+  const [otp, setOtp] = useState(() => {
     return (
       sessionStorage.getItem(
-        "admin_dashboard_token"
+        "admin_dashboard_otp"
       ) || ""
     );
   });
@@ -60,11 +60,11 @@ export default function AdminDashboard() {
 
 
   const loadDashboard = useCallback(async () => {
-    const cleanToken = token.trim();
+    const cleanOtp = otp.trim();
 
-    if (!cleanToken) {
+    if (!cleanOtp) {
       setError(
-        "Please enter the admin dashboard token."
+        "Please enter Google Authenticator code."
       );
 
       return;
@@ -75,15 +75,15 @@ export default function AdminDashboard() {
 
     try {
       sessionStorage.setItem(
-        "admin_dashboard_token",
-        cleanToken
+        "admin_dashboard_otp",
+        cleanOtp
       );
 
       const response = await api.get(
         "/admin/system-dashboard/",
         {
           headers: {
-            "X-Admin-Token": cleanToken,
+            "X-Admin-OTP": cleanOtp,
           },
         }
       );
@@ -99,22 +99,22 @@ export default function AdminDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [otp]);
 
 
   useEffect(() => {
-    if (token.trim()) {
+    if (otp.trim()) {
       loadDashboard();
     }
-  }, [loadDashboard, token]);
+  }, [loadDashboard, otp]);
 
 
   const logoutAdmin = () => {
     sessionStorage.removeItem(
-      "admin_dashboard_token"
+      "admin_dashboard_otp"
     );
 
-    setToken("");
+    setOtp("");
     setData(null);
     setError("");
   };
@@ -145,18 +145,20 @@ export default function AdminDashboard() {
           <h1>System Admin</h1>
 
           <input
-            type="password"
-            value={token}
+            type="text"
+            inputMode="numeric"
+            maxLength={6}
+            value={otp}
             onChange={(event) => {
-              setToken(event.target.value);
+              setOtp(event.target.value);
             }}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
                 loadDashboard();
               }
             }}
-            placeholder="Admin dashboard token"
-            autoComplete="current-password"
+            placeholder="Google Authenticator code"
+            autoComplete="one-time-code"
           />
 
           <button
