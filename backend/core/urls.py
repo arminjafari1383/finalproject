@@ -57,4 +57,9 @@ urlpatterns = [
     "admin/system-dashboard/",
     admin_system_dashboard,
     name="admin-system-dashboard"),
+
+    path(
+    "purchase/create-transaction/",
+    views.create_ton_transaction,
+    name="create_ton_transaction"),
 ]

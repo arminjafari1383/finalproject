@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTonConnectUI, useTonWallet } from "@tonconnect/ui-react";
 import { api } from "../api";
-import { buildTonTransaction } from "../ton";
 import "./Purchase.css";
 
 export default function Purchase() {
@@ -110,18 +109,28 @@ export default function Purchase() {
         alert("Invalid TON amount.");
         setLoading(false);
         return;
-      }
-      
+      }      
       const nano = BigInt(Math.floor(amount * 1e9));
-      const tx = buildTonTransaction(nano);
-      await tonConnectUI.sendTransaction(tx);
-      
+
+      // دریافت transaction از backend
+      // آدرس merchant دیگر داخل frontend نیست
+      const txResponse = await api.post(
+        "/purchase/create-transaction/",
+        {
+          amount: String(nano),
+        }
+      );
+
+      await tonConnectUI.sendTransaction(
+        txResponse.data
+      );
+
       const txHash = prompt("Enter TX Hash:");
       if (!txHash) {
         setLoading(false);
         return;
       }
-      
+
       const payload = {
         wallet_address: address,
         ton_amount: tonAmount,

@@ -1437,9 +1437,7 @@ export default function TimerPage() {
 
           setRemaining(sec);
 
-          setBalance(
-            data.balance_ecg ?? "0"
-          );
+
 
           setTotalRewards(
             data.total_rewards ?? "0"
@@ -1488,14 +1486,6 @@ export default function TimerPage() {
 
 
           setRemaining(sec);
-
-
-          setBalance(
-            data.balance_ecg ??
-            data.balance ??
-            data.withdrawable_total ??
-            "0"
-          );
 
 
           setTotalRewards(
@@ -1704,10 +1694,6 @@ export default function TimerPage() {
           "rewarded"
         ) {
 
-          setBalance(
-            data.balance_ecg ??
-            "0"
-          );
 
 
           setTotalRewards(
@@ -2633,19 +2619,6 @@ export default function TimerPage() {
         <div className="balance-strip">
 
 
-          <span>
-
-            Balance{" "}
-
-            <strong>
-
-              {Number(
-                balance
-              ).toFixed(4)} ECG
-
-            </strong>
-
-          </span>
 
 
 

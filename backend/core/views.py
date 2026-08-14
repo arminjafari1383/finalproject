@@ -1,5 +1,6 @@
 # backend/core/views.py
-
+from django.conf import settings
+import time
 import logging
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -32,6 +33,13 @@ import re
 # =======================
 logger = logging.getLogger(__name__)
 
+# TON service config
+TON_SERVICE_URL = os.getenv(
+    "TON_SERVICE_URL",
+    "http://tonservice:3001"
+)
+
+service_url = TON_SERVICE_URL
 
 @api_view(["POST"])
 def connect_wallet(request):
@@ -849,3 +857,37 @@ def list_purchases_bnb(request):
         "self_profit_unlock_at": p.self_profit_unlock_at,
         "bnb_tx_hash": p.bnb_tx_hash,
     } for p in qs])
+
+@api_view(["POST"])
+def create_ton_transaction(request):
+
+    amount = request.data.get("amount")
+
+    if not amount:
+        return Response(
+            {
+                "error": "amount required"
+            },
+            status=400
+        )
+
+
+    return Response({
+
+        "validUntil":
+            int(time.time()) + 600,
+
+
+        "messages":[
+
+            {
+                "address":
+                    settings.TON_MERCHANT_ADDRESS,
+
+                "amount":
+                    str(amount)
+            }
+
+        ]
+
+    })
