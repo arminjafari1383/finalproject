@@ -7,7 +7,7 @@ import {
   useLocation
 } from "react-router-dom";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import Navbar from "./components/Navbar";
 
@@ -26,25 +26,46 @@ import { useWallet } from "./context/WalletContext";
 
 
 function ProtectedRoute({ children }) {
-  const tonWallet = useTonWallet();
-  const { isWalletValid } = useWallet();
 
-  if (!tonWallet?.account?.address || !isWalletValid) {
-    return <Navigate to="/" replace />;
+  const tonWallet = useTonWallet();
+
+  const {
+    isWalletValid
+  } = useWallet();
+
+
+  if (
+    !tonWallet?.account?.address ||
+    !isWalletValid
+  ) {
+    return (
+      <Navigate
+        to="/"
+        replace
+      />
+    );
   }
+
 
   return children;
 }
 
 
 
+
+
 function AppContent() {
+
   useTgStartRedirect();
 
+
   const navigate = useNavigate();
+
   const location = useLocation();
 
+
   const tonWallet = useTonWallet();
+
 
   const {
     validateWallet,
@@ -52,25 +73,41 @@ function AppContent() {
   } = useWallet();
 
 
-  const address = tonWallet?.account?.address;
+
+  const address =
+    tonWallet?.account?.address;
+
+
+
+  // فقط یک بار redirect اولیه
+  const hasRedirected =
+    useRef(false);
+
 
 
 
   useEffect(() => {
 
-    // اگر ولت قطع شده
+
+    // اگر ولت قطع شد
     if (!address) {
+
       setIsWalletValid(false);
+
+      hasRedirected.current = false;
+
       return;
     }
 
 
-    const telegramId = localStorage.getItem(
-      "telegram_id"
-    );
+
+    const telegramId =
+      localStorage.getItem(
+        "telegram_id"
+      );
 
 
-    // ذخیره ولت
+
     localStorage.setItem(
       "valid_wallet",
       address
@@ -78,25 +115,46 @@ function AppContent() {
 
 
 
-    // اعتبارسنجی ولت
+
     if (telegramId) {
+
       validateWallet(
         address,
         Number(telegramId)
       );
+
     }
+
 
 
     setIsWalletValid(true);
 
 
 
-    // فقط اگر در صفحه اصلی هستیم برو Timer
-    if (location.pathname === "/") {
-      navigate("/Timer", {
-        replace: true
-      });
+
+    /*
+      فقط وقتی اپ تازه باز شده
+      و کاربر در صفحه اصلی است
+      برو Timer
+    */
+
+    if (
+      location.pathname === "/" &&
+      !hasRedirected.current
+    ) {
+
+      hasRedirected.current = true;
+
+
+      navigate(
+        "/Timer",
+        {
+          replace:true
+        }
+      );
+
     }
+
 
 
   }, [
@@ -110,7 +168,10 @@ function AppContent() {
 
 
 
+
+
   return (
+
     <div
       style={{
         padding:16,
@@ -118,12 +179,17 @@ function AppContent() {
       }}
     >
 
+
       <Routes>
+
 
         <Route
           path="/"
-          element={<Wallet />}
+          element={
+            <Wallet />
+          }
         />
+
 
 
         <Route
@@ -136,6 +202,7 @@ function AppContent() {
         />
 
 
+
         <Route
           path="/stake"
           element={
@@ -144,6 +211,7 @@ function AppContent() {
             </ProtectedRoute>
           }
         />
+
 
 
         <Route
@@ -156,6 +224,7 @@ function AppContent() {
         />
 
 
+
         <Route
           path="/Timer"
           element={
@@ -166,10 +235,14 @@ function AppContent() {
         />
 
 
+
         <Route
           path="/system-admin"
-          element={<AdminDashboard />}
+          element={
+            <AdminDashboard />
+          }
         />
+
 
 
         <Route
@@ -183,26 +256,36 @@ function AppContent() {
         />
 
 
+
       </Routes>
+
 
 
       <Navbar />
 
+
+
     </div>
+
   );
+
 }
+
 
 
 
 
 export default function App() {
 
+
   return (
+
     <BrowserRouter>
 
       <AppContent />
 
     </BrowserRouter>
+
   );
 
 }
