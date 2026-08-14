@@ -569,7 +569,11 @@ export default function Wallet() {
                 autoComplete="off"
               />
 
-              <label htmlFor="withdraw-amount">Withdrawal Amount (ECG)</label>
+              <label htmlFor="withdraw-amount">
+                {withdrawAsset === "TON"
+                  ? "Withdrawable Amount (TON)"
+                  : "Withdrawable Amount (ECG)"}
+              </label>
 
               <div className="amount-wrapper">
                 <input
@@ -578,31 +582,44 @@ export default function Wallet() {
                   inputMode="decimal"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  placeholder="Minimum 60 ECG"
-                  min="60"
+                  placeholder={
+                    withdrawAsset === "TON"
+                      ? "Minimum 1 TON"
+                      : "Minimum 60 ECG"
+                  }
+                  min={withdrawAsset === "TON" ? "1" : "60"}
                   disabled={isWithdrawing}
                 />
 
-                <button
-                  type="button"
-                  className="max-btn"
-                  onClick={() => {
-                    setAmount(Number(wallet?.withdrawable_total || 0));
-                  }}
-                  disabled={isWithdrawing}
-                >
-                  MAX
-                </button>
+                {withdrawAsset === "ECG" && (
+                  <button
+                    type="button"
+                    className="max-btn"
+                    onClick={() => {
+                      setAmount(Number(wallet?.withdrawable_total || 0));
+                    }}
+                    disabled={isWithdrawing}
+                  >
+                    MAX
+                  </button>
+                )}
               </div>
+
+              {withdrawAsset === "ECG" && (
+                <div className="max-balance-info">
+                  Available:
+                  <b> {Number(wallet?.withdrawable_total || 0).toFixed(4)} ECG</b>
+                </div>
+              )}
 
               {withdrawAsset === "TON" && (
                 <div className="ton-info">
                   <div>
-                    Available ECG:
-                    <b> {Number(wallet?.withdrawable_total || 0).toFixed(4)} ECG</b>
+                    Withdrawable TON:
+                    <b> {Number(wallet?.ton_balance || 0).toFixed(4)} TON</b>
                   </div>
                   <div>
-                    Minimum TON withdrawal:
+                    Minimum withdrawal:
                     <b> 1 TON</b>
                   </div>
                 </div>

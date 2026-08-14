@@ -904,3 +904,102 @@ html, body {
 .go3205121330 {
   display: none !important;
 }
+
+/* =========================
+   MAX Button
+========================= */
+
+.amount-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+
+.max-btn {
+  height: 52px;
+  min-width: 72px;
+
+  padding: 0 16px;
+
+  border-radius: 14px;
+
+  border: 1px solid rgba(125, 211, 252, 0.35);
+
+  background:
+    linear-gradient(
+      135deg,
+      rgba(56, 189, 248, 0.22),
+      rgba(37, 99, 235, 0.18)
+    );
+
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+
+  color: #e0f2fe;
+
+  font-size: 14px;
+  font-weight: 800;
+
+  letter-spacing: 0.5px;
+
+  cursor: pointer;
+
+  box-shadow:
+    0 0 18px rgba(56, 189, 248, 0.25),
+    inset 0 1px 0 rgba(255,255,255,0.15);
+
+  transition: all .25s ease;
+}
+
+
+.max-btn:hover {
+  transform: translateY(-2px);
+
+  border-color: rgba(125, 211, 252, 0.75);
+
+  background:
+    linear-gradient(
+      135deg,
+      rgba(56, 189, 248, 0.35),
+      rgba(37, 99, 235, 0.28)
+    );
+
+  box-shadow:
+    0 0 28px rgba(56, 189, 248, 0.45),
+    inset 0 1px 0 rgba(255,255,255,0.25);
+}
+
+
+.max-btn:active {
+  transform: scale(.95);
+}
+
+
+.max-btn:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+
+.max-balance-info {
+  margin-top: 8px;
+  padding: 8px 12px;
+
+  border-radius: 12px;
+
+  background: rgba(56,189,248,0.08);
+
+  border: 1px solid rgba(125,211,252,0.15);
+
+  color: #bae6fd;
+
+  font-size: 12px;
+
+  text-align: left;
+}
+
+.max-balance-info b {
+  color: #ffffff;
+}
