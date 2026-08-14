@@ -261,124 +261,199 @@ export default function TimerPage() {
     return `${String(h).padStart(2, "0")} : ${String(m).padStart(2, "0")} : ${String(s).padStart(2, "0")}`;
   };
 
+  const progress = Math.round(elapsedRatio * 100);
+  const hours = remaining == null ? "--" : String(Math.floor(remaining / 3600)).padStart(2, "0");
+  const minutes = remaining == null ? "--" : String(Math.floor((remaining % 3600) / 60)).padStart(2, "0");
+  const seconds = remaining == null ? "--" : String(Math.floor(remaining % 60)).padStart(2, "0");
+
   return (
     <div className="boost-page">
-      {/* ===== HEADER ===== */}
-      <div className="header">
-        <div className="hamburger-menu" ref={menuRef}>
-          <button
-            type="button"
-            className={`hamburger-btn ${menuOpen ? "is-open" : ""}`}
-            onClick={() => setMenuOpen((open) => !open)}
-            aria-label="Open menu"
-            aria-expanded={menuOpen}
-          >
-            <span />
-            <span />
-            <span />
-          </button>
+      <main className="mining-shell">
+        <header className="topbar">
+          <div className="hamburger-menu" ref={menuRef}>
+            <button
+              type="button"
+              className={`hamburger-btn ${menuOpen ? "is-open" : ""}`}
+              onClick={() => setMenuOpen((open) => !open)}
+              aria-label="Open menu"
+              aria-expanded={menuOpen}
+            >
+              <span /><span /><span />
+            </button>
 
-          {menuOpen && (
-            <div className="hamburger-dropdown">
-              <div className="menu-shopping" aria-disabled="true">
-                <span className="menu-item-label">🛍️ Shopping</span>
-                <span className="coming-soon">Coming Soon</span>
+            {menuOpen && (
+              <div className="hamburger-dropdown">
+                <div className="menu-shopping" aria-disabled="true">
+                  <span>🛍️ Shopping</span>
+                  <span className="coming-soon">Coming Soon</span>
+                </div>
+
+                <button
+                  type="button"
+                  className="menu-support"
+                  onClick={() => {
+                    setMessage("💬 Support: Please contact our support team.");
+                    setMenuOpen(false);
+                  }}
+                >
+                  <span>🎧 Support</span>
+                  <span className="menu-arrow">›</span>
+                </button>
               </div>
+            )}
+          </div>
 
-              <button
-                type="button"
-                className="menu-support"
-                onClick={() => {
-                  setMessage("💬 Support: Please contact our support team.");
-                  setMenuOpen(false);
-                }}
-              >
-                <span>🎧 Support</span>
-                <span className="menu-arrow">›</span>
-              </button>
+          <h1>AI POLIFY</h1>
+          <img src={Logo} alt="AI POLIFY Logo" className="brand-logo" />
+        </header>
+
+        <section className="miner-card" aria-label="ECG Miner">
+          <div className="miner-top-edge" />
+
+          <svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" className="miner-svg">
+            <defs>
+              <filter id="centerBloom" x="-80%" y="-80%" width="260%" height="260%">
+                <feGaussianBlur stdDeviation="24" />
+              </filter>
+              <mask id="mask-blades">
+                <rect width="100%" height="100%" fill="white" />
+                <circle cx="200" cy="210" r="47" fill="black" />
+              </mask>
+            </defs>
+
+            <g filter="url(#centerBloom)">
+              <circle cx="200" cy="210" r="115" fill="#039bea" opacity="0.14" />
+              <circle cx="200" cy="210" r="72" fill="#00d9ff" opacity="0.18" />
+            </g>
+
+            <image
+              className="fan-blades"
+              href={Blade}
+              x="72"
+              y="82"
+              width="256"
+              height="256"
+              mask="url(#mask-blades)"
+            />
+
+            <circle cx="200" cy="210" r="62" fill="#06142d" stroke="#0ab9ff" strokeWidth="3" />
+            <circle cx="200" cy="210" r="55" fill="none" stroke="rgba(72,207,255,.18)" strokeWidth="2" />
+            <text x="200" y="198" textAnchor="middle" fill="white" fontSize="18" fontWeight="800">MINER</text>
+            <path d="M177 211 H189 M189 211 Q192 202 195 211 T201 211 Q204 202 207 211 T213 211 H224"
+              stroke="#ffffff" strokeWidth="2.6" fill="none" />
+            <text x="200" y="232" textAnchor="middle" fill="white" fontSize="22" fontWeight="700">ECG</text>
+          </svg>
+
+          <span className="corner-dot dot-a" />
+          <span className="corner-dot dot-b" />
+          <span className="corner-dot dot-c" />
+          <span className="corner-dot dot-d" />
+          <span className="miner-foot foot-left" />
+          <span className="miner-foot foot-right" />
+        </section>
+
+        <section className="countdown-zone">
+          <CountdownHourglass
+            remaining={remaining}
+            topSandHeight={topSandHeight}
+            bottomSandHeight={bottomSandHeight}
+          />
+
+          <p className="mining-caption">
+            {remaining === 0 ? "Mining completed!" : "Mining in progress..."}
+          </p>
+
+          <div className="digital-countdown" aria-label={formatTime(remaining)}>
+            <div className="time-part">
+              <strong>{hours}</strong>
+              <span>HOURS</span>
             </div>
-          )}
+            <b className="colon">:</b>
+            <div className="time-part">
+              <strong>{minutes}</strong>
+              <span>MINUTES</span>
+            </div>
+            <b className="colon">:</b>
+            <div className="time-part">
+              <strong>{seconds}</strong>
+              <span>SECONDS</span>
+            </div>
+          </div>
+        </section>
+
+        <section className="reward-card glass-card">
+          <div className="reward-heading">
+            <span>Estimated Reward</span>
+            <strong>1.0000 ECG</strong>
+          </div>
+
+          <div className="progress-track" aria-label={`Mining progress ${progress}%`}>
+            <div className="progress-fill" style={{ width: `${progress}%` }}>
+              <span>{progress}%</span>
+            </div>
+          </div>
+
+          <div className="reward-stats">
+            <div className="stat-item">
+              <span className="stat-icon">▣</span>
+              <span>Total Days Mined: <strong>{rewardCount}</strong></span>
+            </div>
+            <div className="stat-divider" />
+            <div className="stat-item">
+              <span className="stat-icon">♟</span>
+              <span>Referral Bonus: <strong>{Number(referralBonus).toFixed(4)} ECG</strong></span>
+            </div>
+          </div>
+        </section>
+
+        <section className="status-card glass-card">
+          <div className="coin-icon">
+            <span />
+            <span />
+            <span />
+          </div>
+          <div>
+            <h2>{remaining === 0 ? "Your reward is ready!" : "Mining will complete soon!"}</h2>
+            <p>{remaining === 0 ? "Claim your daily reward now." : "Stay online to claim your reward."}</p>
+          </div>
+        </section>
+
+        {canClaim && walletAddress && (
+          <button className="claim-btn" onClick={claimReward}>
+            Claim 1 ECG
+          </button>
+        )}
+
+        {message && <p className="server-message">{message}</p>}
+
+        <div className="balance-strip">
+          <span>Balance <strong>{Number(balance).toFixed(4)} ECG</strong></span>
+          <span>Total Rewards <strong>{Number(totalRewards).toFixed(4)} ECG</strong></span>
         </div>
+      </main>
 
-        <h1>AI POLIFY</h1>
-        <img src={Logo} alt="AI POLIFY Logo" />
-      </div>
-
-      {/* ===== MINER SVG ===== */}
-      <svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" className="lk">
-        <defs>
-          <linearGradient id="frontEdgeGrad" x1="0" y1="100" x2="0" y2="320" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#00e1ff" />
-            <stop offset="100%" stopColor="#001833" />
-          </linearGradient>
-          <filter id="frontEdgeShadow" x="-5%" y="-5%" width="110%" height="110%">
-            <feGaussianBlur in="SourceAlpha" stdDeviation="2" result="blur" />
-            <feOffset dx="0" dy="1" result="offsetBlur" />
-            <feFlood floodColor="#001833" floodOpacity="0.5" />
-            <feComposite in2="offsetBlur" operator="in" result="shadow" />
-            <feMerge><feMergeNode in="shadow" /><feMergeNode in="SourceGraphic" /></feMerge>
-          </filter>
-          <clipPath id="boxClip"><rect x="60" y="100" width="280" height="220" rx="10" ry="10" /></clipPath>
-          <filter id="centerBloom" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur in="SourceGraphic" stdDeviation="22" /></filter>
-          <mask id="mask-blades"><rect width="100%" height="100%" fill="white" /><circle cx="200" cy="210" r="40" fill="black" /></mask>
-        </defs>
-        <path d="M80 80 L320 80 L340 100 L60 100 Z" fill="none" stroke="#00e1ff" strokeWidth="4" />
-        <rect x="60" y="100" width="280" height="220" rx="10" ry="10" fill="none" stroke="url(#frontEdgeGrad)" strokeWidth="4" filter="url(#frontEdgeShadow)" />
-        <circle cx="80" cy="120" r="5" fill="#00e1ff" /><circle cx="320" cy="120" r="5" fill="#00e1ff" />
-        <circle cx="80" cy="300" r="5" fill="#00e1ff" /><circle cx="320" cy="300" r="5" fill="#00e1ff" />
-        <rect x="130" y="320" width="40" height="10" rx="2" fill="none" stroke="#00e1ff" strokeWidth="3" />
-        <rect x="230" y="320" width="40" height="10" rx="2" fill="none" stroke="#00e1ff" strokeWidth="3" />
-        <g clipPath="url(#boxClip)">
-          <g filter="url(#centerBloom)"><circle cx="200" cy="210" r="46" fill="#00e1ff" opacity="0.25" /></g>
-          <g filter="url(#centerBloom)"><circle cx="200" cy="210" r="90" fill="#00e1ff" opacity="0.08" /></g>
-        </g>
-        <image className="fan-blades" href={Blade} x="100" y="110" width="200" height="200" mask="url(#mask-blades)" />
-        <circle cx="200" cy="210" r="40" fill="#1a1448" stroke="#00e1ff" strokeWidth="3" />
-        <text x="200" y="205" textAnchor="middle" fill="white" fontSize="16" fontWeight="bold">MINER</text>
-        <path d="M180 215 H190 M190 215 Q192 208 194 215 T198 215 Q200 208 202 215 T206 215 Q208 208 210 215 H220" stroke="#ffffff" strokeWidth="2" fill="none" />
-        <text x="200" y="230" textAnchor="middle" fill="white" fontSize="16" fontWeight="bold">ECG</text>
-      </svg>
-
-      {/* ===== تایمر ===== */}
-      <div className="timer">
-        {formatTime(remaining)}
-      </div>
-
-      {/* ===== ساعت شنی ===== */}
-      <div className="b1">
-        <CountdownHourglass
-          remaining={remaining}
-          topSandHeight={topSandHeight}
-          bottomSandHeight={bottomSandHeight}
-        />
-      </div>
-
-      {/* ===== دکمه Claim ===== */}
-      <button
-        className="claim-btn"
-        onClick={claimReward}
-        disabled={!canClaim}
-        style={{ opacity: canClaim ? 1 : 0.5 }}
-      >
-        {canClaim ? "Claim 1 ECG" : "Mining..."}
-      </button>
-
-      {/* ===== اطلاعات ===== */}
-      <div className="info">
-        🕐 Total Days Mined: <span className="highlight">{rewardCount}</span>
-        {" | "} Referral Bonus: <span className="highlight">{Number(referralBonus).toFixed(4)} ECG</span>
-      </div>
-
-      <div className="info">
-        Balance: <span className="highlight">{Number(balance).toFixed(4)} ECG</span>
-        {" | "} Total Rewards: <span className="highlight">{Number(totalRewards).toFixed(4)} ECG</span>
-      </div>
-
-      {message && (
-        <p style={{ textAlign: "center", marginTop: 8, color: "#a0c4ff" }}>
-          {message}
-        </p>
-      )}
+      <nav className="bottom-nav" aria-label="Main navigation">
+        <button className="nav-item active">
+          <span className="nav-icon">⚒</span>
+          <span>Mine</span>
+        </button>
+        <button className="nav-item">
+          <span className="nav-icon">◉</span>
+          <span>Stake</span>
+        </button>
+        <button className="nav-item">
+          <span className="nav-icon">🤝</span>
+          <span>Friends</span>
+        </button>
+        <button className="nav-item">
+          <span className="nav-icon">♙</span>
+          <span>About Us</span>
+        </button>
+        <button className="nav-item">
+          <span className="nav-icon">▢</span>
+          <span>Wallets</span>
+        </button>
+      </nav>
     </div>
   );
 }
