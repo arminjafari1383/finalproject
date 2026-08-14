@@ -282,25 +282,42 @@ export default function TimerPage() {
             </button>
 
             {menuOpen && (
-              <div className="hamburger-dropdown">
-                <div className="menu-shopping" aria-disabled="true">
-                  <span>🛍️ Shopping</span>
-                  <span className="coming-soon">Coming Soon</span>
-                </div>
+                <div className="hamburger-toolbar">
+                  <button
+                    type="button"
+                    className="toolbar-item disabled"
+                    disabled
+                  >
+                    <span className="toolbar-icon">🛍️</span>
+                    <span>Shopping</span>
+                    <small>Coming Soon</small>
+                  </button>
 
-                <button
-                  type="button"
-                  className="menu-support"
-                  onClick={() => {
-                    setMessage("💬 Support: Please contact our support team.");
-                    setMenuOpen(false);
-                  }}
-                >
-                  <span>🎧 Support</span>
-                  <span className="menu-arrow">›</span>
-                </button>
-              </div>
-            )}
+                  <button
+                    type="button"
+                    className="toolbar-item"
+                    onClick={() => {
+                      setMessage("💬 Support: Please contact our support team.");
+                      setMenuOpen(false);
+                    }}
+                  >
+                    <span className="toolbar-icon">🎧</span>
+                    <span>Support</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="toolbar-item"
+                    onClick={() => {
+                      setMessage("⚙️ Settings");
+                      setMenuOpen(false);
+                    }}
+                  >
+                    <span className="toolbar-icon">⚙️</span>
+                    <span>Settings</span>
+                  </button>
+                </div>
+              )}
           </div>
 
           <h1>AI POLIFY</h1>
@@ -329,10 +346,10 @@ export default function TimerPage() {
             <image
               className="fan-blades"
               href={Blade}
-              x="72"
-              y="82"
-              width="256"
-              height="256"
+              x="52"
+              y="62"
+              width="296"
+              height="296"
               mask="url(#mask-blades)"
             />
 

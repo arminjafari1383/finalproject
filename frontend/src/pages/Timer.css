@@ -113,56 +113,129 @@ button {
 .hamburger-btn.is-open span:nth-child(2) { opacity: 0; }
 .hamburger-btn.is-open span:nth-child(3) { transform: translateY(-10px) rotate(-45deg); }
 
-.hamburger-dropdown {
+.hamburger-toolbar {
   position: absolute;
-  top: 72px;
-  left: 0;
-  width: 270px;
-  padding: 10px;
-  border: 1px solid rgba(115, 210, 255, .28);
-  border-radius: 18px;
-  background: rgba(2, 17, 36, .94);
-  box-shadow: 0 22px 54px rgba(0,0,0,.48), 0 0 28px rgba(0, 180, 255, .12);
-  backdrop-filter: blur(20px);
-}
+  top: 50%;
+  left: 74px;
+  transform: translateY(-50%);
 
-.menu-shopping,
-.menu-support {
-  width: 100%;
-  min-height: 52px;
-  padding: 11px 13px;
-  border-radius: 12px;
-  color: #dff5ff;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
+
+  padding: 8px;
+  min-height: 62px;
+
+  border: 1px solid rgba(90, 210, 255, 0.28);
+  border-radius: 18px;
+
+  background:
+    linear-gradient(
+      145deg,
+      rgba(7, 31, 58, 0.96),
+      rgba(2, 15, 32, 0.94)
+    );
+
+  box-shadow:
+    0 14px 40px rgba(0, 0, 0, 0.45),
+    0 0 28px rgba(0, 188, 255, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+
+  animation: toolbar-open 0.25s ease;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
-.menu-shopping {
-  background: rgba(255,255,255,.04);
-  margin-bottom: 6px;
-  opacity: .78;
-}
+.toolbar-item {
+  position: relative;
 
-.menu-support {
-  border: 0;
-  background: rgba(0, 172, 255, .06);
+  min-width: 90px;
+  height: 52px;
+
+  padding: 7px 12px;
+
+  border: 1px solid transparent;
+  border-radius: 13px;
+
+  background: rgba(0, 174, 255, 0.05);
+  color: #cfefff;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+
   cursor: pointer;
+
+  font-size: 12px;
+  font-weight: 600;
+
+  transition:
+    transform 0.2s ease,
+    background 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
-.coming-soon {
-  padding: 4px 7px;
-  border-radius: 999px;
-  color: #70d8ff;
-  background: rgba(6, 200, 255, .08);
-  font-size: 9px;
+.toolbar-item:hover:not(:disabled) {
+  background: rgba(0, 190, 255, 0.14);
+  border-color: rgba(78, 208, 255, 0.3);
+  color: #ffffff;
+
+  box-shadow:
+    inset 0 0 14px rgba(0, 180, 255, 0.1),
+    0 0 12px rgba(0, 180, 255, 0.08);
+
+  transform: translateY(-1px);
+}
+
+.toolbar-item:active:not(:disabled) {
+  transform: translateY(0) scale(0.97);
+}
+
+.toolbar-icon {
+  font-size: 19px;
+  line-height: 1;
+}
+
+.toolbar-item small {
+  margin-top: 1px;
+  font-size: 7px;
   font-weight: 800;
+  color: #35cfff;
   text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
-.menu-arrow {
-  color: var(--cyan);
-  font-size: 24px;
+.toolbar-item.disabled,
+.toolbar-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.toolbar-item.disabled:hover,
+.toolbar-item:disabled:hover {
+  transform: none;
+  background: rgba(0, 174, 255, 0.05);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+@keyframes toolbar-open {
+  from {
+    opacity: 0;
+    transform: translate(-12px, -50%) scale(0.94);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(0, -50%) scale(1);
+  }
 }
 
 .miner-card {
@@ -254,10 +327,10 @@ button {
 }
 
 .countdown-hourglass {
-  width: 142px;
-  height: 170px;
+  width: 138px;
+  height: 178px;
   overflow: visible;
-  filter: drop-shadow(0 0 15px rgba(0, 178, 255, .72));
+  filter: drop-shadow(0 0 18px rgba(33, 196, 255, .58));
 }
 
 .hourglass-running {
@@ -265,12 +338,13 @@ button {
 }
 
 .hourglass-ready {
-  filter: drop-shadow(0 0 18px rgba(250, 204, 21, .65));
+  filter: drop-shadow(0 0 18px rgba(250, 204, 21, .55));
 }
 
 .sand-stream {
-  stroke-dasharray: 8 7;
-  animation: sand-fall .55s linear infinite;
+  stroke-dasharray: 2 5;
+  animation: sand-fall .48s linear infinite;
+  filter: drop-shadow(0 0 4px rgba(255, 206, 61, .8));
 }
 
 @keyframes sand-fall { to { stroke-dashoffset: -15; } }
@@ -579,6 +653,57 @@ button {
   .hamburger-btn.is-open span:nth-child(1) { transform: translateY(7.5px) rotate(45deg); }
   .hamburger-btn.is-open span:nth-child(3) { transform: translateY(-7.5px) rotate(-45deg); }
 
+  .hamburger-toolbar {
+    top: 62px;
+    left: 0;
+    transform: none;
+
+    max-width: calc(100vw - 24px);
+    min-height: 56px;
+
+    padding: 7px;
+    gap: 6px;
+
+    overflow-x: auto;
+    overflow-y: hidden;
+
+    border-radius: 16px;
+
+    scrollbar-width: none;
+  }
+
+  .hamburger-toolbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .toolbar-item {
+    min-width: 78px;
+    height: 48px;
+    padding: 6px 9px;
+    font-size: 10px;
+    flex: 0 0 auto;
+  }
+
+  .toolbar-icon {
+    font-size: 17px;
+  }
+
+  .toolbar-item small {
+    font-size: 6px;
+  }
+
+  @keyframes toolbar-open {
+    from {
+      opacity: 0;
+      transform: translateY(-8px) scale(0.96);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
   .brand-logo {
     width: 52px;
     height: 52px;
@@ -611,7 +736,7 @@ button {
 
   .countdown-hourglass {
     width: 116px;
-    height: 142px;
+    height: 150px;
   }
 
   .digital-countdown {
@@ -715,4 +840,3 @@ button {
     font-size: 9px;
   }
 }
-/* ss */
