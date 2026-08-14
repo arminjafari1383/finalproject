@@ -873,4 +873,153 @@ button {
   .countdown-zone {
     margin-top: 0;
   }
-/* jj */
+}
+
+
+/* ===== Restore miner box like reference + slightly larger fan ===== */
+.miner-card {
+  width: min(100%, 330px) !important;
+  height: 230px !important;
+  margin: 10px auto 10px !important;
+  position: relative !important;
+  display: block !important;
+  border: 2px solid rgba(0, 201, 255, .88) !important;
+  border-radius: 26px !important;
+  background:
+    radial-gradient(circle at 50% 46%, rgba(0, 154, 255, .18), transparent 44%),
+    linear-gradient(180deg, rgba(2, 30, 59, .78), rgba(0, 18, 40, .90)) !important;
+  box-shadow:
+    inset 0 0 28px rgba(0, 179, 255, .08),
+    0 0 18px rgba(0, 191, 255, .18) !important;
+}
+
+.miner-card::before {
+  content: "" !important;
+  display: block !important;
+  position: absolute !important;
+  inset: 10px 12px 12px !important;
+  border: 1px solid rgba(34, 194, 255, .42) !important;
+  border-radius: 20px !important;
+  pointer-events: none !important;
+}
+
+.miner-top-edge {
+  display: block !important;
+  position: absolute !important;
+  left: 14px !important;
+  right: 14px !important;
+  top: -18px !important;
+  height: 26px !important;
+  border: 2px solid rgba(0, 210, 255, .78) !important;
+  border-bottom: 0 !important;
+  border-radius: 24px 24px 0 0 !important;
+  transform: skewX(-10deg) !important;
+  opacity: .9 !important;
+}
+
+.miner-svg {
+  width: 220px !important;
+  height: 220px !important;
+  position: absolute !important;
+  left: 50% !important;
+  top: 54% !important;
+  transform: translate(-50%, -50%) !important;
+  overflow: visible !important;
+}
+
+.corner-dot {
+  display: block !important;
+  position: absolute !important;
+  width: 10px !important;
+  height: 10px !important;
+  border-radius: 50% !important;
+  background: #0daeff !important;
+  box-shadow: 0 0 12px rgba(0, 181, 255, .78) !important;
+}
+
+.dot-a { left: 20px !important; top: 18px !important; }
+.dot-b { right: 20px !important; top: 18px !important; }
+.dot-c { left: 20px !important; bottom: 18px !important; }
+.dot-d { right: 20px !important; bottom: 18px !important; }
+
+.miner-foot {
+  display: block !important;
+  position: absolute !important;
+  bottom: -11px !important;
+  width: 34px !important;
+  height: 9px !important;
+  border: 2px solid #0585ff !important;
+  border-radius: 4px !important;
+  background: #041329 !important;
+  box-shadow: 0 0 9px rgba(0, 156, 255, .28) !important;
+}
+
+.foot-left { left: 34% !important; }
+.foot-right { right: 34% !important; }
+
+.countdown-zone {
+  margin-top: 12px !important;
+}
+
+@media (max-width: 600px) {
+  .miner-card {
+    width: min(100%, 305px) !important;
+    height: 210px !important;
+    margin: 8px auto 8px !important;
+    border-radius: 24px !important;
+    background:
+      radial-gradient(circle at 50% 46%, rgba(0, 154, 255, .18), transparent 44%),
+      linear-gradient(180deg, rgba(2, 30, 59, .78), rgba(0, 18, 40, .90)) !important;
+    box-shadow:
+      inset 0 0 24px rgba(0, 179, 255, .08),
+      0 0 14px rgba(0, 191, 255, .18) !important;
+  }
+
+  .miner-card::before {
+    display: block !important;
+    inset: 9px 10px 10px !important;
+    border-radius: 18px !important;
+  }
+
+  .miner-top-edge {
+    display: block !important;
+    left: 12px !important;
+    right: 12px !important;
+    top: -16px !important;
+    height: 23px !important;
+  }
+
+  .miner-svg {
+    width: 198px !important;
+    height: 198px !important;
+    position: absolute !important;
+    left: 50% !important;
+    top: 55% !important;
+    transform: translate(-50%, -50%) !important;
+  }
+
+  .corner-dot {
+    display: block !important;
+    width: 9px !important;
+    height: 9px !important;
+  }
+
+  .dot-a { left: 16px !important; top: 14px !important; }
+  .dot-b { right: 16px !important; top: 14px !important; }
+  .dot-c { left: 16px !important; bottom: 14px !important; }
+  .dot-d { right: 16px !important; bottom: 14px !important; }
+
+  .miner-foot {
+    display: block !important;
+    bottom: -10px !important;
+    width: 30px !important;
+    height: 8px !important;
+  }
+
+  .foot-left { left: 33% !important; }
+  .foot-right { right: 33% !important; }
+
+  .countdown-zone {
+    margin-top: 10px !important;
+  }
+}
