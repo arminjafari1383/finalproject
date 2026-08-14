@@ -56,10 +56,33 @@ export default function Wallet() {
   const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
   const [amount, setAmount] = useState("");
   const [tonAmount, setTonAmount] = useState("");
+  const [tonPrice, setTonPrice] = useState(null);
   const [withdrawAsset, setWithdrawAsset] = useState("ECG");
   const [destinationWallet, setDestinationWallet] = useState("");
   const [withdrawError, setWithdrawError] = useState("");
   const [isWithdrawing, setIsWithdrawing] = useState(false);
+
+
+  useEffect(() => {
+    async function getTonPrice() {
+      try {
+        const res = await fetch(
+          "https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd"
+        );
+
+        const data = await res.json();
+
+        setTonPrice(
+          data?.["the-open-network"]?.usd || null
+        );
+
+      } catch (err) {
+        console.log("TON price error", err);
+      }
+    }
+
+    getTonPrice();
+  }, []);
 
   // =============================================
   // 📋 مرحله 1: دریافت کد دعوت در اولین لود
@@ -403,6 +426,23 @@ export default function Wallet() {
     }
   };
 
+  const ECG_PER_USDT = 312;
+
+  const withdrawableTon = useMemo(() => {
+    const ecg = Number(wallet?.withdrawable_total || 0);
+
+    if (!tonPrice || !ecg) {
+      return "0.0000";
+    }
+
+    return (
+      ecg / (tonPrice * ECG_PER_USDT)
+    ).toFixed(4);
+
+  }, [wallet, tonPrice]);
+
+
+
   return (
     <div className="wallet-page-container">
       <div className="wallet-box">
@@ -591,6 +631,19 @@ export default function Wallet() {
                   disabled={isWithdrawing}
                 />
 
+                {withdrawAsset === "TON" && (
+                  <button
+                    type="button"
+                    className="max-btn"
+                    onClick={() => {
+                      setAmount(withdrawableTon);
+                    }}
+                    disabled={isWithdrawing}
+                  >
+                    MAX
+                  </button>
+                )}
+
                 {withdrawAsset === "ECG" && (
                   <button
                     type="button"
@@ -616,8 +669,20 @@ export default function Wallet() {
                 <div className="ton-info">
                   <div>
                     Withdrawable TON:
-                    <b> {Number(wallet?.ton_balance || 0).toFixed(4)} TON</b>
+                    <b>
+                      {" "}
+                      {withdrawableTon} TON
+                    </b>
                   </div>
+
+                  <div>
+                    Based on:
+                    <b>
+                      {" "}
+                      {Number(wallet?.withdrawable_total || 0).toFixed(2)} ECG
+                    </b>
+                  </div>
+
                   <div>
                     Minimum withdrawal:
                     <b> 1 TON</b>
