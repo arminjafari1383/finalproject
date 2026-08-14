@@ -292,13 +292,9 @@ export default function TimerPage() {
 
                 <aside className="side-drawer" role="dialog" aria-modal="true" aria-label="Navigation menu">
                   <div className="drawer-header">
-                    <button type="button" className="drawer-icon-btn" aria-label="Search">
-                      <span className="drawer-icon">⌕</span>
-                    </button>
-
                     <div className="drawer-brand">
                       <strong>AI POLIFY</strong>
-                      <span>mining dashboard</span>
+                      <span>quick menu</span>
                     </div>
 
                     <button
@@ -311,47 +307,26 @@ export default function TimerPage() {
                     </button>
                   </div>
 
-                  <div className="drawer-panel-preview" />
-
-                  <nav className="drawer-nav">
-                    <button type="button" className="drawer-link" onClick={() => setMenuOpen(false)}>Mine</button>
-                    <button type="button" className="drawer-link" onClick={() => setMenuOpen(false)}>Stake</button>
-                    <button type="button" className="drawer-link" onClick={() => setMenuOpen(false)}>Friends</button>
-                    <button type="button" className="drawer-link" onClick={() => setMenuOpen(false)}>Wallets</button>
+                  <div className="drawer-buttons">
                     <button
                       type="button"
-                      className="drawer-link"
-                      onClick={() => {
-                        setMessage("💬 Support: Please contact our support team.");
-                        setMenuOpen(false);
-                      }}
+                      className="drawer-main-btn drawer-main-btn-disabled"
+                      disabled
                     >
-                      Support
-                    </button>
-                  </nav>
-
-                  <div className="drawer-divider" />
-
-                  <div className="drawer-actions">
-                    <button type="button" className="drawer-text-btn" onClick={() => setMenuOpen(false)}>
-                      Sign in
+                      <span className="drawer-btn-text">🛍️ Shopping</span>
+                      <span className="drawer-coming-soon">Coming Soon</span>
                     </button>
 
-                    <button
-                      type="button"
-                      className="drawer-outline-btn"
-                      onClick={() => {
-                        setMessage("🛍️ Shopping section is coming soon.");
-                        setMenuOpen(false);
-                      }}
+                    <a
+                      className="drawer-main-btn drawer-support-btn"
+                      href="https://t.me/Ai_polyfi_support"
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={() => setMenuOpen(false)}
                     >
-                      Open Shopping
-                    </button>
-                  </div>
-
-                  <div className="drawer-footer-brand">
-                    <strong>AI POLIFY</strong>
-                    <span>smart mining</span>
+                      <span className="drawer-btn-text">🎧 Support</span>
+                      <span className="drawer-telegram">@Ai_polyfi_support</span>
+                    </a>
                   </div>
                 </aside>
               </>
