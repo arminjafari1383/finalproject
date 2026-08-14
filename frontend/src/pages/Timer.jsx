@@ -282,42 +282,80 @@ export default function TimerPage() {
             </button>
 
             {menuOpen && (
-                <div className="hamburger-toolbar">
-                  <button
-                    type="button"
-                    className="toolbar-item disabled"
-                    disabled
-                  >
-                    <span className="toolbar-icon">🛍️</span>
-                    <span>Shopping</span>
-                    <small>Coming Soon</small>
-                  </button>
+              <>
+                <button
+                  type="button"
+                  className="menu-backdrop"
+                  aria-label="Close menu overlay"
+                  onClick={() => setMenuOpen(false)}
+                />
 
-                  <button
-                    type="button"
-                    className="toolbar-item"
-                    onClick={() => {
-                      setMessage("💬 Support: Please contact our support team.");
-                      setMenuOpen(false);
-                    }}
-                  >
-                    <span className="toolbar-icon">🎧</span>
-                    <span>Support</span>
-                  </button>
+                <aside className="side-drawer" role="dialog" aria-modal="true" aria-label="Navigation menu">
+                  <div className="drawer-header">
+                    <button type="button" className="drawer-icon-btn" aria-label="Search">
+                      <span className="drawer-icon">⌕</span>
+                    </button>
 
-                  <button
-                    type="button"
-                    className="toolbar-item"
-                    onClick={() => {
-                      setMessage("⚙️ Settings");
-                      setMenuOpen(false);
-                    }}
-                  >
-                    <span className="toolbar-icon">⚙️</span>
-                    <span>Settings</span>
-                  </button>
-                </div>
-              )}
+                    <div className="drawer-brand">
+                      <strong>AI POLIFY</strong>
+                      <span>mining dashboard</span>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="drawer-icon-btn"
+                      aria-label="Close menu"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      <span className="drawer-icon">×</span>
+                    </button>
+                  </div>
+
+                  <div className="drawer-panel-preview" />
+
+                  <nav className="drawer-nav">
+                    <button type="button" className="drawer-link" onClick={() => setMenuOpen(false)}>Mine</button>
+                    <button type="button" className="drawer-link" onClick={() => setMenuOpen(false)}>Stake</button>
+                    <button type="button" className="drawer-link" onClick={() => setMenuOpen(false)}>Friends</button>
+                    <button type="button" className="drawer-link" onClick={() => setMenuOpen(false)}>Wallets</button>
+                    <button
+                      type="button"
+                      className="drawer-link"
+                      onClick={() => {
+                        setMessage("💬 Support: Please contact our support team.");
+                        setMenuOpen(false);
+                      }}
+                    >
+                      Support
+                    </button>
+                  </nav>
+
+                  <div className="drawer-divider" />
+
+                  <div className="drawer-actions">
+                    <button type="button" className="drawer-text-btn" onClick={() => setMenuOpen(false)}>
+                      Sign in
+                    </button>
+
+                    <button
+                      type="button"
+                      className="drawer-outline-btn"
+                      onClick={() => {
+                        setMessage("🛍️ Shopping section is coming soon.");
+                        setMenuOpen(false);
+                      }}
+                    >
+                      Open Shopping
+                    </button>
+                  </div>
+
+                  <div className="drawer-footer-brand">
+                    <strong>AI POLIFY</strong>
+                    <span>smart mining</span>
+                  </div>
+                </aside>
+              </>
+            )}
           </div>
 
           <h1>AI POLIFY</h1>
@@ -346,10 +384,10 @@ export default function TimerPage() {
             <image
               className="fan-blades"
               href={Blade}
-              x="52"
-              y="62"
-              width="296"
-              height="296"
+              x="72"
+              y="82"
+              width="256"
+              height="256"
               mask="url(#mask-blades)"
             />
 

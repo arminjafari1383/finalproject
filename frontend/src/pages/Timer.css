@@ -113,131 +113,193 @@ button {
 .hamburger-btn.is-open span:nth-child(2) { opacity: 0; }
 .hamburger-btn.is-open span:nth-child(3) { transform: translateY(-10px) rotate(-45deg); }
 
-.hamburger-toolbar {
-  position: absolute;
-  top: 50%;
-  left: 74px;
-  transform: translateY(-50%);
 
-  display: flex;
-  align-items: center;
-  gap: 8px;
-
-  padding: 8px;
-  min-height: 62px;
-
-  border: 1px solid rgba(90, 210, 255, 0.28);
-  border-radius: 18px;
-
-  background:
-    linear-gradient(
-      145deg,
-      rgba(7, 31, 58, 0.96),
-      rgba(2, 15, 32, 0.94)
-    );
-
-  box-shadow:
-    0 14px 40px rgba(0, 0, 0, 0.45),
-    0 0 28px rgba(0, 188, 255, 0.16),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
-
-  backdrop-filter: blur(20px) saturate(140%);
-  -webkit-backdrop-filter: blur(20px) saturate(140%);
-
-  animation: toolbar-open 0.25s ease;
-  white-space: nowrap;
-  overflow: hidden;
+.menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 160;
+  border: 0;
+  background: rgba(0, 0, 0, 0.42);
+  cursor: pointer;
 }
 
-.toolbar-item {
-  position: relative;
-
-  min-width: 90px;
-  height: 52px;
-
-  padding: 7px 12px;
-
-  border: 1px solid transparent;
-  border-radius: 13px;
-
-  background: rgba(0, 174, 255, 0.05);
-  color: #cfefff;
-
+.side-drawer {
+  position: fixed;
+  z-index: 180;
+  top: 18px;
+  left: 18px;
+  bottom: 18px;
+  width: min(420px, calc(100vw - 36px));
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-
-  cursor: pointer;
-
-  font-size: 12px;
-  font-weight: 600;
-
-  transition:
-    transform 0.2s ease,
-    background 0.2s ease,
-    border-color 0.2s ease,
-    color 0.2s ease,
-    box-shadow 0.2s ease;
-}
-
-.toolbar-item:hover:not(:disabled) {
-  background: rgba(0, 190, 255, 0.14);
-  border-color: rgba(78, 208, 255, 0.3);
-  color: #ffffff;
-
+  padding: 14px 16px 18px;
+  border: 1px solid rgba(159, 225, 255, 0.5);
+  border-radius: 0;
+  background: linear-gradient(180deg, #3b5e82 0%, #355b83 100%);
   box-shadow:
-    inset 0 0 14px rgba(0, 180, 255, 0.1),
-    0 0 12px rgba(0, 180, 255, 0.08);
-
-  transform: translateY(-1px);
+    24px 0 0 rgba(0, 0, 0, 0.28),
+    0 18px 48px rgba(0, 0, 0, 0.42);
+  animation: drawer-slide .28s ease;
+  overflow: auto;
 }
 
-.toolbar-item:active:not(:disabled) {
-  transform: translateY(0) scale(0.97);
+.drawer-header {
+  display: grid;
+  grid-template-columns: 34px 1fr 34px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
 }
 
-.toolbar-icon {
-  font-size: 19px;
+.drawer-icon-btn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: #eef7ff;
+  cursor: pointer;
+}
+
+.drawer-icon {
+  font-size: 22px;
   line-height: 1;
 }
 
-.toolbar-item small {
-  margin-top: 1px;
-  font-size: 7px;
+.drawer-brand {
+  text-align: center;
+  line-height: 0.92;
+  color: white;
+}
+
+.drawer-brand strong,
+.drawer-footer-brand strong {
+  display: block;
+  font-size: 20px;
   font-weight: 800;
-  color: #35cfff;
+  letter-spacing: 0.2px;
+}
+
+.drawer-brand span,
+.drawer-footer-brand span {
+  display: block;
+  color: #eef5ff;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.drawer-panel-preview {
+  height: 230px;
+  margin-bottom: 14px;
+  border-radius: 0;
+  background:
+    linear-gradient(rgba(225, 230, 236, 0.58), rgba(225, 230, 236, 0.58)),
+    radial-gradient(circle at 50% 52%, rgba(255, 193, 40, 0.42), transparent 26%),
+    linear-gradient(180deg, rgba(12, 18, 28, 0.92), rgba(19, 27, 39, 0.92));
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
+  position: relative;
+  overflow: hidden;
+}
+
+.drawer-panel-preview::before,
+.drawer-panel-preview::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  border-radius: 3px;
+  background: rgba(22, 28, 36, 0.92);
+  filter: blur(2px);
+}
+
+.drawer-panel-preview::before {
+  top: 68px;
+  height: 92px;
+}
+
+.drawer-panel-preview::after {
+  top: 178px;
+  height: 82px;
+}
+
+.drawer-nav {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 11px;
+}
+
+.drawer-link {
+  border: 0;
+  background: transparent;
+  color: #edf7ff;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 1.5px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 0;
+  cursor: pointer;
 }
 
-.toolbar-item.disabled,
-.toolbar-item:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
+.drawer-link:hover {
+  color: #ffffff;
+  text-shadow: 0 0 8px rgba(255,255,255,.18);
 }
 
-.toolbar-item.disabled:hover,
-.toolbar-item:disabled:hover {
-  transform: none;
-  background: rgba(0, 174, 255, 0.05);
-  border-color: transparent;
-  box-shadow: none;
+.drawer-divider {
+  width: 100%;
+  height: 1px;
+  margin: 15px 0 14px;
+  background: rgba(255, 255, 255, 0.34);
 }
 
-@keyframes toolbar-open {
+.drawer-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 14px;
+}
+
+.drawer-text-btn {
+  border: 0;
+  background: transparent;
+  color: #edf6ff;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.drawer-outline-btn {
+  align-self: flex-end;
+  min-height: 38px;
+  padding: 0 16px;
+  border: 1px solid rgba(227, 242, 255, 0.7);
+  border-radius: 999px;
+  background: transparent;
+  color: #edf7ff;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.drawer-footer-brand {
+  margin-top: auto;
+  padding-top: 14px;
+  color: white;
+  line-height: 0.95;
+}
+
+@keyframes drawer-slide {
   from {
     opacity: 0;
-    transform: translate(-12px, -50%) scale(0.94);
+    transform: translateX(-24px);
   }
-
   to {
     opacity: 1;
-    transform: translate(0, -50%) scale(1);
+    transform: translateX(0);
   }
 }
-
 .miner-card {
   width: min(100%, 635px);
   height: clamp(330px, 58vw, 455px);
@@ -327,10 +389,10 @@ button {
 }
 
 .countdown-hourglass {
-  width: 138px;
-  height: 178px;
+  width: 142px;
+  height: 170px;
   overflow: visible;
-  filter: drop-shadow(0 0 18px rgba(33, 196, 255, .58));
+  filter: drop-shadow(0 0 15px rgba(0, 178, 255, .72));
 }
 
 .hourglass-running {
@@ -338,13 +400,12 @@ button {
 }
 
 .hourglass-ready {
-  filter: drop-shadow(0 0 18px rgba(250, 204, 21, .55));
+  filter: drop-shadow(0 0 18px rgba(250, 204, 21, .65));
 }
 
 .sand-stream {
-  stroke-dasharray: 2 5;
-  animation: sand-fall .48s linear infinite;
-  filter: drop-shadow(0 0 4px rgba(255, 206, 61, .8));
+  stroke-dasharray: 8 7;
+  animation: sand-fall .55s linear infinite;
 }
 
 @keyframes sand-fall { to { stroke-dashoffset: -15; } }
@@ -653,57 +714,6 @@ button {
   .hamburger-btn.is-open span:nth-child(1) { transform: translateY(7.5px) rotate(45deg); }
   .hamburger-btn.is-open span:nth-child(3) { transform: translateY(-7.5px) rotate(-45deg); }
 
-  .hamburger-toolbar {
-    top: 62px;
-    left: 0;
-    transform: none;
-
-    max-width: calc(100vw - 24px);
-    min-height: 56px;
-
-    padding: 7px;
-    gap: 6px;
-
-    overflow-x: auto;
-    overflow-y: hidden;
-
-    border-radius: 16px;
-
-    scrollbar-width: none;
-  }
-
-  .hamburger-toolbar::-webkit-scrollbar {
-    display: none;
-  }
-
-  .toolbar-item {
-    min-width: 78px;
-    height: 48px;
-    padding: 6px 9px;
-    font-size: 10px;
-    flex: 0 0 auto;
-  }
-
-  .toolbar-icon {
-    font-size: 17px;
-  }
-
-  .toolbar-item small {
-    font-size: 6px;
-  }
-
-  @keyframes toolbar-open {
-    from {
-      opacity: 0;
-      transform: translateY(-8px) scale(0.96);
-    }
-
-    to {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-  }
-
   .brand-logo {
     width: 52px;
     height: 52px;
@@ -736,7 +746,7 @@ button {
 
   .countdown-hourglass {
     width: 116px;
-    height: 150px;
+    height: 142px;
   }
 
   .digital-countdown {
@@ -838,5 +848,35 @@ button {
 
   .nav-item {
     font-size: 9px;
+  }
+}
+
+
+@media (max-width: 600px) {
+  .side-drawer {
+    top: 10px;
+    left: 10px;
+    bottom: 10px;
+    width: calc(100vw - 20px);
+    padding: 12px 12px 16px;
+  }
+
+  .drawer-panel-preview {
+    height: 188px;
+  }
+
+  .drawer-brand strong,
+  .drawer-footer-brand strong {
+    font-size: 18px;
+  }
+
+  .drawer-brand span,
+  .drawer-footer-brand span {
+    font-size: 13px;
+  }
+
+  .drawer-link {
+    font-size: 12px;
+    letter-spacing: 1.3px;
   }
 }
