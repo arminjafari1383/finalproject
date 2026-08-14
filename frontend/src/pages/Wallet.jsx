@@ -55,6 +55,7 @@ export default function Wallet() {
 
   const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
   const [amount, setAmount] = useState("");
+  const [tonAmount, setTonAmount] = useState("");
   const [withdrawAsset, setWithdrawAsset] = useState("ECG");
   const [destinationWallet, setDestinationWallet] = useState("");
   const [withdrawError, setWithdrawError] = useState("");
@@ -352,7 +353,13 @@ export default function Wallet() {
 
     const n = Number(amount);
     if (!Number.isFinite(n)) return setWithdrawError("Invalid amount.");
-    if (n < 60) return setWithdrawError("Minimum withdrawal is 60.");
+    if (withdrawAsset === "ECG" && n < 60) {
+      return setWithdrawError("Minimum withdrawal is 60 ECG.");
+    }
+
+    if (withdrawAsset === "TON" && n < 60) {
+      return setWithdrawError("Minimum TON withdrawal is 1 TON.");
+    }
     if (!address) return setWithdrawError("Please connect your wallet first.");
     if (!destinationWallet.trim()) {
       return setWithdrawError(
@@ -521,6 +528,8 @@ export default function Wallet() {
                   onClick={() => {
                     setWithdrawAsset("ECG");
                     setDestinationWallet("");
+                    setAmount("");
+                    setTonAmount("");
                     setWithdrawError("");
                   }}
                   disabled={isWithdrawing}
@@ -533,6 +542,8 @@ export default function Wallet() {
                   onClick={() => {
                     setWithdrawAsset("TON");
                     setDestinationWallet("");
+                    setAmount("");
+                    setTonAmount("");
                     setWithdrawError("");
                   }}
                   disabled={isWithdrawing}
@@ -559,16 +570,43 @@ export default function Wallet() {
               />
 
               <label htmlFor="withdraw-amount">Withdrawal Amount (ECG)</label>
-              <input
-                id="withdraw-amount"
-                type="number"
-                inputMode="decimal"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="Minimum 60 ECG"
-                min="60"
-                disabled={isWithdrawing}
-              />
+
+              <div className="amount-wrapper">
+                <input
+                  id="withdraw-amount"
+                  type="number"
+                  inputMode="decimal"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder="Minimum 60 ECG"
+                  min="60"
+                  disabled={isWithdrawing}
+                />
+
+                <button
+                  type="button"
+                  className="max-btn"
+                  onClick={() => {
+                    setAmount(Number(wallet?.withdrawable_total || 0));
+                  }}
+                  disabled={isWithdrawing}
+                >
+                  MAX
+                </button>
+              </div>
+
+              {withdrawAsset === "TON" && (
+                <div className="ton-info">
+                  <div>
+                    Available ECG:
+                    <b> {Number(wallet?.withdrawable_total || 0).toFixed(4)} ECG</b>
+                  </div>
+                  <div>
+                    Minimum TON withdrawal:
+                    <b> 1 TON</b>
+                  </div>
+                </div>
+              )}
               {withdrawError && <div className="error-text">{withdrawError}</div>}
             </div>
             <div className="modal-footer">
