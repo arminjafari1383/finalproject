@@ -298,47 +298,31 @@ button {
 }
 }
 .miner-card {
-  width: min(100%, 635px);
-  height: 250px;
+  width: 170px;
+  height: 170px;
+  margin: 8px auto 4px;
   position: relative;
-  border: 2px solid rgba(0, 201, 255, .88);
-  border-radius: 31px;
-  background:
-    radial-gradient(circle at 50% 48%, rgba(0, 137, 255, .14), transparent 42%),
-    linear-gradient(180deg, rgba(2, 30, 59, .72), rgba(0, 18, 40, .86));
-  box-shadow:
-    inset 0 0 28px rgba(0, 179, 255, .08),
-    0 0 18px rgba(0, 191, 255, .18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: none;
 }
 
 .miner-card::before {
-  content: "";
-  position: absolute;
-  inset: 14px 16px 15px;
-  border: 1px solid rgba(34, 194, 255, .45);
-  border-radius: 23px;
-  pointer-events: none;
+  display: none;
 }
 
 .miner-top-edge {
-  position: absolute;
-  left: 18px;
-  right: 18px;
-  top: -24px;
-  height: 33px;
-  border: 2px solid rgba(0, 210, 255, .8);
-  border-bottom: 0;
-  border-radius: 28px 28px 0 0;
-  transform: skewX(-10deg);
-  opacity: .85;
+  display: none;
 }
 
 .miner-svg {
-  width: 74%;
-  height: 78%;
-  position: absolute;
-  left: 13%;
-  top: 10%;
+  width: 170px;
+  height: 170px;
+  position: static;
   overflow: visible;
 }
 
@@ -352,12 +336,7 @@ button {
 }
 
 .corner-dot {
-  position: absolute;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #0daeff;
-  box-shadow: 0 0 14px rgba(0, 181, 255, .8);
+  display: none;
 }
 .dot-a { left: 28px; top: 28px; }
 .dot-b { right: 28px; top: 28px; }
@@ -365,20 +344,13 @@ button {
 .dot-d { right: 28px; bottom: 28px; }
 
 .miner-foot {
-  position: absolute;
-  bottom: -16px;
-  width: 72px;
-  height: 14px;
-  border: 3px solid #0585ff;
-  border-radius: 5px;
-  background: #041329;
-  box-shadow: 0 0 9px rgba(0, 156, 255, .3);
+  display: none;
 }
 .foot-left { left: 28%; }
 .foot-right { right: 28%; }
 
 .countdown-zone {
-  margin-top: 48px;
+  margin-top: 2px;
   width: 100%;
   display: flex;
   flex-direction: column;
@@ -869,5 +841,36 @@ button {
 
   .drawer-telegram {
     font-size: 10px;
+  }
+}
+
+
+/* ===== Compact miner above hourglass ===== */
+@media (max-width: 600px) {
+  .miner-card {
+    width: 135px;
+    height: 135px;
+    margin: 4px auto 2px;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .miner-svg {
+    width: 135px;
+    height: 135px;
+    position: static;
+  }
+
+  .miner-card::before,
+  .miner-top-edge,
+  .corner-dot,
+  .miner-foot {
+    display: none !important;
+  }
+
+  .countdown-zone {
+    margin-top: 0;
   }
 }
