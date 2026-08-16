@@ -85,15 +85,17 @@ CSRF_TRUSTED_ORIGINS = [
 
 CORS_ALLOW_ALL_ORIGINS = True
 
-TON_MERCHANT_ADDRESS = os.getenv(
-    "TON_MERCHANT_ADDRESS",
+GRAM_MERCHANT_ADDRESS = os.getenv(
+    "GRAM_MERCHANT_ADDRESS",
     ""
 )
 
-TON_PRIVATE_KEY = os.getenv(
-    "TON_PRIVATE_KEY"
+GRAM_WALLET_ADDRESS = os.getenv(
+    "GRAM_WALLET_ADDRESS",
+    ""
 )
 
-TON_WALLET_ADDRESS = os.getenv(
-    "TON_WALLET_ADDRESS"
+# Private key مربوط به سرویس TON است و نباید به frontend ارسال شود
+TON_PRIVATE_KEY = os.getenv(
+    "TON_PRIVATE_KEY"
 )
