@@ -847,6 +847,157 @@ def update_level_profit(
     )
 
 
+
+# ============================================================
+# Direct upline 5% purchase bonus
+# ============================================================
+
+@transaction.atomic
+def credit_direct_upline_purchase_bonus(
+    buyer: AppUser,
+    bonus: Decimal,
+    invoice_no: str,
+    tx_hash: str,
+    currency: str,
+    is_test: bool = False,
+):
+    """
+    Credit the direct inviter with the 5% purchase bonus and keep the
+    Referral Tree profit column in sync with the real wallet balance.
+
+    The Ledger invoice key makes the operation idempotent for the same
+    purchase, so polling/retries cannot credit the same invoice twice.
+    """
+
+    if not buyer.inviter_id:
+        logger.warning(
+            "[UPLINE5] skipped: buyer=%s has no inviter",
+            buyer.wallet_address,
+        )
+        return {
+            "credited": False,
+            "reason": "buyer_has_no_inviter",
+        }
+
+    bonus = Decimal(str(bonus))
+
+    if bonus <= 0:
+        logger.warning(
+            "[UPLINE5] skipped non-positive bonus buyer=%s bonus=%s",
+            buyer.wallet_address,
+            bonus,
+        )
+        return {
+            "credited": False,
+            "reason": "invalid_bonus",
+        }
+
+    inviter = (
+        AppUser.objects
+        .select_for_update()
+        .get(pk=buyer.inviter_id)
+    )
+
+    ensure_user_has_wallet(inviter)
+
+    # Prevent the same purchase from paying the direct upline twice.
+    already_credited = (
+        Ledger.objects
+        .filter(
+            user=inviter,
+            typ="DOWNLINE_PROFIT",
+            meta__invoice=invoice_no,
+        )
+        .exists()
+    )
+
+    if already_credited:
+        wallet = (
+            Wallet.objects
+            .select_for_update()
+            .get(user=inviter)
+        )
+
+        logger.warning(
+            "[UPLINE5] duplicate blocked invoice=%s buyer=%s inviter=%s balance=%s",
+            invoice_no,
+            buyer.wallet_address,
+            inviter.wallet_address,
+            wallet.downline_profit_instant,
+        )
+
+        return {
+            "credited": False,
+            "reason": "already_credited",
+            "inviter": inviter.wallet_address,
+            "bonus": str(bonus),
+            "balance": str(wallet.downline_profit_instant or Decimal("0")),
+        }
+
+    wallet = (
+        Wallet.objects
+        .select_for_update()
+        .get(user=inviter)
+    )
+
+    before = Decimal(
+        str(
+            wallet.downline_profit_instant
+            or Decimal("0")
+        )
+    )
+
+    after = before + bonus
+
+    wallet.downline_profit_instant = after
+    wallet.save(
+        update_fields=[
+            "downline_profit_instant",
+            "updated_at",
+        ]
+    )
+
+    Ledger.objects.create(
+        user=inviter,
+        typ="DOWNLINE_PROFIT",
+        amount=bonus,
+        meta={
+            "from": buyer.wallet_address,
+            "invoice": invoice_no,
+            "tx": tx_hash,
+            "currency": currency,
+            "rate": "5%",
+            "is_test": is_test,
+        },
+    )
+
+    # This is the missing synchronization for Referrals.jsx.
+    # It updates level_1_users[].profit for the direct inviter.
+    update_level_profit(
+        inviter,
+        1,
+        buyer.wallet_address,
+        bonus,
+    )
+
+    logger.info(
+        "[UPLINE5] CREDITED buyer=%s inviter=%s invoice=%s bonus=%s before=%s after=%s",
+        buyer.wallet_address,
+        inviter.wallet_address,
+        invoice_no,
+        bonus,
+        before,
+        after,
+    )
+
+    return {
+        "credited": True,
+        "inviter": inviter.wallet_address,
+        "bonus": str(bonus),
+        "balance_before": str(before),
+        "balance_after": str(after),
+    }
+
 # ============================================================
 # TON price
 # ============================================================
@@ -1145,36 +1296,22 @@ def register_purchase(
     )
 
     # --------------------------------------------------------
-    # Upline purchase bonus
+    # Direct upline 5% purchase bonus
     # --------------------------------------------------------
 
-    if user.inviter_id:
+    upline_result = credit_direct_upline_purchase_bonus(
+        buyer=user,
+        bonus=upline_bonus,
+        invoice_no=invoice_no,
+        tx_hash=ton_tx_hash,
+        currency="TON",
+        is_test=is_test,
+    )
 
-        ensure_user_has_wallet(
-            user.inviter
-        )
-
-        Wallet.objects.filter(
-            user=user.inviter
-        ).update(
-            downline_profit_instant=(
-                F("downline_profit_instant")
-                + upline_bonus
-            )
-        )
-
-        Ledger.objects.create(
-            user=user.inviter,
-            typ="DOWNLINE_PROFIT",
-            amount=upline_bonus,
-            meta={
-                "from": user.wallet_address,
-                "invoice": invoice_no,
-                "tx": ton_tx_hash,
-                "currency": "TON",
-                "is_test": is_test,
-            },
-        )
+    logger.info(
+        "[BUY] upline 5%% result: %s",
+        upline_result,
+    )
 
     update_user_investment(
         user,
@@ -1334,32 +1471,19 @@ def register_purchase_usdt(
         },
     )
 
-    if user.inviter_id:
+    upline_result = credit_direct_upline_purchase_bonus(
+        buyer=user,
+        bonus=upline_bonus,
+        invoice_no=invoice_no,
+        tx_hash=usdt_tx_hash,
+        currency="USDT",
+        is_test=is_test,
+    )
 
-        ensure_user_has_wallet(
-            user.inviter
-        )
-
-        Wallet.objects.filter(
-            user=user.inviter
-        ).update(
-            downline_profit_instant=(
-                F("downline_profit_instant")
-                + upline_bonus
-            )
-        )
-
-        Ledger.objects.create(
-            user=user.inviter,
-            typ="DOWNLINE_PROFIT",
-            amount=upline_bonus,
-            meta={
-                "from": user.wallet_address,
-                "invoice": invoice_no,
-                "currency": "USDT",
-                "is_test": is_test,
-            },
-        )
+    logger.info(
+        "[REGISTER_PURCHASE_USDT] upline 5%% result: %s",
+        upline_result,
+    )
 
     update_user_investment(
         user,
@@ -1519,32 +1643,19 @@ def register_purchase_bnb(
         },
     )
 
-    if user.inviter_id:
+    upline_result = credit_direct_upline_purchase_bonus(
+        buyer=user,
+        bonus=upline_bonus,
+        invoice_no=invoice_no,
+        tx_hash=bnb_tx_hash,
+        currency="BNB",
+        is_test=is_test,
+    )
 
-        ensure_user_has_wallet(
-            user.inviter
-        )
-
-        Wallet.objects.filter(
-            user=user.inviter
-        ).update(
-            downline_profit_instant=(
-                F("downline_profit_instant")
-                + upline_bonus
-            )
-        )
-
-        Ledger.objects.create(
-            user=user.inviter,
-            typ="DOWNLINE_PROFIT",
-            amount=upline_bonus,
-            meta={
-                "from": user.wallet_address,
-                "invoice": invoice_no,
-                "currency": "BNB",
-                "is_test": is_test,
-            },
-        )
+    logger.info(
+        "[REGISTER_PURCHASE_BNB] upline 5%% result: %s",
+        upline_result,
+    )
 
     update_user_investment(
         user,

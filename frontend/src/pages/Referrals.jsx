@@ -1499,8 +1499,14 @@ export default function Referrals() {
       return;
 
     let cancelled = false;
+    let requestRunning = false;
 
     async function fetchLevels() {
+      if (requestRunning)
+        return;
+
+      requestRunning = true;
+
       try {
         const response =
           await api.get(
@@ -1532,31 +1538,75 @@ export default function Referrals() {
           data?.levels
             ?.level_1;
 
-        if (
-          firstLevel?.users
-            ?.length
-        ) {
-          setDebugData(
-            (prev) => ({
-              ...prev,
-
-              firstLevelUser:
-                firstLevel.users[0],
-            })
-          );
-        }
+        setDebugData(
+          (prev) => ({
+            ...prev,
+            referralLevelsLastRefresh:
+              new Date().toISOString(),
+            firstLevelUser:
+              firstLevel?.users?.[0] ||
+              null,
+          })
+        );
       } catch (err) {
         console.error(
           "❌ Levels error:",
           err
         );
+      } finally {
+        requestRunning = false;
       }
     }
 
+    // First load immediately.
     fetchLevels();
+
+    // Keep the referral tree live so a new 5% bonus appears without refresh.
+    const intervalId =
+      window.setInterval(
+        fetchLevels,
+        5000
+      );
+
+    const refreshOnFocus = () => {
+      fetchLevels();
+    };
+
+    const refreshOnVisible = () => {
+      if (
+        document.visibilityState ===
+        "visible"
+      ) {
+        fetchLevels();
+      }
+    };
+
+    window.addEventListener(
+      "focus",
+      refreshOnFocus
+    );
+
+    document.addEventListener(
+      "visibilitychange",
+      refreshOnVisible
+    );
 
     return () => {
       cancelled = true;
+
+      window.clearInterval(
+        intervalId
+      );
+
+      window.removeEventListener(
+        "focus",
+        refreshOnFocus
+      );
+
+      document.removeEventListener(
+        "visibilitychange",
+        refreshOnVisible
+      );
     };
   }, [address]);
 
@@ -1793,6 +1843,18 @@ export default function Referrals() {
           {levelProfitMessage}
         </p>
 
+        {level === 1 && (
+          <div
+            style={{
+              marginBottom: "10px",
+              fontSize: "12px",
+              opacity: 0.8,
+            }}
+          >
+            ✅ Direct-upline 5% is credited to the inviter wallet and this table refreshes every 5 seconds.
+          </div>
+        )}
+
         <div className="table-wrapper">
           <table>
             <thead>
@@ -1803,7 +1865,9 @@ export default function Referrals() {
                   Investment (TON)
                 </th>
                 <th>
-                  Profit
+                  {level === 1
+                    ? "5% Profit (ECG)"
+                    : "Profit (ECG)"}
                 </th>
               </tr>
             </thead>
@@ -1944,7 +2008,9 @@ export default function Referrals() {
                         </td>
 
                         <td className="profit-cell">
-                          + {profit}
+                          + {Number(
+                            profit || 0
+                          ).toFixed(4)} ECG
                         </td>
                       </tr>
                     );
