@@ -27,6 +27,7 @@ from django.db import transaction
 import os
 import requests
 import re
+import base64
 
 # =======================
 # تنظیمات لاگینگ
@@ -40,6 +41,320 @@ TON_SERVICE_URL = os.getenv(
 )
 
 service_url = TON_SERVICE_URL
+
+
+# ============================================================
+# TON / GRAM on-chain confirmation helpers
+# ============================================================
+
+TONCENTER_API_KEY = os.getenv(
+    "TONCENTER_API_KEY",
+    "",
+).strip()
+
+TONCENTER_MAINNET_URL = os.getenv(
+    "TONCENTER_MAINNET_URL",
+    "https://toncenter.com",
+).rstrip("/")
+
+TONCENTER_TESTNET_URL = os.getenv(
+    "TONCENTER_TESTNET_URL",
+    "https://testnet.toncenter.com",
+).rstrip("/")
+
+
+def _toncenter_base_url(network: str) -> str:
+    """
+    TON Connect network id:
+      -239 = mainnet
+      -3   = testnet
+    """
+    return (
+        TONCENTER_TESTNET_URL
+        if str(network) == "-3"
+        else TONCENTER_MAINNET_URL
+    )
+
+
+def _toncenter_headers() -> dict:
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
+
+    if TONCENTER_API_KEY:
+        headers["X-API-Key"] = TONCENTER_API_KEY
+
+    return headers
+
+
+def _ton_address_to_raw(address: str) -> str:
+    """
+    Convert a TON raw or TEP-2 user-friendly address to canonical raw form:
+        workchain:64_hex_chars
+
+    No external Python TON package is required.
+    """
+    value = str(address or "").strip()
+
+    if not value:
+        raise ValueError("Empty TON address")
+
+    raw_match = re.fullmatch(
+        r"(-?\d+):([0-9a-fA-F]{64})",
+        value,
+    )
+
+    if raw_match:
+        return (
+            f"{int(raw_match.group(1))}:"
+            f"{raw_match.group(2).lower()}"
+        )
+
+    # User-friendly address is 36 bytes:
+    # tag(1) + workchain(1) + account_id(32) + crc16(2)
+    normalized = (
+        value
+        .replace("-", "+")
+        .replace("_", "/")
+    )
+
+    normalized += "=" * ((-len(normalized)) % 4)
+
+    try:
+        decoded = base64.b64decode(
+            normalized,
+            validate=True,
+        )
+    except Exception as exc:
+        raise ValueError(
+            "Invalid TON user-friendly address"
+        ) from exc
+
+    if len(decoded) != 36:
+        raise ValueError(
+            "Invalid TON user-friendly address length"
+        )
+
+    workchain = int.from_bytes(
+        decoded[1:2],
+        byteorder="big",
+        signed=True,
+    )
+
+    account_id = decoded[2:34].hex()
+
+    return f"{workchain}:{account_id}"
+
+
+def _get_external_message_hash(
+    boc: str,
+    network: str,
+) -> str:
+    """
+    TON Connect returns a signed external-message BOC.
+    TON Center's sendBocReturnHash returns the message hash that can be
+    used to locate the real on-chain wallet transaction.
+
+    Re-broadcasting the same signed external message is safe for lookup:
+    it is the same message, not a newly signed payment.
+    """
+    base_url = _toncenter_base_url(network)
+
+    response = requests.post(
+        f"{base_url}/api/v2/sendBocReturnHash",
+        headers=_toncenter_headers(),
+        json={"boc": boc},
+        timeout=20,
+    )
+
+    try:
+        data = response.json()
+    except Exception as exc:
+        raise RuntimeError(
+            "TON Center returned a non-JSON response while resolving BOC"
+        ) from exc
+
+    if (
+        response.status_code != 200
+        or not data.get("ok")
+    ):
+        raise RuntimeError(
+            data.get("error")
+            or (
+                "TON Center could not resolve the BOC "
+                f"(HTTP {response.status_code})"
+            )
+        )
+
+    result = data.get("result") or {}
+
+    message_hash = str(
+        result.get("hash_norm")
+        or result.get("hash")
+        or ""
+    ).strip()
+
+    if not message_hash:
+        raise RuntimeError(
+            "TON Center did not return a message hash"
+        )
+
+    return message_hash
+
+
+def _find_verified_gram_payment(
+    *,
+    message_hash: str,
+    wallet_address: str,
+    gram_address: str,
+    network: str,
+):
+    """
+    Find the wallet transaction created by the external message and verify
+    that it produced a real outgoing GRAM payment to our configured merchant.
+
+    Returns:
+        None                      -> not indexed/confirmed yet
+        {tx_hash, gram_nano,...} -> verified payment
+    """
+    base_url = _toncenter_base_url(network)
+
+    response = requests.get(
+        f"{base_url}/api/v3/transactionsByMessage",
+        headers=_toncenter_headers(),
+        params={
+            "msg_hash": message_hash,
+            "direction": "in",
+            "limit": 10,
+        },
+        timeout=20,
+    )
+
+    if response.status_code == 429:
+        logger.warning(
+            "TON Center rate limit reached during confirmation; retrying later."
+        )
+        return None
+
+    try:
+        data = response.json()
+    except Exception as exc:
+        raise RuntimeError(
+            "TON Center returned a non-JSON transaction response"
+        ) from exc
+
+    if response.status_code != 200:
+        raise RuntimeError(
+            data.get("error")
+            or (
+                "TON Center transaction lookup failed "
+                f"(HTTP {response.status_code})"
+            )
+        )
+
+    transactions = data.get("transactions") or []
+
+    if not transactions:
+        return None
+
+    expected_sender_raw = _ton_address_to_raw(
+        wallet_address
+    )
+
+    expected_merchant_raw = _ton_address_to_raw(
+        gram_address
+    )
+
+    for tx in transactions:
+        # Indexed API may expose emulated entries. Never accept them as payment.
+        if tx.get("emulated") is True:
+            continue
+
+        try:
+            tx_account_raw = _ton_address_to_raw(
+                tx.get("account")
+            )
+        except ValueError:
+            continue
+
+        # The external message must have executed on the connected user's wallet.
+        if tx_account_raw != expected_sender_raw:
+            continue
+
+        description = tx.get("description") or {}
+
+        if description.get("aborted") is True:
+            continue
+
+        tx_hash = str(
+            tx.get("hash") or ""
+        ).strip()
+
+        if not tx_hash:
+            continue
+
+        matching_messages = []
+
+        for message in tx.get("out_msgs") or []:
+            destination = message.get("destination")
+
+            if not destination:
+                continue
+
+            try:
+                destination_raw = _ton_address_to_raw(
+                    destination
+                )
+            except ValueError:
+                continue
+
+            if destination_raw != expected_merchant_raw:
+                continue
+
+            # A bounced outgoing transfer must not be credited.
+            if message.get("bounced") is True:
+                continue
+
+            try:
+                value_nano = int(
+                    str(message.get("value") or "0")
+                )
+            except (TypeError, ValueError):
+                continue
+
+            if value_nano <= 0:
+                continue
+
+            matching_messages.append(
+                {
+                    "hash": str(
+                        message.get("hash") or ""
+                    ),
+                    "value_nano": value_nano,
+                    "destination": destination,
+                }
+            )
+
+        if not matching_messages:
+            continue
+
+        # create_ton_transaction creates one merchant message, but summing keeps
+        # verification correct even if a wallet produces multiple matching msgs.
+        total_gram_nano = sum(
+            item["value_nano"]
+            for item in matching_messages
+        )
+
+        return {
+            "tx_hash": tx_hash,
+            "wallet_transaction": tx,
+            "gram_nano": total_gram_nano,
+            "matching_messages": matching_messages,
+        }
+
+    return None
+
 
 @api_view(["POST"])
 def connect_wallet(request):
@@ -144,46 +459,299 @@ def wallet_view(request, wallet_address):
 
 @api_view(["POST"])
 def create_purchase(request):
-    logger.info("=" * 60)
-    logger.info("💰 CREATE_PURCHASE CALLED")
-    logger.info(f"📥 Data: {request.data}")
+    """
+    Confirm a TON Connect payment on-chain and create the invoice automatically.
 
-    wallet_address = request.data.get("wallet_address")
-    ton_amount = request.data.get("ton_amount")
-    ton_tx_hash = request.data.get("ton_tx_hash")
-    output_asset = str(request.data.get("output_asset", "ECG")).strip().upper()
+    Frontend sends:
+      - wallet_address: connected user's wallet
+      - boc: BOC returned by tonConnectUI.sendTransaction()
+      - output_asset: ECG or USDT
+      - network: -239 mainnet / -3 testnet
+      - message_hash: optional; reuse after a pending (202) response
+
+    IMPORTANT:
+    The frontend does NOT provide or type a TX hash.
+    The real transaction hash and the paid amount are derived from the chain.
+    """
+    logger.info("=" * 60)
+    logger.info("💰 CREATE_PURCHASE / ON-CHAIN CONFIRMATION")
+    logger.info("📥 Data keys: %s", list(request.data.keys()))
+
+    wallet_address = str(
+        request.data.get("wallet_address", "")
+    ).strip()
+
+    boc = str(
+        request.data.get("boc", "")
+    ).strip()
+
+    output_asset = str(
+        request.data.get("output_asset", "ECG")
+    ).strip().upper()
+
+    network = str(
+        request.data.get("network", "-239")
+    ).strip()
+
+    supplied_message_hash = str(
+        request.data.get("message_hash", "")
+    ).strip()
+
+    if not wallet_address:
+        return Response(
+            {"error": "wallet_address required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if not boc and not supplied_message_hash:
+        return Response(
+            {
+                "error":
+                    "boc required for first confirmation attempt"
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     if output_asset not in {"ECG", "USDT"}:
-        return Response({"error": "Invalid output asset"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {"error": "Invalid output asset"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
-    if wallet_address is None or ton_amount is None or ton_tx_hash is None:
-        logger.error("❌ Missing fields")
-        return Response({"error": "missing fields"}, status=400)
+    if network not in {"-239", "-3"}:
+        return Response(
+            {"error": "Invalid TON network"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    gram_address = str(
+        getattr(
+            settings,
+            "GRAM_MERCHANT_ADDRESS",
+            "",
+        ) or ""
+    ).strip()
+
+    if not gram_address:
+        return Response(
+            {
+                "error":
+                    "GRAM_MERCHANT_ADDRESS is not configured"
+            },
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
     try:
-        ton_amount = Decimal(str(ton_amount))
-        if ton_amount <= 0:
-            raise ValueError()
-    except:
-        logger.error("❌ Invalid ton_amount")
-        return Response({"error": "invalid ton_amount"}, status=400)
+        # First attempt resolves the wallet-returned BOC to a message hash.
+        # Later polling attempts can reuse message_hash and avoid re-broadcasting.
+        message_hash = (
+            supplied_message_hash
+            or _get_external_message_hash(
+                boc=boc,
+                network=network,
+            )
+        )
 
-    telegram_id = request.query_params.get("telegram_id") or request.headers.get("X-Telegram-Id")
-    is_telegram = request.query_params.get("is_telegram", "false").lower() == "true" or request.headers.get("X-Telegram") == "true"
-    
-    if telegram_id:
-        user = get_or_create_user(wallet_address, int(telegram_id), is_telegram)
-    else:
-        user = get_or_create_user(wallet_address, telegram_id=None, is_telegram=False)
+        logger.info(
+            "🔎 External message hash: %s",
+            message_hash,
+        )
 
-    try:
-        p = register_purchase(user, ton_amount, str(ton_tx_hash), output_asset=output_asset)
-        logger.info(f"✅ Purchase created: {p.invoice_no}")
-    except Exception as e:
-        logger.error(f"❌ REGISTER ERROR: {e}")
-        return Response({"error": str(e)}, status=400)
+        # Public TON Center access is rate-limited. On the first attempt we just
+        # made a v2 request to resolve the BOC; a short delay avoids immediately
+        # hitting the public rate limit before the v3 indexed lookup.
+        if (
+            not supplied_message_hash
+            and not TONCENTER_API_KEY
+        ):
+            time.sleep(1.1)
 
-    return Response(PurchaseSerializer(p).data, status=201)
+        verified = _find_verified_gram_payment(
+            message_hash=message_hash,
+            wallet_address=wallet_address,
+            gram_address=gram_address,
+            network=network,
+        )
+
+        if not verified:
+            logger.info(
+                "⏳ Payment not indexed/confirmed yet. message_hash=%s",
+                message_hash,
+            )
+
+            return Response(
+                {
+                    "status": "pending",
+                    "message":
+                        "Payment was sent and is waiting for on-chain confirmation.",
+                    "message_hash": message_hash,
+                    "gram_address": gram_address,
+                },
+                status=status.HTTP_202_ACCEPTED,
+            )
+
+        tx_hash = verified["tx_hash"]
+        gram_nano = int(verified["gram_nano"])
+
+        ton_amount = (
+            Decimal(gram_nano)
+            / Decimal("1000000000")
+        )
+
+        logger.info(
+            "✅ Verified payment tx=%s amount_nano=%s amount_ton=%s",
+            tx_hash,
+            gram_nano,
+            ton_amount,
+        )
+
+        telegram_id = (
+            request.query_params.get("telegram_id")
+            or request.headers.get("X-Telegram-Id")
+        )
+
+        is_telegram = (
+            request.query_params.get(
+                "is_telegram",
+                "false",
+            ).lower() == "true"
+            or request.headers.get("X-Telegram") == "true"
+        )
+
+        user = get_or_create_user(
+            wallet_address,
+            int(telegram_id) if telegram_id else None,
+            is_telegram if telegram_id else False,
+        )
+
+        # Idempotency: repeated polling/reloads must not create duplicate invoices.
+        existing = (
+            Purchase.objects
+            .filter(ton_tx_hash=tx_hash)
+            .first()
+        )
+
+        if existing:
+            if existing.user_id != user.id:
+                logger.error(
+                    "❌ Existing tx belongs to another user tx=%s",
+                    tx_hash,
+                )
+
+                return Response(
+                    {
+                        "error":
+                            "This blockchain transaction is already registered to another user."
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            serialized = PurchaseSerializer(
+                existing
+            ).data
+
+            logger.info(
+                "✅ Existing invoice returned idempotently: %s",
+                existing.invoice_no,
+            )
+
+            return Response(
+                {
+                    "status": "confirmed",
+                    "already_registered": True,
+                    "ton_tx_hash": tx_hash,
+                    "message_hash": message_hash,
+                    "gram_address": gram_address,
+                    "gram_amount": str(gram_nano),
+                    "ton_amount": str(ton_amount),
+                    "invoice": serialized,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        try:
+            purchase = register_purchase(
+                user,
+                ton_amount,
+                tx_hash,
+                output_asset=output_asset,
+            )
+        except ValueError as exc:
+            # Handles a race where another identical confirmation created it
+            # after the idempotency check but before register_purchase().
+            if "TX already registered" not in str(exc):
+                raise
+
+            existing = (
+                Purchase.objects
+                .filter(ton_tx_hash=tx_hash)
+                .first()
+            )
+
+            if (
+                not existing
+                or existing.user_id != user.id
+            ):
+                raise
+
+            purchase = existing
+
+        serialized = PurchaseSerializer(
+            purchase
+        ).data
+
+        logger.info(
+            "✅ Invoice created automatically: %s",
+            purchase.invoice_no,
+        )
+        logger.info("=" * 60)
+
+        return Response(
+            {
+                "status": "confirmed",
+                "already_registered": False,
+                "ton_tx_hash": tx_hash,
+                "message_hash": message_hash,
+                "gram_address": gram_address,
+                "gram_amount": str(gram_nano),
+                "ton_amount": str(ton_amount),
+                "invoice": serialized,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    except ValueError as exc:
+        logger.exception(
+            "TON payment validation error"
+        )
+
+        return Response(
+            {"error": str(exc)},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    except requests.RequestException as exc:
+        logger.exception(
+            "TON Center network error"
+        )
+
+        return Response(
+            {
+                "error":
+                    f"TON blockchain provider request failed: {exc}"
+            },
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+
+    except Exception as exc:
+        logger.exception(
+            "TON blockchain confirmation failed"
+        )
+
+        return Response(
+            {"error": str(exc)},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
 
 
 @api_view(["GET"])
@@ -861,11 +1429,11 @@ def list_purchases_bnb(request):
 @api_view(["POST"])
 def create_ton_transaction(request):
     """
-    ساخت payload تراکنش برای TON Connect.
+    Build the TON Connect transaction payload.
 
-    آدرس مقصد Merchant با نام GRAM از تنظیمات Backend خوانده می‌شود.
-    Frontend فقط gram_address / gram_amount را برای نمایش و دیباگ دریافت می‌کند.
-    کلید خصوصی هیچ‌وقت در این response ارسال نمی‌شود.
+    Merchant address always comes from GRAM_MERCHANT_ADDRESS on the backend.
+    The connected wallet address and network are bound into the TON Connect
+    request when provided.
     """
     logger.info("=" * 60)
     logger.info("💎 CREATE_GRAM_TRANSACTION CALLED")
@@ -873,68 +1441,142 @@ def create_ton_transaction(request):
 
     raw_amount = request.data.get("amount")
 
+    wallet_address = str(
+        request.data.get("wallet_address", "")
+    ).strip()
+
+    network = str(
+        request.data.get("network", "-239")
+    ).strip()
+
     if raw_amount in (None, ""):
         logger.error("❌ amount required")
+
         return Response(
             {"error": "amount required"},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # TON Connect مقدار amount را به nanoTON و به شکل رشته می‌خواهد.
     try:
-        amount_int = int(str(raw_amount))
+        amount_int = int(
+            str(raw_amount)
+        )
+
         if amount_int <= 0:
-            raise ValueError("amount must be greater than zero")
+            raise ValueError(
+                "amount must be greater than zero"
+            )
+
     except (TypeError, ValueError):
-        logger.error("❌ invalid amount: %r", raw_amount)
+        logger.error(
+            "❌ invalid amount: %r",
+            raw_amount,
+        )
+
         return Response(
-            {"error": "amount must be a positive integer in nanoTON"},
+            {
+                "error":
+                    "amount must be a positive integer in nanoTON"
+            },
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # اگر setting وجود نداشته باشد، به‌جای AttributeError یک JSON واضح برمی‌گردد.
+    if network not in {"-239", "-3"}:
+        return Response(
+            {"error": "Invalid TON network"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     gram_address = str(
-        getattr(settings, "GRAM_MERCHANT_ADDRESS", "") or ""
+        getattr(
+            settings,
+            "GRAM_MERCHANT_ADDRESS",
+            "",
+        ) or ""
     ).strip()
 
     if not gram_address:
-        logger.error("❌ GRAM_MERCHANT_ADDRESS is not configured")
+        logger.error(
+            "❌ GRAM_MERCHANT_ADDRESS is not configured"
+        )
+
         return Response(
             {
-                "error": "GRAM_MERCHANT_ADDRESS is not configured",
+                "error":
+                    "GRAM_MERCHANT_ADDRESS is not configured",
                 "gram_address": "",
             },
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
-    gram_amount = str(amount_int)
+    gram_amount = str(
+        amount_int
+    )
 
     transaction_data = {
-        "validUntil": int(time.time()) + 600,
+        "validUntil":
+            int(time.time()) + 600,
+
+        # TON Connect recommends explicitly binding the network.
+        "network":
+            network,
+
         "messages": [
             {
-                # این کلید باید address بماند چون TON Connect همین ساختار را می‌خواهد.
-                "address": gram_address,
-                "amount": gram_amount,
+                # TON Connect protocol field must stay named "address".
+                "address":
+                    gram_address,
+
+                "amount":
+                    gram_amount,
             }
         ],
     }
 
+    if wallet_address:
+        transaction_data["from"] = wallet_address
+
     gram_amount_ton = str(
-        Decimal(gram_amount) / Decimal("1000000000")
+        Decimal(gram_amount)
+        / Decimal("1000000000")
     )
 
-    logger.info("✅ GRAM merchant address: %s", gram_address)
-    logger.info("✅ GRAM amount nanoTON: %s", gram_amount)
-    logger.info("✅ GRAM amount TON: %s", gram_amount_ton)
+    logger.info(
+        "✅ GRAM merchant address: %s",
+        gram_address,
+    )
+
+    logger.info(
+        "✅ GRAM amount nanoTON: %s",
+        gram_amount,
+    )
+
+    logger.info(
+        "✅ GRAM amount TON: %s",
+        gram_amount_ton,
+    )
+
+    logger.info(
+        "✅ TON Connect network: %s",
+        network,
+    )
+
     logger.info("=" * 60)
 
     return Response(
         {
-            "transaction": transaction_data,
-            "gram_address": gram_address,
-            "gram_amount": gram_amount,
-            "gram_amount_ton": gram_amount_ton,
+            "transaction":
+                transaction_data,
+
+            "gram_address":
+                gram_address,
+
+            "gram_amount":
+                gram_amount,
+
+            "gram_amount_ton":
+                gram_amount_ton,
         },
         status=status.HTTP_200_OK,
     )
+
