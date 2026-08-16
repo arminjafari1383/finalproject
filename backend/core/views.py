@@ -860,34 +860,81 @@ def list_purchases_bnb(request):
 
 @api_view(["POST"])
 def create_ton_transaction(request):
+    """
+    ساخت payload تراکنش برای TON Connect.
 
-    amount = request.data.get("amount")
+    آدرس مقصد Merchant با نام GRAM از تنظیمات Backend خوانده می‌شود.
+    Frontend فقط gram_address / gram_amount را برای نمایش و دیباگ دریافت می‌کند.
+    کلید خصوصی هیچ‌وقت در این response ارسال نمی‌شود.
+    """
+    logger.info("=" * 60)
+    logger.info("💎 CREATE_GRAM_TRANSACTION CALLED")
+    logger.info("📥 Request data: %s", request.data)
 
-    if not amount:
+    raw_amount = request.data.get("amount")
+
+    if raw_amount in (None, ""):
+        logger.error("❌ amount required")
         return Response(
-            {
-                "error": "amount required"
-            },
-            status=400
+            {"error": "amount required"},
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
+    # TON Connect مقدار amount را به nanoTON و به شکل رشته می‌خواهد.
+    try:
+        amount_int = int(str(raw_amount))
+        if amount_int <= 0:
+            raise ValueError("amount must be greater than zero")
+    except (TypeError, ValueError):
+        logger.error("❌ invalid amount: %r", raw_amount)
+        return Response(
+            {"error": "amount must be a positive integer in nanoTON"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
-    return Response({
+    # اگر setting وجود نداشته باشد، به‌جای AttributeError یک JSON واضح برمی‌گردد.
+    gram_address = str(
+        getattr(settings, "GRAM_MERCHANT_ADDRESS", "") or ""
+    ).strip()
 
-        "validUntil":
-            int(time.time()) + 600,
-
-
-        "messages":[
-
+    if not gram_address:
+        logger.error("❌ GRAM_MERCHANT_ADDRESS is not configured")
+        return Response(
             {
-                "address":
-                    settings.TON_MERCHANT_ADDRESS,
+                "error": "GRAM_MERCHANT_ADDRESS is not configured",
+                "gram_address": "",
+            },
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
-                "amount":
-                    str(amount)
+    gram_amount = str(amount_int)
+
+    transaction_data = {
+        "validUntil": int(time.time()) + 600,
+        "messages": [
+            {
+                # این کلید باید address بماند چون TON Connect همین ساختار را می‌خواهد.
+                "address": gram_address,
+                "amount": gram_amount,
             }
+        ],
+    }
 
-        ]
+    gram_amount_ton = str(
+        Decimal(gram_amount) / Decimal("1000000000")
+    )
 
-    })
+    logger.info("✅ GRAM merchant address: %s", gram_address)
+    logger.info("✅ GRAM amount nanoTON: %s", gram_amount)
+    logger.info("✅ GRAM amount TON: %s", gram_amount_ton)
+    logger.info("=" * 60)
+
+    return Response(
+        {
+            "transaction": transaction_data,
+            "gram_address": gram_address,
+            "gram_amount": gram_amount,
+            "gram_amount_ton": gram_amount_ton,
+        },
+        status=status.HTTP_200_OK,
+    )
