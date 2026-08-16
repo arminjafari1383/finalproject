@@ -460,18 +460,13 @@ def wallet_view(request, wallet_address):
 @api_view(["POST"])
 def create_purchase(request):
     """
-    Confirm a TON Connect payment on-chain and create the invoice automatically.
+    Confirm TON/GRAM payment and create the real invoice automatically.
 
-    Frontend sends:
-      - wallet_address: connected user's wallet
-      - boc: BOC returned by tonConnectUI.sendTransaction()
-      - output_asset: ECG or USDT
-      - network: -239 mainnet / -3 testnet
-      - message_hash: optional; reuse after a pending (202) response
+    The frontend never supplies a manual TX hash. It sends BOC/message_hash.
+    register_purchase() runs only after the transaction is verified on-chain.
 
-    IMPORTANT:
-    The frontend does NOT provide or type a TX hash.
-    The real transaction hash and the paid amount are derived from the chain.
+    Temporary TON provider/indexer failures return HTTP 202 with status=pending,
+    so the frontend keeps the invoice visible as CONFIRMING and retries.
     """
     logger.info("=" * 60)
     logger.info("💰 CREATE_PURCHASE / ON-CHAIN CONFIRMATION")
@@ -497,6 +492,10 @@ def create_purchase(request):
         request.data.get("message_hash", "")
     ).strip()
 
+    expected_gram_amount_raw = str(
+        request.data.get("expected_gram_amount", "")
+    ).strip()
+
     if not wallet_address:
         return Response(
             {"error": "wallet_address required"},
@@ -505,10 +504,7 @@ def create_purchase(request):
 
     if not boc and not supplied_message_hash:
         return Response(
-            {
-                "error":
-                    "boc required for first confirmation attempt"
-            },
+            {"error": "boc required for first confirmation attempt"},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -524,6 +520,24 @@ def create_purchase(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    expected_gram_amount = None
+
+    if expected_gram_amount_raw:
+        try:
+            expected_gram_amount = int(
+                expected_gram_amount_raw
+            )
+            if expected_gram_amount <= 0:
+                raise ValueError()
+        except (TypeError, ValueError):
+            return Response(
+                {
+                    "error":
+                        "expected_gram_amount must be a positive integer in nanoTON"
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
     gram_address = str(
         getattr(
             settings,
@@ -534,32 +548,24 @@ def create_purchase(request):
 
     if not gram_address:
         return Response(
-            {
-                "error":
-                    "GRAM_MERCHANT_ADDRESS is not configured"
-            },
+            {"error": "GRAM_MERCHANT_ADDRESS is not configured"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
+    message_hash = supplied_message_hash
+
     try:
-        # First attempt resolves the wallet-returned BOC to a message hash.
-        # Later polling attempts can reuse message_hash and avoid re-broadcasting.
-        message_hash = (
-            supplied_message_hash
-            or _get_external_message_hash(
+        if not message_hash:
+            message_hash = _get_external_message_hash(
                 boc=boc,
                 network=network,
             )
-        )
 
         logger.info(
             "🔎 External message hash: %s",
             message_hash,
         )
 
-        # Public TON Center access is rate-limited. On the first attempt we just
-        # made a v2 request to resolve the BOC; a short delay avoids immediately
-        # hitting the public rate limit before the v3 indexed lookup.
         if (
             not supplied_message_hash
             and not TONCENTER_API_KEY
@@ -574,11 +580,6 @@ def create_purchase(request):
         )
 
         if not verified:
-            logger.info(
-                "⏳ Payment not indexed/confirmed yet. message_hash=%s",
-                message_hash,
-            )
-
             return Response(
                 {
                     "status": "pending",
@@ -590,19 +591,42 @@ def create_purchase(request):
                 status=status.HTTP_202_ACCEPTED,
             )
 
-        tx_hash = verified["tx_hash"]
-        gram_nano = int(verified["gram_nano"])
+        tx_hash = str(
+            verified["tx_hash"]
+        ).strip()
+
+        gram_nano = int(
+            verified["gram_nano"]
+        )
+
+        if (
+            expected_gram_amount is not None
+            and gram_nano != expected_gram_amount
+        ):
+            logger.error(
+                "❌ Amount mismatch expected=%s actual=%s tx=%s",
+                expected_gram_amount,
+                gram_nano,
+                tx_hash,
+            )
+
+            return Response(
+                {
+                    "error":
+                        "Verified blockchain amount does not match requested payment amount.",
+                    "expected_gram_amount":
+                        str(expected_gram_amount),
+                    "verified_gram_amount":
+                        str(gram_nano),
+                    "ton_tx_hash":
+                        tx_hash,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         ton_amount = (
             Decimal(gram_nano)
             / Decimal("1000000000")
-        )
-
-        logger.info(
-            "✅ Verified payment tx=%s amount_nano=%s amount_ton=%s",
-            tx_hash,
-            gram_nano,
-            ton_amount,
         )
 
         telegram_id = (
@@ -611,10 +635,7 @@ def create_purchase(request):
         )
 
         is_telegram = (
-            request.query_params.get(
-                "is_telegram",
-                "false",
-            ).lower() == "true"
+            request.query_params.get("is_telegram", "false").lower() == "true"
             or request.headers.get("X-Telegram") == "true"
         )
 
@@ -624,7 +645,7 @@ def create_purchase(request):
             is_telegram if telegram_id else False,
         )
 
-        # Idempotency: repeated polling/reloads must not create duplicate invoices.
+        # idempotency: one blockchain TX => one invoice
         existing = (
             Purchase.objects
             .filter(ton_tx_hash=tx_hash)
@@ -633,11 +654,6 @@ def create_purchase(request):
 
         if existing:
             if existing.user_id != user.id:
-                logger.error(
-                    "❌ Existing tx belongs to another user tx=%s",
-                    tx_hash,
-                )
-
                 return Response(
                     {
                         "error":
@@ -649,11 +665,6 @@ def create_purchase(request):
             serialized = PurchaseSerializer(
                 existing
             ).data
-
-            logger.info(
-                "✅ Existing invoice returned idempotently: %s",
-                existing.invoice_no,
-            )
 
             return Response(
                 {
@@ -677,8 +688,6 @@ def create_purchase(request):
                 output_asset=output_asset,
             )
         except ValueError as exc:
-            # Handles a race where another identical confirmation created it
-            # after the idempotency check but before register_purchase().
             if "TX already registered" not in str(exc):
                 raise
 
@@ -701,7 +710,7 @@ def create_purchase(request):
         ).data
 
         logger.info(
-            "✅ Invoice created automatically: %s",
+            "✅ REAL INVOICE CREATED AUTOMATICALLY: %s",
             purchase.invoice_no,
         )
         logger.info("=" * 60)
@@ -721,36 +730,39 @@ def create_purchase(request):
         )
 
     except ValueError as exc:
-        logger.exception(
-            "TON payment validation error"
-        )
-
+        logger.exception("TON payment validation error")
         return Response(
             {"error": str(exc)},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    except requests.RequestException as exc:
-        logger.exception(
-            "TON Center network error"
-        )
-
+    except (requests.RequestException, RuntimeError) as exc:
+        # Wallet payment was already sent. Provider/indexer issue is temporary.
+        logger.exception("TON provider/indexer temporary error")
         return Response(
             {
-                "error":
-                    f"TON blockchain provider request failed: {exc}"
+                "status": "pending",
+                "message":
+                    "Payment was sent. Blockchain provider/indexing is temporarily unavailable; retry confirmation.",
+                "message_hash": message_hash,
+                "gram_address": gram_address,
+                "provider_error": str(exc),
             },
-            status=status.HTTP_502_BAD_GATEWAY,
+            status=status.HTTP_202_ACCEPTED,
         )
 
     except Exception as exc:
-        logger.exception(
-            "TON blockchain confirmation failed"
-        )
-
+        logger.exception("Unexpected TON confirmation error")
         return Response(
-            {"error": str(exc)},
-            status=status.HTTP_502_BAD_GATEWAY,
+            {
+                "status": "pending",
+                "message":
+                    "Payment was sent. Confirmation will be retried.",
+                "message_hash": message_hash,
+                "gram_address": gram_address,
+                "provider_error": str(exc),
+            },
+            status=status.HTTP_202_ACCEPTED,
         )
 
 

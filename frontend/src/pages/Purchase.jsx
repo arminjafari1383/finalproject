@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTonConnectUI, useTonWallet } from "@tonconnect/ui-react";
 import { api } from "../api";
 import "./Purchase.css";
@@ -32,7 +32,14 @@ export default function Purchase() {
   const [gramAddress, setGramAddress] = useState("");
   const [gramAmount, setGramAmount] = useState("");
 
+  // فاکتور موقت بلافاصله بعد از موفقیت Wallet نمایش داده می‌شود.
+  // فاکتور واقعی فقط بعد از تایید on-chain از Backend می‌آید.
+  const [pendingInvoice, setPendingInvoice] = useState(null);
+  const [confirmingPayment, setConfirmingPayment] = useState(false);
+  const confirmationRunningRef = useRef(false);
+
   const ECG_PER_USDT = 312;
+  const PENDING_PAYMENT_PREFIX = "gram_pending_payment:";
 
   // =========================
   // DEBUG HELPERS
@@ -286,119 +293,499 @@ export default function Purchase() {
   // PAYMENT
   // =========================
 
+  function pendingPaymentKey(address) {
+    return `${PENDING_PAYMENT_PREFIX}${address || "unknown"}`;
+  }
+
+  function readPendingPayment() {
+    if (!walletAddress) return null;
+
+    try {
+      const raw = localStorage.getItem(
+        pendingPaymentKey(walletAddress)
+      );
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function savePendingPayment(payment) {
+    if (!payment?.wallet_address) return;
+
+    try {
+      localStorage.setItem(
+        pendingPaymentKey(payment.wallet_address),
+        JSON.stringify(payment)
+      );
+    } catch (error) {
+      addDebug(
+        "⚠️ Could not save pending payment",
+        error?.message || String(error)
+      );
+    }
+  }
+
+  function clearPendingPayment(address = walletAddress) {
+    if (!address) return;
+
+    try {
+      localStorage.removeItem(
+        pendingPaymentKey(address)
+      );
+    } catch {
+      // ignore localStorage cleanup error
+    }
+  }
+
+  function sleep(ms) {
+    return new Promise((resolve) => {
+      setTimeout(resolve, ms);
+    });
+  }
+
+  function makePendingInvoice(payment) {
+    const amount = Number(
+      payment?.ton_amount || 0
+    );
+
+    const savedTonPrice = Number(
+      payment?.ton_price || 0
+    );
+
+    const usd =
+      amount > 0 && savedTonPrice > 0
+        ? amount * savedTonPrice
+        : 0;
+
+    const ecg =
+      usd * ECG_PER_USDT;
+
+    const profit =
+      payment?.output_asset === "USDT"
+        ? usd * 0.05
+        : ecg * 0.05;
+
+    const createdAt =
+      Number(payment?.created_at) ||
+      Date.now();
+
+    return {
+      id: `pending-${createdAt}`,
+      invoice_no: `PENDING-${String(createdAt).slice(-8)}`,
+      ton_amount: String(payment?.ton_amount || "0"),
+      ecg_value: ecg ? ecg.toFixed(2) : "-",
+      self_profit_5: profit ? profit.toFixed(2) : "-",
+      principal_unlock_at: "Waiting for blockchain confirmation",
+      self_profit_unlock_at: "Waiting for blockchain confirmation",
+      ton_tx_hash: "",
+      currency: "TON",
+      __pending: true,
+      __status: "CONFIRMING",
+      __message_hash: String(payment?.message_hash || ""),
+    };
+  }
+
+  async function confirmPendingPayment(
+    initialPayment,
+    { resumed = false } = {}
+  ) {
+    if (
+      !initialPayment?.wallet_address ||
+      !initialPayment?.boc
+    ) {
+      return null;
+    }
+
+    if (confirmationRunningRef.current) {
+      addDebug(
+        "ℹ️ Confirmation is already running"
+      );
+      return null;
+    }
+
+    confirmationRunningRef.current = true;
+    setConfirmingPayment(true);
+
+    let payment = {
+      ...initialPayment,
+    };
+
+    let messageHash = String(
+      payment?.message_hash || ""
+    );
+
+    try {
+      addDebug(
+        resumed
+          ? "🔄 RESUMING SAVED PAYMENT CONFIRMATION"
+          : "🔎 START AUTOMATIC BLOCKCHAIN CONFIRMATION"
+      );
+
+      // حدود 30 دقیقه روی همین صفحه تلاش می‌کند.
+      // اگر صفحه بسته/رفرش شود، localStorage باعث ادامه در لود بعدی می‌شود.
+      const maxAttempts = 360;
+
+      for (
+        let attempt = 1;
+        attempt <= maxAttempts;
+        attempt += 1
+      ) {
+        const confirmPayload = {
+          wallet_address:
+            payment.wallet_address,
+
+          output_asset:
+            payment.output_asset || "ECG",
+
+          network:
+            payment.network || "-239",
+
+          expected_gram_amount:
+            String(payment.gram_amount || ""),
+
+          boc:
+            messageHash
+              ? ""
+              : payment.boc,
+
+          message_hash:
+            messageHash,
+        };
+
+        addDebug(
+          `Confirmation attempt ${attempt}/${maxAttempts}`,
+          {
+            ...confirmPayload,
+            boc:
+              confirmPayload.boc
+                ? `<BOC ${confirmPayload.boc.length} chars>`
+                : "",
+          }
+        );
+
+        try {
+          const response =
+            await api.post(
+              "/purchase/create/",
+              confirmPayload
+            );
+
+          const data =
+            response?.data || {};
+
+          addDebug(
+            "Confirmation HTTP STATUS",
+            response?.status
+          );
+
+          addDebug(
+            "Confirmation FULL RESPONSE",
+            data
+          );
+
+          if (data?.message_hash) {
+            messageHash =
+              String(data.message_hash);
+
+            payment = {
+              ...payment,
+              message_hash:
+                messageHash,
+            };
+
+            if (payment.pending_invoice) {
+              payment.pending_invoice = {
+                ...payment.pending_invoice,
+                __message_hash:
+                  messageHash,
+              };
+            }
+
+            savePendingPayment(
+              payment
+            );
+
+            setPendingInvoice(
+              (prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      __message_hash:
+                        messageHash,
+                    }
+                  : prev
+            );
+          }
+
+          if (
+            data?.status ===
+            "confirmed"
+          ) {
+            const txHash =
+              String(
+                data?.ton_tx_hash ||
+                ""
+              );
+
+            if (!txHash) {
+              throw new Error(
+                "Backend confirmed payment but did not return ton_tx_hash"
+              );
+            }
+
+            addDebug(
+              "✅ REAL BLOCKCHAIN TX HASH",
+              txHash
+            );
+
+            addDebug(
+              "✅ REAL INVOICE CREATED",
+              data?.invoice
+            );
+
+            clearPendingPayment(
+              payment.wallet_address
+            );
+
+            setPendingInvoice(
+              null
+            );
+
+            await loadInvoices();
+
+            addDebug(
+              "✅ PAYMENT CONFIRMED + INVOICE LOADED"
+            );
+
+            showSuccess(
+              `✅ Payment confirmed. Invoice created! TX: ${txHash.slice(0, 12)}...`
+            );
+
+            return data;
+          }
+
+          if (
+            data?.status !==
+            "pending"
+          ) {
+            throw new Error(
+              "Unexpected blockchain confirmation response"
+            );
+          }
+
+          addDebug(
+            "⏳ Payment is sent. Invoice remains CONFIRMING."
+          );
+        } catch (error) {
+          const statusCode =
+            error?.response?.status;
+
+          const retryable =
+            !error?.response ||
+            statusCode === 202 ||
+            statusCode === 408 ||
+            statusCode === 425 ||
+            statusCode === 429 ||
+            statusCode === 500 ||
+            statusCode === 502 ||
+            statusCode === 503 ||
+            statusCode === 504;
+
+          if (!retryable) {
+            addDebug(
+              "❌ NON-RETRYABLE CONFIRMATION ERROR",
+              getErrorDetails(error)
+            );
+            throw error;
+          }
+
+          addDebug(
+            "⚠️ Temporary confirmation/provider error; retrying",
+            getErrorDetails(error)
+          );
+        }
+
+        const waitMs =
+          attempt <= 20
+            ? 2500
+            : attempt <= 80
+              ? 5000
+              : 8000;
+
+        await sleep(
+          waitMs
+        );
+      }
+
+      addDebug(
+        "⏳ Confirmation is taking longer. Payment is saved and will resume automatically."
+      );
+
+      return null;
+    } finally {
+      confirmationRunningRef.current =
+        false;
+
+      setConfirmingPayment(
+        false
+      );
+    }
+  }
+
+  // بعد از Refresh/باز کردن دوباره صفحه، پرداخت قبلی را ادامه بده.
+  useEffect(() => {
+    if (!walletAddress) {
+      return;
+    }
+
+    const saved =
+      readPendingPayment();
+
+    if (
+      !saved ||
+      saved.wallet_address !==
+        walletAddress
+    ) {
+      return;
+    }
+
+    const localInvoice =
+      saved.pending_invoice ||
+      makePendingInvoice(saved);
+
+    setPendingInvoice(
+      localInvoice
+    );
+
+    setGramAddress(
+      String(
+        saved.gram_address ||
+        ""
+      )
+    );
+
+    setGramAmount(
+      String(
+        saved.gram_amount ||
+        ""
+      )
+    );
+
+    addDebug(
+      "🧾 Previous sent payment restored; invoice is visible as CONFIRMING."
+    );
+
+    confirmPendingPayment(
+      {
+        ...saved,
+        pending_invoice:
+          localInvoice,
+      },
+      {
+        resumed: true,
+      }
+    ).catch((error) => {
+      addDebug(
+        "❌ Resume confirmation error",
+        getErrorDetails(error)
+      );
+    });
+  }, [walletAddress]);
+
   async function payAndRegister() {
-    // هر پرداخت جدید، لاگ قبلی پاک شود
     setDebugLogs([]);
-    setGramAddress("");
-    setGramAmount("");
 
-    addDebug("====================================");
-    addDebug("🚀 PAYMENT STARTED");
-    addDebug("====================================");
-
-    const walletNetwork = String(
-      tonWallet?.account?.chain || "-239"
+    addDebug(
+      "===================================="
     );
 
     addDebug(
-      "API baseURL",
-      api?.defaults?.baseURL || "relative/default"
+      "🚀 PAYMENT STARTED"
     );
 
     addDebug(
-      "Connected USER wallet",
-      walletAddress || "NOT CONNECTED"
-    );
-
-    addDebug(
-      "Wallet chain",
-      walletNetwork
-    );
-
-    addDebug(
-      "TON amount input",
-      tonAmount
-    );
-
-    addDebug(
-      "Selected output",
-      selectedOutput
+      "===================================="
     );
 
     if (!walletAddress) {
-      addDebug(
-        "❌ STOP",
-        "Wallet is not connected"
-      );
-
       alert(
         "Wallet is not connected."
       );
+      return;
+    }
+
+    // اگر پرداخت قبلی هنوز تایید نشده، پرداخت جدید را مسدود کن.
+    const previousPending =
+      readPendingPayment();
+
+    if (previousPending) {
+      const localInvoice =
+        previousPending.pending_invoice ||
+        makePendingInvoice(
+          previousPending
+        );
+
+      setPendingInvoice(
+        localInvoice
+      );
+
+      showSuccess(
+        "⏳ Previous payment is still confirming. Do not pay again."
+      );
+
+      addDebug(
+        "⚠️ New payment blocked because previous payment is still confirming."
+      );
+
+      confirmPendingPayment(
+        {
+          ...previousPending,
+          pending_invoice:
+            localInvoice,
+        },
+        {
+          resumed: true,
+        }
+      ).catch((error) => {
+        addDebug(
+          "❌ Resume error",
+          getErrorDetails(error)
+        );
+      });
 
       return;
     }
 
+    setGramAddress("");
+    setGramAmount("");
     setLoading(true);
 
-    let walletBroadcastSucceeded =
-      false;
-
     try {
-      // =========================
-      // CHECK AMOUNT
-      // =========================
-
-      const amount = Number(
-        tonAmount
-      );
-
-      addDebug(
-        "Parsed TON amount",
-        amount
-      );
+      const amount =
+        Number(tonAmount);
 
       if (
         !Number.isFinite(amount) ||
         amount <= 0
       ) {
-        addDebug(
-          "❌ STOP",
-          "Invalid TON amount"
-        );
-
-        alert(
+        throw new Error(
           "Invalid TON amount."
         );
-
-        return;
       }
 
-      // =========================
-      // TON -> nanoGRAM
-      // =========================
+      const walletNetwork =
+        String(
+          tonWallet?.account?.chain ||
+          "-239"
+        );
 
-      const nano = BigInt(
-        Math.floor(
-          amount * 1e9
-        )
-      );
-
-      addDebug(
-        "Amount in nanoGRAM",
-        nano.toString()
-      );
-
-      // =========================
-      // REQUEST TRANSACTION
-      // =========================
-
-      addDebug(
-        "------------------------------------"
-      );
-
-      addDebug(
-        "📡 REQUESTING GRAM TRANSACTION"
-      );
+      const nano =
+        BigInt(
+          Math.floor(
+            amount * 1e9
+          )
+        );
 
       const createTxPayload = {
         amount:
@@ -422,20 +809,6 @@ export default function Purchase() {
           createTxPayload
         );
 
-      addDebug(
-        "create-transaction HTTP STATUS",
-        txResponse?.status
-      );
-
-      addDebug(
-        "create-transaction FULL RESPONSE",
-        txResponse?.data
-      );
-
-      // =========================
-      // BACKEND DATA
-      // =========================
-
       const backendData =
         txResponse?.data || {};
 
@@ -451,25 +824,67 @@ export default function Purchase() {
           ""
         );
 
-      addDebug(
-        "GRAM address returned by BACKEND",
-        backendGramAddress
-      );
+      const transaction =
+        backendData?.transaction;
 
       addDebug(
-        "GRAM amount returned by BACKEND",
-        backendGramAmount
+        "create-transaction FULL RESPONSE",
+        backendData
       );
 
-      if (!backendGramAddress) {
+      if (
+        !backendGramAddress
+      ) {
         throw new Error(
           "Backend did not return gram_address"
         );
       }
 
-      if (!backendGramAmount) {
+      if (
+        !backendGramAmount
+      ) {
         throw new Error(
           "Backend did not return gram_amount"
+        );
+      }
+
+      if (
+        !transaction ||
+        !Array.isArray(
+          transaction?.messages
+        ) ||
+        transaction.messages
+          .length === 0
+      ) {
+        throw new Error(
+          "Backend returned invalid transaction"
+        );
+      }
+
+      const firstMessage =
+        transaction.messages[0];
+
+      if (
+        String(
+          firstMessage?.address ||
+          ""
+        ) !==
+        backendGramAddress
+      ) {
+        throw new Error(
+          "GRAM address mismatch in transaction"
+        );
+      }
+
+      if (
+        String(
+          firstMessage?.amount ||
+          ""
+        ) !==
+        backendGramAmount
+      ) {
+        throw new Error(
+          "GRAM amount mismatch in transaction"
         );
       }
 
@@ -482,176 +897,17 @@ export default function Purchase() {
       );
 
       addDebug(
-        "✅ GRAM Merchant Address",
+        "✅ GRAM address verified",
         backendGramAddress
       );
 
       addDebug(
-        "GRAM amount nanoGRAM",
+        "✅ GRAM amount verified",
         backendGramAmount
       );
 
       addDebug(
-        "GRAM amount GRAM",
-        Number(
-          backendGramAmount
-        ) / 1e9
-      );
-
-      // =========================
-      // GET TRANSACTION
-      // =========================
-
-      const transaction =
-        backendData?.transaction;
-
-      if (!transaction) {
-        throw new Error(
-          "Backend did not return transaction"
-        );
-      }
-
-      addDebug(
-        "Transaction object",
-        transaction
-      );
-
-      if (
-        !Array.isArray(
-          transaction?.messages
-        ) ||
-        transaction.messages.length === 0
-      ) {
-        throw new Error(
-          "Backend transaction.messages is empty or invalid"
-        );
-      }
-
-      addDebug(
-        "Transaction validUntil",
-        transaction?.validUntil
-      );
-
-      addDebug(
-        "Transaction network",
-        transaction?.network
-      );
-
-      addDebug(
-        "Transaction from",
-        transaction?.from
-      );
-
-      addDebug(
-        "Transaction messages count",
-        transaction.messages.length
-      );
-
-      transaction.messages.forEach(
-        (message, index) => {
-          addDebug(
-            `Message ${index + 1} FULL`,
-            message
-          );
-
-          addDebug(
-            `Message ${index + 1} destination`,
-            message?.address
-          );
-
-          addDebug(
-            `Message ${index + 1} amount`,
-            message?.amount
-          );
-        }
-      );
-
-      // =========================
-      // VERIFY BACKEND PAYLOAD
-      // =========================
-
-      const firstMessageAddress =
-        String(
-          transaction
-            ?.messages?.[0]
-            ?.address || ""
-        );
-
-      const firstMessageAmount =
-        String(
-          transaction
-            ?.messages?.[0]
-            ?.amount || ""
-        );
-
-      if (!firstMessageAddress) {
-        throw new Error(
-          "Transaction message does not contain address"
-        );
-      }
-
-      if (
-        firstMessageAddress !==
-        backendGramAddress
-      ) {
-        addDebug(
-          "❌ GRAM ADDRESS MISMATCH",
-          {
-            gram_address:
-              backendGramAddress,
-
-            transaction_address:
-              firstMessageAddress,
-          }
-        );
-
-        throw new Error(
-          "gram_address does not match transaction.messages[0].address"
-        );
-      }
-
-      if (
-        firstMessageAmount !==
-        backendGramAmount
-      ) {
-        addDebug(
-          "❌ GRAM AMOUNT MISMATCH",
-          {
-            gram_amount:
-              backendGramAmount,
-
-            transaction_amount:
-              firstMessageAmount,
-          }
-        );
-
-        throw new Error(
-          "gram_amount does not match transaction.messages[0].amount"
-        );
-      }
-
-      addDebug(
-        "✅ GRAM address verification PASSED"
-      );
-
-      addDebug(
-        "✅ GRAM amount verification PASSED"
-      );
-
-      // =========================
-      // SEND TO WALLET
-      // =========================
-
-      addDebug(
-        "------------------------------------"
-      );
-
-      addDebug(
-        "🚀 Calling tonConnectUI.sendTransaction"
-      );
-
-      addDebug(
-        "Transaction being sent to wallet",
+        "🚀 Calling tonConnectUI.sendTransaction",
         transaction
       );
 
@@ -662,19 +918,15 @@ export default function Purchase() {
           );
 
       addDebug(
-        "✅ sendTransaction SUCCESS"
-      );
-
-      addDebug(
-        "TON Connect FULL RESULT",
+        "✅ sendTransaction SUCCESS",
         sendResult
       );
 
-      // TON Connect returns the signed external-message BOC.
-      // It does NOT require the user to type the blockchain TX hash.
-      const boc = String(
-        sendResult?.boc || ""
-      );
+      const boc =
+        String(
+          sendResult?.boc ||
+          ""
+        );
 
       if (!boc) {
         throw new Error(
@@ -682,302 +934,108 @@ export default function Purchase() {
         );
       }
 
-      walletBroadcastSucceeded =
-        true;
+      // ===================================================
+      // بلافاصله بعد از موفقیت Wallet فاکتور CONFIRMING بساز
+      // ===================================================
+      const paymentContext = {
+        wallet_address:
+          walletAddress,
 
-      addDebug(
-        "✅ Wallet returned BOC"
-      );
+        network:
+          walletNetwork,
 
-      addDebug(
-        "Returned BOC length",
-        boc.length
-      );
+        output_asset:
+          selectedOutput,
 
-      // =========================
-      // AUTOMATIC ON-CHAIN CONFIRMATION
-      // =========================
+        gram_address:
+          backendGramAddress,
 
-      addDebug(
-        "------------------------------------"
-      );
+        gram_amount:
+          backendGramAmount,
 
-      addDebug(
-        "🔎 START AUTOMATIC BLOCKCHAIN CONFIRMATION"
-      );
+        ton_amount:
+          String(amount),
 
-      let messageHash = "";
-      let confirmedData = null;
+        ton_price:
+          tonPrice,
 
-      // حدود 75 ثانیه برای index شدن تراکنش
-      const maxAttempts = 30;
+        boc,
 
-      for (
-        let attempt = 1;
-        attempt <= maxAttempts;
-        attempt += 1
-      ) {
-        addDebug(
-          `Confirmation attempt ${attempt}/${maxAttempts}`
+        message_hash: "",
+
+        created_at:
+          Date.now(),
+      };
+
+      const localInvoice =
+        makePendingInvoice(
+          paymentContext
         );
 
-        const confirmPayload = {
-          wallet_address:
-            walletAddress,
+      const pendingPayment = {
+        ...paymentContext,
+        pending_invoice:
+          localInvoice,
+      };
 
-          output_asset:
-            selectedOutput,
+      savePendingPayment(
+        pendingPayment
+      );
 
-          network:
-            walletNetwork,
-
-          // فقط بار اول BOC لازم است.
-          // بعد از دریافت message_hash همان hash را poll می‌کنیم.
-          boc:
-            messageHash
-              ? ""
-              : boc,
-
-          message_hash:
-            messageHash,
-        };
-
-        addDebug(
-          "POST /purchase/create/ confirmation payload",
-          {
-            ...confirmPayload,
-            // BOC خیلی بزرگ است؛ در لاگ فقط طول آن نمایش داده شود.
-            boc:
-              confirmPayload.boc
-                ? `<BOC ${confirmPayload.boc.length} chars>`
-                : "",
-          }
-        );
-
-        const confirmResponse =
-          await api.post(
-            "/purchase/create/",
-            confirmPayload
-          );
-
-        addDebug(
-          "Confirmation HTTP STATUS",
-          confirmResponse?.status
-        );
-
-        addDebug(
-          "Confirmation FULL RESPONSE",
-          confirmResponse?.data
-        );
-
-        const responseData =
-          confirmResponse?.data || {};
-
-        if (
-          responseData?.message_hash
-        ) {
-          messageHash = String(
-            responseData.message_hash
-          );
-
-          addDebug(
-            "Blockchain message hash",
-            messageHash
-          );
-        }
-
-        if (
-          responseData?.status ===
-          "confirmed"
-        ) {
-          confirmedData =
-            responseData;
-
-          break;
-        }
-
-        if (
-          responseData?.status !==
-          "pending"
-        ) {
-          throw new Error(
-            "Unexpected blockchain confirmation response"
-          );
-        }
-
-        addDebug(
-          "⏳ Payment sent; waiting for TON blockchain indexing..."
-        );
-
-        if (
-          attempt <
-          maxAttempts
-        ) {
-          await new Promise(
-            (resolve) =>
-              setTimeout(
-                resolve,
-                2500
-              )
-          );
-        }
-      }
-
-      if (!confirmedData) {
-        const pendingError =
-          new Error(
-            "Payment was sent successfully, but blockchain confirmation is still pending. Do not send the payment again."
-          );
-
-        pendingError.paymentPending =
-          true;
-
-        pendingError.messageHash =
-          messageHash;
-
-        throw pendingError;
-      }
-
-      // =========================
-      // REAL TX HASH + INVOICE
-      // =========================
-
-      const txHash =
-        String(
-          confirmedData
-            ?.ton_tx_hash ||
-          ""
-        );
-
-      if (!txHash) {
-        throw new Error(
-          "Backend confirmed payment but did not return ton_tx_hash"
-        );
-      }
-
-      addDebug(
-        "✅ REAL BLOCKCHAIN TX HASH",
-        txHash
+      setPendingInvoice(
+        localInvoice
       );
 
       addDebug(
-        "✅ VERIFIED GRAM AMOUNT",
-        confirmedData?.gram_amount
+        "🧾 INVOICE DISPLAYED IMMEDIATELY",
+        localInvoice
       );
 
       addDebug(
-        "✅ VERIFIED TON/GRAM AMOUNT",
-        confirmedData?.ton_amount
-      );
-
-      addDebug(
-        "✅ INVOICE",
-        confirmedData?.invoice
-      );
-
-      addDebug(
-        "Invoice already registered",
-        Boolean(
-          confirmedData
-            ?.already_registered
-        )
-      );
-
-      // =========================
-      // RELOAD INVOICES
-      // =========================
-
-      addDebug(
-        "Reloading invoices..."
-      );
-
-      await loadInvoices();
-
-      addDebug(
-        "✅ Invoices reloaded"
-      );
-
-      addDebug(
-        "===================================="
-      );
-
-      addDebug(
-        "✅ PAYMENT CONFIRMED + INVOICE CREATED"
-      );
-
-      addDebug(
-        "===================================="
+        "💾 Payment saved to localStorage. Refresh will resume confirmation."
       );
 
       showSuccess(
-        `✅ Payment confirmed! TX: ${txHash.slice(0, 12)}...`
+        "✅ Payment sent successfully. Invoice is visible below as CONFIRMING."
       );
-    } catch (error) {
-      const details =
-        getErrorDetails(
-          error
+
+      // کاربر منتظر صفحه قفل‌شده نمی‌ماند؛ تایید در پس‌زمینه ادامه دارد.
+      setLoading(false);
+
+      confirmPendingPayment(
+        pendingPayment
+      ).catch((error) => {
+        addDebug(
+          "❌ Background confirmation error",
+          getErrorDetails(error)
         );
 
+        showSuccess(
+          "⏳ Payment was sent. Invoice remains CONFIRMING and will resume automatically."
+        );
+      });
+    } catch (error) {
       console.error(
         "Payment error:",
         error
       );
 
       addDebug(
-        "===================================="
+        "❌ PAYMENT ERROR",
+        getErrorDetails(error)
       );
 
-      if (
-        error?.paymentPending ||
-        walletBroadcastSucceeded
-      ) {
-        addDebug(
-          "⏳ PAYMENT SENT - CONFIRMATION/VERIFICATION PENDING"
-        );
-
-        addDebug(
-          "Pending message hash",
-          error?.messageHash || ""
-        );
-
-        addDebug(
-          "DETAILS",
-          details
-        );
-
-        alert(
-          "✅ The wallet already sent the payment. Blockchain confirmation could not finish yet. Do NOT pay again. Keep this debug log and check the invoice again after confirmation."
-        );
-      } else {
-        addDebug(
-          "❌ PAYMENT ERROR"
-        );
-
-        addDebug(
-          "ERROR DETAILS",
-          details
-        );
-
-        alert(
-          `❌ Payment failed: ${
-            error?.response
-              ?.data?.error ||
-            error?.response
-              ?.data?.detail ||
-            error?.message ||
-            "Unknown error"
-          }`
-        );
-      }
-
-      addDebug(
-        "===================================="
+      alert(
+        `❌ Payment failed: ${
+          error?.response
+            ?.data?.error ||
+          error?.response
+            ?.data?.detail ||
+          error?.message ||
+          "Unknown error"
+        }`
       );
     } finally {
-      addDebug(
-        "Payment flow ended"
-      );
-
       setLoading(false);
     }
   }
@@ -988,14 +1046,27 @@ export default function Purchase() {
 
   const allInvoices =
     useMemo(() => {
-      return invoices.map(
-        (invoice) => ({
-          ...invoice,
-          currency:
-            "TON",
-        })
-      );
-    }, [invoices]);
+      const confirmed =
+        invoices.map(
+          (invoice) => ({
+            ...invoice,
+            currency: "TON",
+            __pending: false,
+          })
+        );
+
+      if (!pendingInvoice) {
+        return confirmed;
+      }
+
+      return [
+        pendingInvoice,
+        ...confirmed,
+      ];
+    }, [
+      invoices,
+      pendingInvoice,
+    ]);
 
   function Row({
     label,
@@ -1062,9 +1133,11 @@ export default function Purchase() {
               </div>
             )}
 
-            {loading && (
+            {(loading || confirmingPayment) && (
               <div className="loading-text">
-                Processing...
+                {loading
+                  ? "Processing..."
+                  : "Payment sent — confirming invoice on blockchain..."}
               </div>
             )}
 
@@ -1563,12 +1636,15 @@ export default function Purchase() {
               }
               className="convert-btn"
               disabled={
-                loading
+                loading ||
+                confirmingPayment
               }
             >
               {loading
                 ? "Processing..."
-                : `Stake TON → ${outputLabel}`}
+                : confirmingPayment
+                  ? "Confirming Previous Payment..."
+                  : `Stake TON → ${outputLabel}`}
             </button>
           </div>
 
@@ -1595,7 +1671,11 @@ export default function Purchase() {
             <div className="invoices-grid">
               {allInvoices.map(
                 (item) => {
+                  const isPending =
+                    item.__pending === true;
+
                   const isTest =
+                    !isPending &&
                     item.ton_tx_hash?.startsWith(
                       "TEST_"
                     );
@@ -1638,16 +1718,20 @@ export default function Purchase() {
 
                         <div
                           className={`invoice-status ${
-                            isTest
+                            isPending
                               ? "status-test"
-                              : "status-paid"
+                              : isTest
+                                ? "status-test"
+                                : "status-paid"
                           }`}
                         >
                           <span className="dot" />
 
-                          {isTest
-                            ? "TEST"
-                            : "PAID"}
+                          {isPending
+                            ? "CONFIRMING"
+                            : isTest
+                              ? "TEST"
+                              : "PAID"}
                         </div>
                       </div>
 
@@ -1708,13 +1792,20 @@ export default function Purchase() {
                       >
                         TX:{" "}
                         <b>
-                          {typeof txHash ===
-                          "string"
-                            ? `${txHash.slice(
-                                0,
-                                12
-                              )}...`
-                            : "-"}
+                          {isPending
+                            ? item.__message_hash
+                              ? `${item.__message_hash.slice(
+                                  0,
+                                  12
+                                )}... (message)`
+                              : "Waiting for TX hash..."
+                            : typeof txHash ===
+                              "string"
+                              ? `${txHash.slice(
+                                  0,
+                                  12
+                                )}...`
+                              : "-"}
                         </b>
                       </div>
                     </div>
