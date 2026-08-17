@@ -1,39 +1,62 @@
-import { useEffect, useMemo, useState, useRef, useCallback } from "react";
-import { useTonWallet, TonConnectButton } from "@tonconnect/ui-react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  useRef,
+  useCallback,
+} from "react";
+
+import {
+  useTonWallet,
+  TonConnectButton,
+  useTonConnectUI,
+} from "@tonconnect/ui-react";
+
 import { api } from "../api";
 import "./Wallet.css";
+
 import {
   captureInviterCode,
   clearInviterCode,
 } from "../utils/referral";
 
+
+// ======================================================
+// CONSTANTS
+// ======================================================
+
 const USER_DATA_KEY = "my_app_user_data";
 const INVITER_CODE_KEY = "inviter_code";
+
 const WITHDRAW_TARGET = 60;
+
 const ECG_PER_USDT = 312;
 
-const ECG_CONTRACT_ADDRESS = "0x1A2b7F3c9D8e4B2A";
+const ECG_CONTRACT_ADDRESS =
+  "0x1A2b7F3c9D8e4B2A";
 
 const ECG_CONTRACT_LINK =
   `https://bscscan.com/address/${ECG_CONTRACT_ADDRESS}`;
 
 
 // ======================================================
-// LOCAL STORAGE
+// STORAGE
 // ======================================================
 
 const loadUserDataFromStorage = () => {
   try {
     const data =
-      localStorage.getItem(USER_DATA_KEY);
+      localStorage.getItem(
+        USER_DATA_KEY
+      );
 
     return data
       ? JSON.parse(data)
       : null;
-  } catch (e) {
+  } catch (error) {
     console.error(
-      "Error parsing localStorage data:",
-      e
+      "Error parsing localStorage:",
+      error
     );
 
     return null;
@@ -41,35 +64,71 @@ const loadUserDataFromStorage = () => {
 };
 
 
-const saveUserDataToStorage = (newData) => {
+const saveUserDataToStorage = (
+  newData
+) => {
   try {
     const currentData =
-      loadUserDataFromStorage() || {};
-
-    const mergedData = {
-      ...currentData,
-      ...newData,
-    };
+      loadUserDataFromStorage() ||
+      {};
 
     localStorage.setItem(
       USER_DATA_KEY,
-      JSON.stringify(mergedData)
+      JSON.stringify({
+        ...currentData,
+        ...newData,
+      })
     );
-  } catch (e) {
+  } catch (error) {
     console.error(
-      "Error saving to localStorage:",
-      e
+      "Error saving localStorage:",
+      error
     );
   }
 };
 
+
+const removeStoredWalletOnly = () => {
+  try {
+    const current =
+      loadUserDataFromStorage();
+
+    if (!current) {
+      return;
+    }
+
+    const {
+      walletAddress,
+      ...telegramData
+    } = current;
+
+    localStorage.setItem(
+      USER_DATA_KEY,
+      JSON.stringify(
+        telegramData
+      )
+    );
+  } catch (error) {
+    console.error(
+      "Could not remove stored wallet:",
+      error
+    );
+  }
+};
+
+
+// ======================================================
+// UTILS
+// ======================================================
 
 const shortenMiddle = (
   value,
   start = 6,
   end = 6
 ) => {
-  if (!value) return "-";
+  if (!value) {
+    return "-";
+  }
 
   if (
     value.length <=
@@ -90,8 +149,18 @@ const shortenMiddle = (
 // ======================================================
 
 export default function Wallet() {
+
+  // ====================================================
+  // TON CONNECT
+  // ====================================================
+
   const tonWallet =
     useTonWallet();
+
+  const [
+    tonConnectUI,
+  ] = useTonConnectUI();
+
 
   const address =
     useMemo(
@@ -102,12 +171,13 @@ export default function Wallet() {
       [tonWallet]
     );
 
+
   const hasConnected =
     useRef(false);
 
 
   // ====================================================
-  // STATES
+  // WALLET STATES
   // ====================================================
 
   const [
@@ -115,25 +185,35 @@ export default function Wallet() {
     setWallet,
   ] = useState(null);
 
+
   const [
     walletLocked,
     setWalletLocked,
   ] = useState(false);
+
 
   const [
     connectError,
     setConnectError,
   ] = useState("");
 
+
   const [
     errorType,
     setErrorType,
   ] = useState("none");
 
+
   const [
     copiedText,
     setCopiedText,
   ] = useState("");
+
+
+  const [
+    isReplacingWallet,
+    setIsReplacingWallet,
+  ] = useState(false);
 
 
   // ====================================================
@@ -145,30 +225,36 @@ export default function Wallet() {
     setIsWithdrawOpen,
   ] = useState(false);
 
+
   const [
     amount,
     setAmount,
   ] = useState("");
+
 
   const [
     tonPrice,
     setTonPrice,
   ] = useState(null);
 
+
   const [
     withdrawAsset,
     setWithdrawAsset,
   ] = useState("ECG");
+
 
   const [
     destinationWallet,
     setDestinationWallet,
   ] = useState("");
 
+
   const [
     withdrawError,
     setWithdrawError,
   ] = useState("");
+
 
   const [
     isWithdrawing,
@@ -177,7 +263,7 @@ export default function Wallet() {
 
 
   // ====================================================
-  // DEBUG STATE
+  // DEBUG
   // ====================================================
 
   const [
@@ -185,10 +271,6 @@ export default function Wallet() {
     setWithdrawDebugLogs,
   ] = useState([]);
 
-
-  // ====================================================
-  // DEBUG LOGGER
-  // ====================================================
 
   const addWithdrawDebugLog =
     useCallback(
@@ -224,6 +306,7 @@ export default function Wallet() {
         setWithdrawDebugLogs(
           (prev) => [
             ...prev.slice(-79),
+
             {
               time:
                 now.toLocaleTimeString(),
@@ -249,23 +332,24 @@ export default function Wallet() {
   useEffect(() => {
     async function getTonPrice() {
       try {
-        const res =
+        const response =
           await fetch(
             "https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd"
           );
 
         const data =
-          await res.json();
+          await response.json();
 
         setTonPrice(
           data?.[
             "the-open-network"
-          ]?.usd || null
+          ]?.usd ||
+            null
         );
-      } catch (err) {
-        console.log(
-          "TON price error",
-          err
+      } catch (error) {
+        console.error(
+          "TON price error:",
+          error
         );
       }
     }
@@ -284,87 +368,90 @@ export default function Wallet() {
 
     if (inviterCode) {
       localStorage.setItem(
-        "inviter_code",
+        INVITER_CODE_KEY,
         inviterCode
       );
     }
 
+
     const tg =
       window.Telegram?.WebApp;
 
-    if (
+
+    const startParam =
       tg
         ?.initDataUnsafe
-        ?.start_param
+        ?.start_param;
+
+
+    if (
+      startParam &&
+      startParam.startsWith(
+        "ref_"
+      )
     ) {
-      const startParamValue =
-        tg.initDataUnsafe
-          .start_param;
-
-      if (
-        startParamValue &&
-        startParamValue.startsWith(
-          "ref_"
-        )
-      ) {
-        const refCode =
-          startParamValue.replace(
-            "ref_",
-            ""
-          );
-
-        localStorage.setItem(
-          "inviter_code",
-          refCode
+      const code =
+        startParam.replace(
+          "ref_",
+          ""
         );
-      }
+
+      localStorage.setItem(
+        INVITER_CODE_KEY,
+        code
+      );
     }
   }, []);
 
 
   // ====================================================
-  // SAVE WALLET ADDRESS
+  // SAVE ACTIVE WALLET LOCALLY
   // ====================================================
 
   useEffect(() => {
-    if (address) {
-      const currentData =
-        loadUserDataFromStorage() ||
-        {};
-
-      saveUserDataToStorage({
-        ...currentData,
-        walletAddress:
-          address,
-      });
+    if (!address) {
+      return;
     }
+
+    saveUserDataToStorage({
+      walletAddress:
+        address,
+    });
   }, [address]);
 
 
   // ====================================================
-  // CONNECT + LOAD WALLET
+  // CONNECT TELEGRAM USER + WALLET
   // ====================================================
 
   const connectAndLoadWallet =
     useCallback(
       async () => {
         if (
-          hasConnected.current ||
-          !address
+          !address ||
+          hasConnected.current
         ) {
           return;
         }
 
+
         hasConnected.current =
           true;
+
 
         setConnectError("");
         setErrorType("none");
 
+
+        // --------------------------------------------
+        // INVITER
+        // --------------------------------------------
+
         let inviter_code =
           localStorage.getItem(
-            "inviter_code"
+            INVITER_CODE_KEY
           );
+
 
         if (!inviter_code) {
           inviter_code =
@@ -372,12 +459,16 @@ export default function Wallet() {
 
           if (inviter_code) {
             localStorage.setItem(
-              "inviter_code",
+              INVITER_CODE_KEY,
               inviter_code
             );
           }
         }
 
+
+        // --------------------------------------------
+        // TELEGRAM USER DATA
+        // --------------------------------------------
 
         let telegramId =
           null;
@@ -385,11 +476,11 @@ export default function Wallet() {
         let telegramUsername =
           null;
 
-        let isTelegram =
-          false;
-
         let telegramPhotoUrl =
           null;
+
+        let isTelegram =
+          false;
 
 
         const savedData =
@@ -418,37 +509,50 @@ export default function Wallet() {
               .telegramUsername ||
             null;
 
-          isTelegram =
+          telegramPhotoUrl =
             savedData
-              .isTelegram ||
-            false;
+              .telegramPhotoUrl ||
+            null;
+
+          isTelegram =
+            Boolean(
+              savedData
+                .isTelegram
+            );
         } else {
+
           const tg =
-            window.Telegram
+            window
+              .Telegram
               ?.WebApp;
 
-          if (
+
+          const telegramUser =
             tg
               ?.initDataUnsafe
-              ?.user
-          ) {
-            const user =
-              tg.initDataUnsafe
-                .user;
+              ?.user;
+
+
+          if (telegramUser) {
 
             telegramId =
-              Number(user.id);
+              Number(
+                telegramUser.id
+              );
 
             telegramUsername =
-              user.username ||
+              telegramUser
+                .username ||
               null;
 
             telegramPhotoUrl =
-              user.photo_url ||
+              telegramUser
+                .photo_url ||
               null;
 
             isTelegram =
               true;
+
 
             saveUserDataToStorage({
               telegramId,
@@ -460,9 +564,10 @@ export default function Wallet() {
               isTelegram:
                 true,
             });
-          } else if (
-            address
-          ) {
+
+          } else {
+
+            // Browser fallback
             let hash = 0;
 
             for (
@@ -489,6 +594,7 @@ export default function Wallet() {
                 hash;
             }
 
+
             telegramId =
               Number(
                 Math.abs(
@@ -497,14 +603,17 @@ export default function Wallet() {
                   1000000000000
               );
 
+
             telegramUsername =
               `browser_${address.slice(
                 0,
                 8
               )}`;
 
+
             isTelegram =
               false;
+
 
             saveUserDataToStorage({
               telegramId,
@@ -513,13 +622,14 @@ export default function Wallet() {
 
               isTelegram:
                 false,
-
-              walletAddress:
-                address,
             });
           }
         }
 
+
+        // --------------------------------------------
+        // LAST FALLBACK
+        // --------------------------------------------
 
         if (!telegramId) {
           telegramId =
@@ -532,6 +642,10 @@ export default function Wallet() {
             );
         }
 
+
+        // --------------------------------------------
+        // BACKEND PAYLOAD
+        // --------------------------------------------
 
         const payload = {
           wallet_address:
@@ -556,6 +670,11 @@ export default function Wallet() {
 
 
         try {
+
+          // ------------------------------------------
+          // CONNECT
+          // ------------------------------------------
+
           const response =
             await api.post(
               "/connect/",
@@ -563,25 +682,21 @@ export default function Wallet() {
             );
 
 
-          if (
-            response.data
-              ?.user
-              ?.wallet_locked
-          ) {
-            setWalletLocked(
-              true
-            );
-          }
+          const user =
+            response
+              ?.data
+              ?.user;
 
 
-          if (
-            response.data
-              ?.user
-          ) {
-            const user =
-              response.data
-                .user;
+          setWalletLocked(
+            Boolean(
+              user
+                ?.wallet_locked
+            )
+          );
 
+
+          if (user) {
             saveUserDataToStorage({
               telegramId:
                 user.telegram_id ||
@@ -591,8 +706,12 @@ export default function Wallet() {
                 user.telegram_username ||
                 telegramUsername,
 
+              telegramPhotoUrl:
+                user.telegram_photo_url ||
+                telegramPhotoUrl,
+
               isTelegram:
-                user.is_telegram ||
+                user.is_telegram ??
                 isTelegram,
 
               walletAddress:
@@ -601,38 +720,48 @@ export default function Wallet() {
           }
 
 
-          const r =
+          // ------------------------------------------
+          // GET WALLET
+          // ------------------------------------------
+
+          const walletResponse =
             await api.get(
               `/wallet/${address}/`
             );
 
+
           setWallet(
-            r.data
+            walletResponse.data
           );
 
-          setErrorType(
-            "none"
-          );
-        } catch (e) {
+
+          setConnectError("");
+          setErrorType("none");
+
+        } catch (error) {
+
           const errorData =
-            e?.response
+            error
+              ?.response
               ?.data;
 
+
           const statusCode =
-            e?.response
+            error
+              ?.response
               ?.status;
 
+
           const isNetworkError =
-            e.message ===
+            error?.message ===
               "Network Error" ||
-            e.code ===
+            error?.code ===
               "ERR_NETWORK" ||
-            !e.response;
+            !error?.response;
 
 
-          if (
-            isNetworkError
-          ) {
+          if (isNetworkError) {
+
             setErrorType(
               "network_error"
             );
@@ -640,6 +769,7 @@ export default function Wallet() {
             setConnectError(
               "Network Error! Please check your internet connection."
             );
+
           } else if (
             errorData
               ?.error
@@ -657,49 +787,56 @@ export default function Wallet() {
                 "already linked"
               )
           ) {
+
             setErrorType(
               "locked"
             );
 
             setConnectError(
+              errorData?.error ||
+              errorData?.detail ||
               "This wallet is already linked to another Telegram account."
             );
+
           } else if (
             statusCode ===
             400
           ) {
+
             setErrorType(
               "bad_request"
             );
 
-            const msg =
-              errorData
-                ?.error ||
-              errorData
-                ?.detail ||
-              "Invalid wallet address format.";
+            const message =
+              errorData?.error ||
+              errorData?.detail ||
+              "Invalid wallet request.";
 
             setConnectError(
-              `Bad Request: ${msg}`
+              `Bad Request: ${message}`
             );
+
           } else {
+
             setErrorType(
               "server_error"
             );
 
-            const errorMessage =
-              errorData
-                ?.error ||
-              errorData
-                ?.detail ||
-              e?.message ||
+            const message =
+              errorData?.error ||
+              errorData?.detail ||
+              error?.message ||
               "Server error.";
 
             setConnectError(
-              `Server Error: ${errorMessage}`
+              `Server Error: ${message}`
             );
           }
 
+
+          // ------------------------------------------
+          // FALLBACK WALLET LOAD
+          // ------------------------------------------
 
           if (
             statusCode !==
@@ -707,16 +844,16 @@ export default function Wallet() {
             !isNetworkError
           ) {
             try {
-              const r =
+              const walletResponse =
                 await api.get(
                   `/wallet/${address}/`
                 );
 
               setWallet(
-                r.data
+                walletResponse.data
               );
             } catch {
-              // ignore fallback error
+              // ignore
             }
           }
         }
@@ -733,17 +870,50 @@ export default function Wallet() {
 
 
   // ====================================================
-  // DISCONNECT
+  // WHEN WALLET IS REMOVED
+  // ====================================================
+
+  useEffect(() => {
+    if (!address) {
+      hasConnected.current =
+        false;
+    }
+  }, [address]);
+
+
+  // ====================================================
+  // FULL DISCONNECT
   // ====================================================
 
   const disconnectWallet =
-    () => {
-      localStorage.removeItem(
-        "telegram_id"
-      );
+    async () => {
+      try {
+
+        // ------------------------------------------
+        // REAL TONCONNECT DISCONNECT
+        // ------------------------------------------
+
+        if (
+          tonConnectUI
+            ?.connected
+        ) {
+          await tonConnectUI.disconnect();
+        }
+
+      } catch (error) {
+        console.error(
+          "TonConnect disconnect error:",
+          error
+        );
+      }
+
+
+      // --------------------------------------------
+      // CLEAR APP STORAGE
+      // --------------------------------------------
 
       localStorage.removeItem(
-        "inviter_code"
+        "telegram_id"
       );
 
       localStorage.removeItem(
@@ -756,6 +926,11 @@ export default function Wallet() {
         USER_DATA_KEY
       );
 
+
+      // --------------------------------------------
+      // RESET UI
+      // --------------------------------------------
+
       setWallet(null);
 
       setWalletLocked(
@@ -766,17 +941,164 @@ export default function Wallet() {
 
       setErrorType("none");
 
+      setWithdrawError("");
+
+      setIsWithdrawOpen(
+        false
+      );
+
       hasConnected.current =
         false;
+
 
       window.location.reload();
     };
 
 
+  // ====================================================
+  // REPLACE WALLET
+  //
+  // TELEGRAM USER STAYS THE SAME
+  // OLD TON WALLET SESSION IS DISCONNECTED
+  // CONNECT MODAL OPENS FOR NEW WALLET
+  // ====================================================
+
+  const replaceWallet =
+    async () => {
+
+      if (
+        isReplacingWallet ||
+        isWithdrawing
+      ) {
+        return;
+      }
+
+
+      setIsReplacingWallet(
+        true
+      );
+
+      setConnectError("");
+      setErrorType("none");
+
+
+      try {
+
+        const oldAddress =
+          address;
+
+
+        console.log(
+          "[REPLACE WALLET] Old wallet:",
+          oldAddress
+        );
+
+
+        // ------------------------------------------
+        // 1. DISCONNECT REAL TONCONNECT SESSION
+        // ------------------------------------------
+
+        if (
+          tonConnectUI
+            ?.connected
+        ) {
+          await tonConnectUI.disconnect();
+        }
+
+
+        console.log(
+          "[REPLACE WALLET] TonConnect disconnected"
+        );
+
+
+        // ------------------------------------------
+        // 2. PRESERVE TELEGRAM DATA
+        //
+        // فقط walletAddress محلی حذف می‌شود.
+        // telegramId / username / inviter حفظ می‌شود.
+        // ------------------------------------------
+
+        removeStoredWalletOnly();
+
+
+        // ------------------------------------------
+        // 3. RESET CURRENT WALLET UI
+        // ------------------------------------------
+
+        setWallet(null);
+
+        setWalletLocked(
+          false
+        );
+
+        setWithdrawError("");
+
+        setIsWithdrawOpen(
+          false
+        );
+
+        hasConnected.current =
+          false;
+
+
+        // ------------------------------------------
+        // 4. SMALL DELAY SO TONCONNECT STATE UPDATES
+        // ------------------------------------------
+
+        await new Promise(
+          (resolve) =>
+            setTimeout(
+              resolve,
+              250
+            )
+        );
+
+
+        // ------------------------------------------
+        // 5. OPEN WALLET SELECTOR
+        // ------------------------------------------
+
+        await tonConnectUI.openModal();
+
+
+        console.log(
+          "[REPLACE WALLET] Wallet selection modal opened"
+        );
+
+      } catch (error) {
+
+        console.error(
+          "[REPLACE WALLET] Error:",
+          error
+        );
+
+
+        setErrorType(
+          "server_error"
+        );
+
+
+        setConnectError(
+          error?.message ||
+          "Could not open wallet replacement."
+        );
+
+      } finally {
+
+        setIsReplacingWallet(
+          false
+        );
+      }
+    };
+
+
+  // ====================================================
+  // RETRY
+  // ====================================================
+
   const handleRetry =
     () => {
       setConnectError("");
-
       setErrorType("none");
 
       hasConnected.current =
@@ -795,7 +1117,9 @@ export default function Wallet() {
       label,
       value
     ) => {
-      if (!value) return;
+      if (!value) {
+        return;
+      }
 
       try {
         await navigator
@@ -815,7 +1139,9 @@ export default function Wallet() {
             ),
           1800
         );
+
       } catch {
+
         setCopiedText(
           `Could not copy ${label.toLowerCase()}`
         );
@@ -831,6 +1157,10 @@ export default function Wallet() {
     };
 
 
+  // ====================================================
+  // CONTRACT
+  // ====================================================
+
   const openContractLink =
     () => {
       window.open(
@@ -842,14 +1172,12 @@ export default function Wallet() {
 
 
   // ====================================================
-  // OPEN / CLOSE WITHDRAW
+  // WITHDRAW MODAL
   // ====================================================
 
   const openWithdraw =
     () => {
-      setWithdrawError(
-        ""
-      );
+      setWithdrawError("");
 
       setAmount("");
 
@@ -873,9 +1201,7 @@ export default function Wallet() {
 
   const closeWithdraw =
     () => {
-      if (
-        isWithdrawing
-      ) {
+      if (isWithdrawing) {
         return;
       }
 
@@ -883,6 +1209,78 @@ export default function Wallet() {
         false
       );
     };
+
+
+  // ====================================================
+  // CALCULATIONS
+  // ====================================================
+
+  const withdrawableTon =
+    useMemo(() => {
+
+      const ecg =
+        Number(
+          wallet
+            ?.withdrawable_total ||
+            0
+        );
+
+
+      if (
+        !tonPrice ||
+        !ecg
+      ) {
+        return "0.0000";
+      }
+
+
+      return (
+        ecg /
+        (
+          tonPrice *
+          ECG_PER_USDT
+        )
+      ).toFixed(4);
+
+    }, [
+      wallet,
+      tonPrice,
+    ]);
+
+
+  const totalBalance =
+    useMemo(
+      () =>
+        Number(
+          wallet
+            ?.withdrawable_total ||
+            0
+        ),
+      [wallet]
+    );
+
+
+  const progressPercent =
+    Math.min(
+      (
+        totalBalance /
+        WITHDRAW_TARGET
+      ) * 100,
+      100
+    );
+
+
+  const remainingToUnlock =
+    Math.max(
+      WITHDRAW_TARGET -
+        totalBalance,
+      0
+    );
+
+
+  const canWithdraw =
+    totalBalance >=
+    WITHDRAW_TARGET;
 
 
   // ====================================================
@@ -900,28 +1298,30 @@ export default function Wallet() {
       );
 
 
-  // ====================================================
-  // REMOVE SECRET HEADERS FROM DEBUG
-  // ====================================================
-
   const safeHeaders =
     (headers) => {
+
       if (!headers) {
         return null;
       }
 
+
       try {
+
         const raw =
-          typeof headers.toJSON ===
+          typeof headers
+            .toJSON ===
           "function"
             ? headers.toJSON()
             : {
                 ...headers,
               };
 
+
         const cleaned = {
           ...raw,
         };
+
 
         delete cleaned.Authorization;
         delete cleaned.authorization;
@@ -937,23 +1337,25 @@ export default function Wallet() {
           "x-api-key"
         ];
 
+
         return cleaned;
+
       } catch {
+
         return "[Could not serialize headers]";
       }
     };
 
 
-  // ====================================================
-  // FULL AXIOS ERROR SERIALIZER
-  // ====================================================
-
   const serializeAxiosError =
     (error) => {
+
       let axiosJSON =
         null;
 
+
       try {
+
         axiosJSON =
           typeof error
             ?.toJSON ===
@@ -961,18 +1363,22 @@ export default function Wallet() {
             ? error.toJSON()
             : null;
 
+
         if (
           axiosJSON
             ?.config
             ?.headers
         ) {
-          axiosJSON.config.headers =
+          axiosJSON
+            .config
+            .headers =
             safeHeaders(
               axiosJSON
                 .config
                 .headers
             );
         }
+
       } catch {
         axiosJSON =
           null;
@@ -980,6 +1386,7 @@ export default function Wallet() {
 
 
       return {
+
         message:
           error?.message ||
           null,
@@ -997,57 +1404,69 @@ export default function Wallet() {
           null,
 
         status:
-          error?.response
+          error
+            ?.response
             ?.status ||
           null,
 
         statusText:
-          error?.response
+          error
+            ?.response
             ?.statusText ||
           null,
 
         responseData:
-          error?.response
+          error
+            ?.response
             ?.data ??
           null,
 
         responseHeaders:
           safeHeaders(
-            error?.response
+            error
+              ?.response
               ?.headers
           ),
 
         request: {
+
           url:
-            error?.config
+            error
+              ?.config
               ?.url ||
             null,
 
           method:
-            error?.config
+            error
+              ?.config
               ?.method ||
             null,
 
           baseURL:
-            error?.config
+            error
+              ?.config
               ?.baseURL ||
-            api?.defaults
+            api
+              ?.defaults
               ?.baseURL ||
             null,
 
           timeout:
-            error?.config
+            error
+              ?.config
               ?.timeout ??
             null,
 
           data:
-            error?.config
+            error
+              ?.config
               ?.data ??
             null,
 
           headers:
             safeHeaders(
-              error?.config
+              error
+                ?.config
                 ?.headers
             ),
         },
@@ -1058,16 +1477,15 @@ export default function Wallet() {
 
 
   // ====================================================
-  // SAFE API HEALTH CHECK
-  //
-  // این تابع فقط GET می‌زند.
-  // هیچ برداشت دوباره‌ای انجام نمی‌دهد.
+  // SAFE API HEALTH PROBE
   // ====================================================
 
   const probeWalletEndpoint =
     async (label) => {
+
       const startedAt =
         Date.now();
+
 
       addWithdrawDebugLog(
         `${label} START`,
@@ -1084,7 +1502,8 @@ export default function Wallet() {
             navigator.onLine,
 
           apiBaseURL:
-            api?.defaults
+            api
+              ?.defaults
               ?.baseURL ||
             null,
         }
@@ -1092,6 +1511,7 @@ export default function Wallet() {
 
 
       try {
+
         const response =
           await api.get(
             `/wallet/${address}/`,
@@ -1102,20 +1522,19 @@ export default function Wallet() {
           );
 
 
-        const durationMs =
-          Date.now() -
-          startedAt;
-
-
         const result = {
-          ok: true,
+
+          ok:
+            true,
 
           status:
             response
               ?.status ||
             null,
 
-          durationMs,
+          durationMs:
+            Date.now() -
+            startedAt,
 
           responseHeaders:
             safeHeaders(
@@ -1143,16 +1562,17 @@ export default function Wallet() {
 
 
         return result;
-      } catch (error) {
-        const durationMs =
-          Date.now() -
-          startedAt;
 
+      } catch (error) {
 
         const result = {
-          ok: false,
 
-          durationMs,
+          ok:
+            false,
+
+          durationMs:
+            Date.now() -
+            startedAt,
 
           error:
             serializeAxiosError(
@@ -1183,20 +1603,24 @@ export default function Wallet() {
       postProbeImmediate,
       postProbeDelayed,
     }) => {
+
       const status =
-        error?.response
+        error
+          ?.response
           ?.status ||
         null;
 
 
       const data =
-        error?.response
+        error
+          ?.response
           ?.data ||
         {};
 
 
       const headers =
-        error?.response
+        error
+          ?.response
           ?.headers;
 
 
@@ -1217,9 +1641,6 @@ export default function Wallet() {
         headers?.[
           "retry-after"
         ] ||
-        headers?.[
-          "Retry-After"
-        ] ||
         null;
 
 
@@ -1232,74 +1653,55 @@ export default function Wallet() {
 
 
       let diagnosis =
-        "Unknown failure. Check detailed logs.";
+        "Unknown failure.";
 
       let likelyLayer =
         "unknown";
 
 
-      // ------------------------------------------
-      // CLIENT OFFLINE
-      // ------------------------------------------
-
       if (
         !navigator.onLine
       ) {
+
         diagnosis =
-          "Browser reports OFFLINE. Request may be failing before reaching the API.";
+          "Browser is offline.";
 
         likelyLayer =
           "client/network";
-      }
 
-      // ------------------------------------------
-      // NO HTTP RESPONSE
-      // ------------------------------------------
-
-      else if (
-        !error?.response
+      } else if (
+        !error
+          ?.response
       ) {
+
         diagnosis =
-          "Axios received no HTTP response. Possible DNS, TLS, CORS, client network, proxy, or origin connection failure.";
+          "No HTTP response received. Possible DNS, TLS, CORS, network or proxy failure.";
 
         likelyLayer =
           "network/proxy";
-      }
 
-      // ------------------------------------------
-      // 4XX
-      // ------------------------------------------
-
-      else if (
+      } else if (
         status >= 400 &&
         status < 500
       ) {
+
         diagnosis =
-          "Server returned a normal 4xx response. Check validation, authentication, permission, wallet address, amount, or payload.";
+          "Backend returned a normal 4xx response. Check request validation or permissions.";
 
         likelyLayer =
           "application/request";
-      }
 
-      // ------------------------------------------
-      // 500
-      // ------------------------------------------
-
-      else if (
+      } else if (
         status === 500
       ) {
+
         diagnosis =
-          "Backend itself returned HTTP 500. Origin was reachable. Check backend traceback inside withdrawal handler.";
+          "Backend returned HTTP 500. Check backend traceback.";
 
         likelyLayer =
           "backend application";
-      }
 
-      // ------------------------------------------
-      // GATEWAY / CLOUDFLARE
-      // ------------------------------------------
-
-      else if (
+      } else if (
         [
           502,
           503,
@@ -1313,59 +1715,58 @@ export default function Wallet() {
           status
         )
       ) {
+
         likelyLayer =
           cloudflare
             ? "cloudflare/origin"
             : "reverse-proxy/origin";
 
 
-        // API healthy before + after.
         if (
           preProbe?.ok &&
           postProbeImmediate?.ok &&
           postProbeDelayed?.ok
         ) {
-          diagnosis =
-            "The normal /wallet endpoint was healthy before and after the failed withdrawal. The problem is very likely specific to /withdraw/request/ or an upstream service used only during withdrawal, such as TON RPC, transaction sender, hot-wallet service, blockchain provider, or a dedicated withdrawal worker.";
-        }
 
-        // API healthy before, dead after.
-        else if (
+          diagnosis =
+            "Normal wallet API is healthy before and after failure. Problem is specific to /withdraw/request/ or an upstream TON service used by withdrawal.";
+
+        } else if (
           preProbe?.ok &&
           !postProbeImmediate?.ok &&
           !postProbeDelayed?.ok
         ) {
-          diagnosis =
-            "API was healthy before withdrawal, but the normal /wallet endpoint also became unavailable after withdrawal. The withdrawal request may be crashing the backend worker, restarting the application, exhausting resources, or killing the origin process.";
-        }
 
-        // API temporarily dead then recovers.
-        else if (
+          diagnosis =
+            "API was healthy before withdrawal but unavailable afterwards. Withdrawal may be crashing/restarting the backend worker.";
+
+        } else if (
           preProbe?.ok &&
           !postProbeImmediate?.ok &&
           postProbeDelayed?.ok
         ) {
-          diagnosis =
-            "API was healthy before withdrawal, became unavailable immediately after the withdrawal attempt, then recovered. Strong sign of a worker crash/restart, temporary origin failure, upstream timeout, or withdrawal process killing/restarting the worker.";
-        }
 
-        // Server broken before withdrawal.
-        else if (
+          diagnosis =
+            "Backend became unavailable immediately after withdrawal and recovered. Possible worker crash/restart.";
+
+        } else if (
           preProbe &&
           !preProbe.ok
         ) {
-          diagnosis =
-            "The normal /wallet endpoint was already unhealthy before the withdrawal POST. This indicates a broader backend/origin availability problem, not just the withdrawal payload.";
-        }
 
-        else {
           diagnosis =
-            "Gateway/origin failure detected. Compare PRE-PROBE and POST-PROBE results and inspect origin logs using the Cloudflare Ray ID.";
+            "Backend was already unhealthy before withdrawal.";
+
+        } else {
+
+          diagnosis =
+            "Gateway/origin failure detected.";
         }
       }
 
 
       return {
+
         diagnosis,
 
         likelyLayer,
@@ -1420,6 +1821,7 @@ export default function Wallet() {
 
   const onWithdraw =
     async () => {
+
       setWithdrawError(
         ""
       );
@@ -1433,40 +1835,33 @@ export default function Wallet() {
         Date.now();
 
 
-      // Calculate separately for logging.
+      const ecg =
+        Number(
+          wallet
+            ?.withdrawable_total ||
+            0
+        );
+
+
       const calculatedTon =
-        (() => {
-          const ecg =
-            Number(
-              wallet
-                ?.withdrawable_total ||
-                0
-            );
-
-          if (
-            !tonPrice ||
-            !ecg
-          ) {
-            return null;
-          }
-
-          return (
-            ecg /
+        tonPrice &&
+        ecg
+          ? ecg /
             (
               tonPrice *
               ECG_PER_USDT
             )
-          );
-        })();
+          : null;
 
 
-      // =================================================
-      // CLICK LOG
-      // =================================================
+      // --------------------------------------------
+      // START LOG
+      // --------------------------------------------
 
       addWithdrawDebugLog(
         "WITHDRAW CLICK",
         {
+
           clickedAt:
             new Date(
               withdrawStartedAt
@@ -1490,38 +1885,29 @@ export default function Wallet() {
             null,
 
           withdrawableECG:
-            Number(
-              wallet
-                ?.withdrawable_total ||
-                0
-            ),
+            ecg,
 
           calculatedWithdrawableTON:
             calculatedTon ===
-            null
+              null
               ? null
-              : calculatedTon.toFixed(
-                  8
-                ),
+              : calculatedTon
+                  .toFixed(
+                    8
+                  ),
 
           tonPrice,
 
           ecgPerUsdt:
             ECG_PER_USDT,
-
-          formula:
-            "ECG / (TON_USD_PRICE * ECG_PER_USDT)",
         }
       );
 
 
-      // =================================================
-      // CLIENT ENVIRONMENT
-      // =================================================
-
       addWithdrawDebugLog(
         "CLIENT ENVIRONMENT",
         {
+
           timestamp:
             new Date()
               .toISOString(),
@@ -1536,20 +1922,24 @@ export default function Wallet() {
             navigator.language,
 
           pageOrigin:
-            window.location
+            window
+              .location
               .origin,
 
           pagePath:
-            window.location
+            window
+              .location
               .pathname,
 
           apiBaseURL:
-            api?.defaults
+            api
+              ?.defaults
               ?.baseURL ||
             null,
 
           axiosTimeout:
-            api?.defaults
+            api
+              ?.defaults
               ?.timeout ??
             null,
 
@@ -1560,23 +1950,14 @@ export default function Wallet() {
                 ?.WebApp
             ),
 
-          telegramUserExists:
-            Boolean(
-              window
-                .Telegram
-                ?.WebApp
-                ?.initDataUnsafe
-                ?.user
-            ),
-
           walletLocked,
         }
       );
 
 
-      // =================================================
+      // --------------------------------------------
       // VALIDATION
-      // =================================================
+      // --------------------------------------------
 
       if (
         !Number.isFinite(
@@ -1584,6 +1965,7 @@ export default function Wallet() {
         ) ||
         n <= 0
       ) {
+
         const message =
           "Invalid amount.";
 
@@ -1591,22 +1973,20 @@ export default function Wallet() {
           "VALIDATION ERROR",
           {
             message,
-
-            rawAmount:
-              amount,
-
-            parsedAmount:
-              n,
+            amount,
           }
         );
 
-        return setWithdrawError(
+        setWithdrawError(
           message
         );
+
+        return;
       }
 
 
       if (!address) {
+
         const message =
           "Please connect your wallet first.";
 
@@ -1615,9 +1995,11 @@ export default function Wallet() {
           message
         );
 
-        return setWithdrawError(
+        setWithdrawError(
           message
         );
+
+        return;
       }
 
 
@@ -1626,6 +2008,7 @@ export default function Wallet() {
           "TON" &&
         n < 1
       ) {
+
         const message =
           "Minimum automatic TON withdrawal is 1 TON.";
 
@@ -1633,18 +2016,16 @@ export default function Wallet() {
           "VALIDATION ERROR",
           {
             message,
-
             requested:
               n,
-
-            minimum:
-              1,
           }
         );
 
-        return setWithdrawError(
+        setWithdrawError(
           message
         );
+
+        return;
       }
 
 
@@ -1652,9 +2033,11 @@ export default function Wallet() {
         withdrawAsset ===
         "ECG"
       ) {
+
         if (
           n < 60
         ) {
+
           const message =
             "Minimum withdrawal is 60 ECG.";
 
@@ -1662,24 +2045,21 @@ export default function Wallet() {
             "VALIDATION ERROR",
             {
               message,
-
-              requested:
-                n,
-
-              minimum:
-                60,
             }
           );
 
-          return setWithdrawError(
+          setWithdrawError(
             message
           );
+
+          return;
         }
 
 
         if (
           !destinationWallet.trim()
         ) {
+
           const message =
             "Please enter the destination ECG wallet address.";
 
@@ -1688,36 +2068,29 @@ export default function Wallet() {
             message
           );
 
-          return setWithdrawError(
+          setWithdrawError(
             message
           );
+
+          return;
         }
       }
 
 
-      // This stores API state BEFORE POST.
       let preProbe =
         null;
 
 
       try {
+
         setIsWithdrawing(
           true
         );
 
 
-        // ===============================================
-        // TEST API BEFORE WITHDRAW
-        // ===============================================
-
-        addWithdrawDebugLog(
-          "PRE-WITHDRAW HEALTH CHECK",
-          {
-            reason:
-              "Testing the normal /wallet endpoint immediately before withdrawal so we know whether the origin was healthy before POST.",
-          }
-        );
-
+        // ------------------------------------------
+        // PRE CHECK
+        // ------------------------------------------
 
         preProbe =
           await probeWalletEndpoint(
@@ -1725,17 +2098,18 @@ export default function Wallet() {
           );
 
 
-        // ===============================================
+        // ------------------------------------------
         // PAYLOAD
-        // ===============================================
+        // ------------------------------------------
 
         const payload = {
+
           wallet_address:
             address,
 
           destination_wallet:
             withdrawAsset ===
-            "TON"
+              "TON"
               ? address
               : destinationWallet.trim(),
 
@@ -1766,27 +2140,19 @@ export default function Wallet() {
               "/withdraw/request/",
 
             apiBaseURL:
-              api?.defaults
+              api
+                ?.defaults
                 ?.baseURL ||
               null,
-
-            browserOnline:
-              navigator.onLine,
 
             payload,
           }
         );
 
 
-        console.log(
-          "[WITHDRAW] payload",
-          payload
-        );
-
-
-        // ===============================================
-        // ACTUAL WITHDRAW REQUEST
-        // ===============================================
+        // ------------------------------------------
+        // WITHDRAW REQUEST
+        // ------------------------------------------
 
         const withdrawResponse =
           await api.post(
@@ -1795,19 +2161,13 @@ export default function Wallet() {
           );
 
 
-        const requestDurationMs =
-          Date.now() -
-          requestStartedAt;
-
-
-        // ===============================================
-        // SUCCESS RESPONSE
-        // ===============================================
-
         addWithdrawDebugLog(
           "WITHDRAW RESPONSE",
           {
-            requestDurationMs,
+
+            requestDurationMs:
+              Date.now() -
+              requestStartedAt,
 
             status:
               withdrawResponse
@@ -1830,30 +2190,15 @@ export default function Wallet() {
         );
 
 
-        console.log(
-          "[WITHDRAW] response",
-          withdrawResponse
-        );
-
-
-        // ===============================================
+        // ------------------------------------------
         // REFRESH WALLET
-        // ===============================================
-
-        addWithdrawDebugLog(
-          "REFRESH WALLET START",
-          {
-            endpoint:
-              `/wallet/${address}/`,
-          }
-        );
-
+        // ------------------------------------------
 
         const refreshStartedAt =
           Date.now();
 
 
-        const r =
+        const walletResponse =
           await api.get(
             `/wallet/${address}/`
           );
@@ -1862,41 +2207,33 @@ export default function Wallet() {
         addWithdrawDebugLog(
           "WALLET REFRESH RESPONSE",
           {
+
             durationMs:
               Date.now() -
               refreshStartedAt,
 
             status:
-              r?.status,
-
-            headers:
-              safeHeaders(
-                r?.headers
-              ),
+              walletResponse
+                ?.status,
 
             data:
-              r?.data,
+              walletResponse
+                ?.data,
           }
         );
 
 
         setWallet(
-          r.data
+          walletResponse.data
         );
 
-
-        // ===============================================
-        // SUCCESS DIAGNOSIS
-        // ===============================================
 
         addWithdrawDebugLog(
           "AUTO DIAGNOSIS",
           {
-            result:
-              "Withdrawal endpoint returned a successful HTTP response.",
 
-            likelyLayer:
-              "none",
+            result:
+              "Withdrawal endpoint returned successful HTTP response.",
 
             totalDurationMs:
               Date.now() -
@@ -1905,23 +2242,22 @@ export default function Wallet() {
         );
 
 
-        setIsWithdrawOpen(
-          false
-        );
-
         setAmount("");
 
         setDestinationWallet(
           ""
         );
+
+
+        setIsWithdrawOpen(
+          false
+        );
+
       } catch (error) {
-        // ===============================================
-        // EXACT TIME OF FAILURE
-        // ===============================================
 
-        const requestFailureAt =
-          Date.now();
-
+        // ------------------------------------------
+        // ERROR
+        // ------------------------------------------
 
         const serializedError =
           serializeAxiosError(
@@ -1932,13 +2268,13 @@ export default function Wallet() {
         addWithdrawDebugLog(
           "WITHDRAW ERROR",
           {
+
             failedAt:
-              new Date(
-                requestFailureAt
-              ).toISOString(),
+              new Date()
+                .toISOString(),
 
             totalDurationSinceClickMs:
-              requestFailureAt -
+              Date.now() -
               withdrawStartedAt,
 
             ...serializedError,
@@ -1946,24 +2282,16 @@ export default function Wallet() {
         );
 
 
-        console.error(
-          "[WITHDRAW] ERROR",
-          error
-        );
-
-
-        // ===============================================
-        // CLOUDFLARE INFORMATION
-        // ===============================================
-
         const responseData =
-          error?.response
+          error
+            ?.response
             ?.data ||
           {};
 
 
         const cfHeaders =
-          error?.response
+          error
+            ?.response
             ?.headers;
 
 
@@ -1972,14 +2300,13 @@ export default function Wallet() {
             ?.cloudflare_error ||
           cfHeaders?.[
             "cf-ray"
-          ] ||
-          cfHeaders?.[
-            "CF-Ray"
           ]
         ) {
+
           addWithdrawDebugLog(
             "CLOUDFLARE DETAILS",
             {
+
               status:
                 error
                   ?.response
@@ -2007,24 +2334,11 @@ export default function Wallet() {
                 cfHeaders?.[
                   "cf-ray"
                 ] ||
-                cfHeaders?.[
-                  "CF-Ray"
-                ] ||
-                null,
-
-              instance:
-                responseData
-                  ?.instance ||
                 null,
 
               timestamp:
                 responseData
                   ?.timestamp ||
-                null,
-
-              retryable:
-                responseData
-                  ?.retryable ??
                 null,
 
               retryAfter:
@@ -2034,44 +2348,23 @@ export default function Wallet() {
                   "retry-after"
                 ] ||
                 null,
-
-              ownerActionRequired:
-                responseData
-                  ?.owner_action_required ??
-                null,
-
-              whatYouShouldDo:
-                responseData
-                  ?.what_you_should_do ||
-                null,
             }
           );
         }
 
 
-        // ===============================================
-        // IMPORTANT:
-        // WE DO NOT RETRY THE WITHDRAWAL POST.
-        //
-        // ممکنه تراکنش در سرور انجام شده باشد
-        // ولی پاسخ HTTP به Cloudflare نرسیده باشد.
-        // ===============================================
+        // ------------------------------------------
+        // NEVER RETRY POST AUTOMATICALLY
+        // ------------------------------------------
 
         addWithdrawDebugLog(
           "POST-FAILURE HEALTH CHECK",
           {
-            reason:
-              "Withdrawal failed. Testing normal /wallet endpoint to see whether only withdrawal failed or the whole backend/origin became unavailable.",
-
             important:
-              "Withdrawal POST will NOT be retried automatically.",
+              "Withdrawal POST is NOT automatically retried.",
           }
         );
 
-
-        // ===============================================
-        // FIRST PROBE AFTER FAILURE
-        // ===============================================
 
         const postProbeImmediate =
           await probeWalletEndpoint(
@@ -2079,40 +2372,16 @@ export default function Wallet() {
           );
 
 
-        // ===============================================
-        // WAIT 2 SECONDS
-        // ===============================================
-
-        addWithdrawDebugLog(
-          "SHORT RECOVERY WAIT",
-          {
-            delayMs:
-              2000,
-
-            note:
-              "No withdrawal retry. Only waiting before another safe GET health probe.",
-          }
-        );
-
-
         await sleep(
           2000
         );
 
-
-        // ===============================================
-        // SECOND PROBE
-        // ===============================================
 
         const postProbeDelayed =
           await probeWalletEndpoint(
             "POST-PROBE #2 /wallet"
           );
 
-
-        // ===============================================
-        // AUTOMATIC DIAGNOSIS
-        // ===============================================
 
         const diagnosis =
           diagnoseWithdrawFailure({
@@ -2129,21 +2398,15 @@ export default function Wallet() {
         addWithdrawDebugLog(
           "AUTO DIAGNOSIS",
           {
+
             ...diagnosis,
 
             totalDurationMs:
               Date.now() -
               withdrawStartedAt,
-
-            important:
-              "The client does NOT automatically retry withdrawal POST, preventing accidental duplicate withdrawals.",
           }
         );
 
-
-        // ===============================================
-        // USER-FACING ERROR
-        // ===============================================
 
         const backendMessage =
           error
@@ -2166,7 +2429,9 @@ export default function Wallet() {
         setWithdrawError(
           backendMessage
         );
+
       } finally {
+
         setIsWithdrawing(
           false
         );
@@ -2175,6 +2440,7 @@ export default function Wallet() {
         addWithdrawDebugLog(
           "WITHDRAW FINISHED",
           {
+
             finishedAt:
               new Date()
                 .toISOString(),
@@ -2192,110 +2458,48 @@ export default function Wallet() {
 
 
   // ====================================================
-  // CALCULATIONS
-  // ====================================================
-
-  const withdrawableTon =
-    useMemo(() => {
-      const ecg =
-        Number(
-          wallet
-            ?.withdrawable_total ||
-            0
-        );
-
-      if (
-        !tonPrice ||
-        !ecg
-      ) {
-        return "0.0000";
-      }
-
-      return (
-        ecg /
-        (
-          tonPrice *
-          ECG_PER_USDT
-        )
-      ).toFixed(4);
-    }, [
-      wallet,
-      tonPrice,
-    ]);
-
-
-  const totalBalance =
-    useMemo(
-      () =>
-        Number(
-          wallet
-            ?.withdrawable_total ||
-            0
-        ),
-      [wallet]
-    );
-
-
-  const progressPercent =
-    Math.min(
-      (
-        totalBalance /
-        WITHDRAW_TARGET
-      ) * 100,
-      100
-    );
-
-
-  const remainingToUnlock =
-    Math.max(
-      WITHDRAW_TARGET -
-        totalBalance,
-      0
-    );
-
-
-  const canWithdraw =
-    totalBalance >=
-    WITHDRAW_TARGET;
-
-
-  // ====================================================
-  // DEBUG COPY TEXT
+  // DEBUG COPY
   // ====================================================
 
   const withdrawDebugText =
-    useMemo(() => {
-      return withdrawDebugLogs
-        .map(
-          (log) =>
-            `[${log.time}] ${log.label}${
-              log.isoTime
-                ? `\nISO: ${log.isoTime}`
-                : ""
-            }${
-              log.details
-                ? `\n${log.details}`
-                : ""
-            }`
-        )
-        .join(
-          "\n\n"
-        );
-    }, [
-      withdrawDebugLogs,
-    ]);
+    useMemo(
+      () =>
+        withdrawDebugLogs
+          .map(
+            (log) =>
+              `[${log.time}] ${log.label}${
+                log.isoTime
+                  ? `\nISO: ${log.isoTime}`
+                  : ""
+              }${
+                log.details
+                  ? `\n${log.details}`
+                  : ""
+              }`
+          )
+          .join(
+            "\n\n"
+          ),
+      [
+        withdrawDebugLogs,
+      ]
+    );
 
 
   // ====================================================
-  // UI
+  // RENDER
   // ====================================================
 
   return (
+
     <div className="wallet-page-container">
 
       <div className="wallet-box wallet-box--redesigned">
 
+
+        {/* ================================================= */}
         {/* HEADER */}
+        {/* ================================================= */}
 
         <div className="wallet-header-block">
 
@@ -2310,17 +2514,18 @@ export default function Wallet() {
         </div>
 
 
-        {!address ? (
+        {/* ================================================= */}
+        {/* NOT CONNECTED */}
+        {/* ================================================= */}
 
-          // =================================================
-          // NOT CONNECTED
-          // =================================================
+        {!address ? (
 
           <div className="wallet-connect-state">
 
             <div className="connect-button-wrapper">
               <TonConnectButton />
             </div>
+
 
             <p className="wallet-connect-hint">
               Connect your TON wallet to see your balance,
@@ -2331,13 +2536,11 @@ export default function Wallet() {
 
         ) : (
 
-          // =================================================
-          // CONNECTED
-          // =================================================
-
           <>
 
+            {/* ============================================= */}
             {/* CONNECTED WALLET */}
+            {/* ============================================= */}
 
             <div className="wallet-connected-panel">
 
@@ -2348,11 +2551,9 @@ export default function Wallet() {
                 </div>
 
                 <div>
-
                   <h3 className="panel-title">
                     Connected Wallet
                   </h3>
-
                 </div>
 
               </div>
@@ -2386,7 +2587,6 @@ export default function Wallet() {
                       address
                     )
                   }
-                  aria-label="Copy wallet address"
                 >
                   ⧉
                 </button>
@@ -2396,7 +2596,9 @@ export default function Wallet() {
             </div>
 
 
+            {/* ============================================= */}
             {/* CONTRACT */}
+            {/* ============================================= */}
 
             <div className="contract-card">
 
@@ -2406,11 +2608,13 @@ export default function Wallet() {
                   📄
                 </div>
 
+
                 <div>
 
                   <div className="contract-title">
                     ECG Token Contract
                   </div>
+
 
                   <div className="contract-address">
                     {shortenMiddle(
@@ -2419,6 +2623,7 @@ export default function Wallet() {
                       8
                     )}
                   </div>
+
 
                   <div className="contract-note">
                     ✓ Official ECG Token Contract
@@ -2460,7 +2665,9 @@ export default function Wallet() {
             </div>
 
 
-            {/* COPY TOAST */}
+            {/* ============================================= */}
+            {/* TOAST */}
+            {/* ============================================= */}
 
             {copiedText && (
 
@@ -2471,7 +2678,9 @@ export default function Wallet() {
             )}
 
 
+            {/* ============================================= */}
             {/* CONNECTION ERROR */}
+            {/* ============================================= */}
 
             {connectError && (
 
@@ -2502,50 +2711,52 @@ export default function Wallet() {
                 </div>
 
 
-                {(errorType ===
-                  "locked" ||
-                  errorType ===
-                    "network_error") && (
+                <div className="wallet-error-actions">
 
-                  <div className="wallet-error-actions">
+                  {errorType ===
+                    "locked" && (
 
-                    {errorType ===
-                      "locked" && (
+                    <button
+                      className="wallet-inline-btn danger"
+                      onClick={
+                        replaceWallet
+                      }
+                      disabled={
+                        isReplacingWallet
+                      }
+                    >
+                      {isReplacingWallet
+                        ? "Opening Wallets..."
+                        : "Choose Another Wallet"}
+                    </button>
 
-                      <button
-                        className="wallet-inline-btn danger"
-                        onClick={
-                          disconnectWallet
-                        }
-                      >
-                        Disconnect & Try Again
-                      </button>
-
-                    )}
+                  )}
 
 
-                    {errorType ===
-                      "network_error" && (
+                  {errorType ===
+                    "network_error" && (
 
-                      <button
-                        className="wallet-inline-btn"
-                        onClick={
-                          handleRetry
-                        }
-                      >
-                        Retry Connection
-                      </button>
+                    <button
+                      className="wallet-inline-btn"
+                      onClick={
+                        handleRetry
+                      }
+                    >
+                      Retry Connection
+                    </button>
 
-                    )}
+                  )}
 
-                  </div>
-
-                )}
+                </div>
 
               </div>
 
             )}
 
+
+            {/* ============================================= */}
+            {/* LOADING */}
+            {/* ============================================= */}
 
             {!wallet ? (
 
@@ -2557,7 +2768,9 @@ export default function Wallet() {
 
               <>
 
+                {/* ========================================= */}
                 {/* BALANCE */}
+                {/* ========================================= */}
 
                 <div className="wallet-balance-card">
 
@@ -2569,10 +2782,13 @@ export default function Wallet() {
                   <div className="wallet-balance-row">
 
                     <div className="balance-number">
+
                       {Number(
                         totalBalance
                       ).toFixed(0)}
+
                     </div>
+
 
                     <div className="balance-token-pill">
                       ECG
@@ -2592,7 +2808,9 @@ export default function Wallet() {
                 </div>
 
 
+                {/* ========================================= */}
                 {/* WITHDRAW GOAL */}
+                {/* ========================================= */}
 
                 <div className="withdraw-goal-card">
 
@@ -2603,6 +2821,7 @@ export default function Wallet() {
                       <div className="goal-title">
                         Withdrawal Goal
                       </div>
+
 
                       <div className="goal-subtitle">
                         Reach 60 ECG to unlock withdrawal
@@ -2639,28 +2858,20 @@ export default function Wallet() {
                   <div className="goal-bottom-row">
 
                     <span>
-
                       {Number(
                         totalBalance
                       ).toFixed(0)}
-
                       {" / "}
-
                       {WITHDRAW_TARGET}
-
                       {" ECG"}
-
                     </span>
 
 
                     <span>
-
                       {Number(
                         remainingToUnlock
                       ).toFixed(0)}
-
                       {" ECG to go"}
-
                     </span>
 
                   </div>
@@ -2668,7 +2879,9 @@ export default function Wallet() {
                 </div>
 
 
+                {/* ========================================= */}
                 {/* WITHDRAW */}
+                {/* ========================================= */}
 
                 <button
                   className={`wallet-main-action ${
@@ -2680,7 +2893,8 @@ export default function Wallet() {
                     openWithdraw
                   }
                   disabled={
-                    !canWithdraw
+                    !canWithdraw ||
+                    isReplacingWallet
                   }
                 >
 
@@ -2704,19 +2918,49 @@ export default function Wallet() {
                 </button>
 
 
+                {/* ========================================= */}
+                {/* REPLACE WALLET */}
+                {/* ========================================= */}
+
+                <button
+                  className="wallet-disconnect-btn"
+                  onClick={
+                    replaceWallet
+                  }
+                  disabled={
+                    isReplacingWallet ||
+                    isWithdrawing
+                  }
+                >
+
+                  {isReplacingWallet
+                    ? "Opening Wallet Selector..."
+                    : "🔄 Replace Wallet"}
+
+                </button>
+
+
+                {/* ========================================= */}
                 {/* DISCONNECT */}
+                {/* ========================================= */}
 
                 <button
                   className="wallet-disconnect-btn"
                   onClick={
                     disconnectWallet
                   }
+                  disabled={
+                    isReplacingWallet ||
+                    isWithdrawing
+                  }
                 >
                   Disconnect Wallet
                 </button>
 
 
+                {/* ========================================= */}
                 {/* STATS */}
+                {/* ========================================= */}
 
                 <div className="wallet-stats-grid">
 
@@ -2748,13 +2992,10 @@ export default function Wallet() {
                     </div>
 
                     <div className="stat-value">
-
                       {Number(
                         totalBalance
                       ).toFixed(0)}
-
                       {" ECG"}
-
                     </div>
 
                   </div>
@@ -2771,11 +3012,8 @@ export default function Wallet() {
                     </div>
 
                     <div className="stat-value">
-
                       {WITHDRAW_TARGET}
-
                       {" ECG"}
-
                     </div>
 
                   </div>
@@ -2826,18 +3064,21 @@ export default function Wallet() {
 
           <div
             className="modal"
-            onClick={(e) =>
-              e.stopPropagation()
+            onClick={(event) =>
+              event.stopPropagation()
             }
           >
 
-            {/* HEADER */}
+            {/* =========================================== */}
+            {/* MODAL HEADER */}
+            {/* =========================================== */}
 
             <div className="modal-header">
 
               <h3>
                 Withdraw
               </h3>
+
 
               <button
                 className="modal-close"
@@ -2854,7 +3095,9 @@ export default function Wallet() {
             </div>
 
 
-            {/* BODY */}
+            {/* =========================================== */}
+            {/* MODAL BODY */}
+            {/* =========================================== */}
 
             <div className="modal-body">
 
@@ -2863,7 +3106,9 @@ export default function Wallet() {
               </label>
 
 
-              {/* ASSET PICKER */}
+              {/* ========================================= */}
+              {/* ASSET */}
+              {/* ========================================= */}
 
               <div className="asset-picker">
 
@@ -2876,6 +3121,7 @@ export default function Wallet() {
                       : ""
                   }
                   onClick={() => {
+
                     setWithdrawAsset(
                       "ECG"
                     );
@@ -2907,6 +3153,7 @@ export default function Wallet() {
                       : ""
                   }
                   onClick={() => {
+
                     setWithdrawAsset(
                       "TON"
                     );
@@ -2931,7 +3178,9 @@ export default function Wallet() {
               </div>
 
 
+              {/* ========================================= */}
               {/* DESTINATION */}
+              {/* ========================================= */}
 
               {withdrawAsset ===
               "ECG" ? (
@@ -2949,9 +3198,10 @@ export default function Wallet() {
                     value={
                       destinationWallet
                     }
-                    onChange={(e) =>
+                    onChange={(event) =>
                       setDestinationWallet(
-                        e.target
+                        event
+                          .target
                           .value
                       )
                     }
@@ -2969,7 +3219,6 @@ export default function Wallet() {
                 <div className="ton-info">
 
                   <div>
-
                     Automatic destination:{" "}
 
                     <b>
@@ -2979,7 +3228,6 @@ export default function Wallet() {
                         8
                       )}
                     </b>
-
                   </div>
 
 
@@ -2992,7 +3240,9 @@ export default function Wallet() {
               )}
 
 
-              {/* AMOUNT LABEL */}
+              {/* ========================================= */}
+              {/* AMOUNT */}
+              {/* ========================================= */}
 
               <label htmlFor="withdraw-amount">
 
@@ -3004,8 +3254,6 @@ export default function Wallet() {
               </label>
 
 
-              {/* AMOUNT */}
-
               <div className="amount-wrapper">
 
                 <input
@@ -3015,9 +3263,11 @@ export default function Wallet() {
                   value={
                     amount
                   }
-                  onChange={(e) =>
+                  onChange={(event) =>
                     setAmount(
-                      e.target.value
+                      event
+                        .target
+                        .value
                     )
                   }
                   placeholder={
@@ -3037,8 +3287,6 @@ export default function Wallet() {
                   }
                 />
 
-
-                {/* TON MAX */}
 
                 {withdrawAsset ===
                   "TON" && (
@@ -3060,8 +3308,6 @@ export default function Wallet() {
 
                 )}
 
-
-                {/* ECG MAX */}
 
                 {withdrawAsset ===
                   "ECG" && (
@@ -3090,7 +3336,9 @@ export default function Wallet() {
               </div>
 
 
-              {/* ECG INFO */}
+              {/* ========================================= */}
+              {/* INFO */}
+              {/* ========================================= */}
 
               {withdrawAsset ===
                 "ECG" && (
@@ -3100,7 +3348,6 @@ export default function Wallet() {
                   Available:{" "}
 
                   <b>
-
                     {Number(
                       wallet
                         ?.withdrawable_total ||
@@ -3108,7 +3355,6 @@ export default function Wallet() {
                     ).toFixed(4)}
 
                     {" ECG"}
-
                   </b>
 
                 </div>
@@ -3116,31 +3362,25 @@ export default function Wallet() {
               )}
 
 
-              {/* TON INFO */}
-
               {withdrawAsset ===
                 "TON" && (
 
                 <div className="ton-info">
 
                   <div>
-
                     Withdrawable TON:{" "}
 
                     <b>
                       {withdrawableTon}
                       {" TON"}
                     </b>
-
                   </div>
 
 
                   <div>
-
                     Based on:{" "}
 
                     <b>
-
                       {Number(
                         wallet
                           ?.withdrawable_total ||
@@ -3148,20 +3388,16 @@ export default function Wallet() {
                       ).toFixed(2)}
 
                       {" ECG"}
-
                     </b>
-
                   </div>
 
 
                   <div>
-
                     Minimum withdrawal:{" "}
 
                     <b>
                       1 TON
                     </b>
-
                   </div>
 
                 </div>
@@ -3169,7 +3405,9 @@ export default function Wallet() {
               )}
 
 
-              {/* WITHDRAW ERROR */}
+              {/* ========================================= */}
+              {/* ERROR */}
+              {/* ========================================= */}
 
               {withdrawError && (
 
@@ -3180,9 +3418,9 @@ export default function Wallet() {
               )}
 
 
-              {/* ================================================= */}
-              {/* DEEP DEBUG LOG */}
-              {/* ================================================= */}
+              {/* ========================================= */}
+              {/* DEBUG */}
+              {/* ========================================= */}
 
               <div
                 style={{
@@ -3202,8 +3440,6 @@ export default function Wallet() {
                     "hidden",
                 }}
               >
-
-                {/* DEBUG HEADER */}
 
                 <div
                   style={{
@@ -3247,8 +3483,6 @@ export default function Wallet() {
                     }}
                   >
 
-                    {/* COPY */}
-
                     <button
                       type="button"
                       className="small-outline-btn"
@@ -3265,8 +3499,6 @@ export default function Wallet() {
                       Copy
                     </button>
 
-
-                    {/* CLEAR */}
 
                     <button
                       type="button"
@@ -3288,8 +3520,6 @@ export default function Wallet() {
 
                 </div>
 
-
-                {/* DEBUG BODY */}
 
                 <div
                   style={{
@@ -3331,8 +3561,8 @@ export default function Wallet() {
                       }}
                     >
                       Press withdrawal. Deep request,
-                      Cloudflare, API health and automatic
-                      diagnosis logs will appear here.
+                      Cloudflare and API diagnosis logs
+                      will appear here.
                     </div>
 
                   ) : (
@@ -3413,7 +3643,9 @@ export default function Wallet() {
             </div>
 
 
-            {/* FOOTER */}
+            {/* =========================================== */}
+            {/* MODAL FOOTER */}
+            {/* =========================================== */}
 
             <div className="modal-footer">
 
