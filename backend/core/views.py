@@ -24,10 +24,12 @@ from .models import (
 from .serializers import WalletSerializer, PurchaseSerializer, UserSerializer
 from django.conf import settings
 from django.db import transaction
+from django.db.utils import OperationalError
 import os
 import requests
 import re
 import base64
+import hashlib
 
 # =======================
 # تنظیمات لاگینگ
@@ -368,108 +370,147 @@ def connect_wallet(request):
     if not wallet_address:
         return Response(
             {"error": "wallet_address required"},
-            status=status.HTTP_400_BAD_REQUEST
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
     if not telegram_id:
         return Response(
             {"error": "telegram_id required"},
-            status=status.HTTP_400_BAD_REQUEST
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
-    try:
-        user = get_or_create_user(
-            wallet_address=wallet_address,
-            telegram_id=int(telegram_id),
-            is_telegram=bool(is_telegram)
-        )
+    # SQLite allows only one writer at a time. A duplicate frontend mount or a
+    # concurrent write may briefly hold the file lock, so retry only this
+    # transient OperationalError. Referral registration itself is idempotent.
+    max_attempts = 5
 
-        update_fields = []
+    for attempt in range(max_attempts):
+        try:
+            user = get_or_create_user(
+                wallet_address=wallet_address,
+                telegram_id=int(telegram_id),
+                is_telegram=bool(is_telegram),
+            )
 
-        # یوزرنیم واقعی را ذخیره کن؛ ID را به‌عنوان username ذخیره نکن.
-        if telegram_username:
-            clean_username = str(telegram_username).strip().lstrip("@")
+            update_fields = []
 
-            if clean_username and not clean_username.startswith("browser_"):
-                user.telegram_username = clean_username
-                update_fields.append("telegram_username")
+            if telegram_username:
+                clean_username = str(telegram_username).strip().lstrip("@")
+                if (
+                    clean_username
+                    and not clean_username.startswith("browser_")
+                    and user.telegram_username != clean_username
+                ):
+                    user.telegram_username = clean_username
+                    update_fields.append("telegram_username")
 
-        if telegram_photo_url:
-            user.telegram_photo_url = str(telegram_photo_url).strip()
-            update_fields.append("telegram_photo_url")
+            if telegram_photo_url:
+                clean_photo = str(telegram_photo_url).strip()
+                if user.telegram_photo_url != clean_photo:
+                    user.telegram_photo_url = clean_photo
+                    update_fields.append("telegram_photo_url")
 
-        if update_fields:
-            user.save(update_fields=list(set(update_fields)))
+            if update_fields:
+                user.save(update_fields=list(dict.fromkeys(update_fields)))
 
-        if inviter_code and not user.inviter_id:
-            apply_referral(inviter_code, user)
+            if inviter_code and not user.inviter_id:
+                apply_referral(inviter_code, user)
 
-    except (TypeError, ValueError) as exc:
-        logger.exception("connect_wallet validation error")
+            return Response(
+                {
+                    "user": {
+                        "telegram_id": user.telegram_id,
+                        "telegram_username": user.telegram_username,
+                        "telegram_photo_url": user.telegram_photo_url,
+                        "wallet_address": user.wallet_address,
+                        "referral_code": user.referral_code,
+                        "wallet_locked": user.wallet_locked,
+                    }
+                },
+                status=status.HTTP_200_OK,
+            )
 
-        return Response(
-            {"error": str(exc)},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+        except OperationalError as exc:
+            is_locked = "database is locked" in str(exc).lower()
+            if not is_locked:
+                logger.exception("connect_wallet database error")
+                return Response(
+                    {"error": "Database error"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
 
-    except Exception:
-        logger.exception("connect_wallet unexpected error")
+            if attempt >= max_attempts - 1:
+                logger.exception(
+                    "connect_wallet SQLite remained locked after %s attempts",
+                    max_attempts,
+                )
+                return Response(
+                    {
+                        "error": "Database is busy. Please retry.",
+                        "code": "database_busy",
+                    },
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
 
-        return Response(
-            {"error": "Unable to connect wallet"},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+            delay = 0.15 * (2 ** attempt)
+            logger.warning(
+                "SQLite locked during /connect/; retry %s/%s in %.2fs",
+                attempt + 1,
+                max_attempts,
+                delay,
+            )
+            time.sleep(delay)
 
-    return Response(
-        {
-            "user": {
-                "telegram_id": user.telegram_id,
-                "telegram_username": user.telegram_username,
-                "telegram_photo_url": user.telegram_photo_url,
-                "wallet_address": user.wallet_address,
-                "referral_code": user.referral_code,
-                "wallet_locked": user.wallet_locked,
-            }
-        },
-        status=status.HTTP_200_OK
-    )
+        except (TypeError, ValueError) as exc:
+            logger.exception("connect_wallet validation error")
+            return Response(
+                {"error": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        except Exception:
+            logger.exception("connect_wallet unexpected error")
+            return Response(
+                {"error": "Unable to connect wallet"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
 @api_view(["GET"])
 def wallet_view(request, wallet_address):
-    logger.info("=" * 60)
-    logger.info(f"🔍 WALLET_VIEW called for: {wallet_address}")
-    
-    telegram_id = request.query_params.get("telegram_id")
-    is_telegram = request.query_params.get("is_telegram", "false").lower() == "true"
-    
-    logger.info(f"📊 telegram_id: {telegram_id}, is_telegram: {is_telegram}")
-    
-    try:
-        if telegram_id:
-            user = get_or_create_user(wallet_address, int(telegram_id), is_telegram)
-        else:
-            user = get_or_create_user(wallet_address, telegram_id=None, is_telegram=False)
-            
-        logger.info(f"✅ Wallet data returned for: {user.wallet_address}")
-        return Response(WalletSerializer(user.wallet).data, status=status.HTTP_200_OK)
-    except Exception as e:
-        logger.error(f"❌ Error in wallet_view: {e}")
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    """Read-only wallet endpoint. Registration belongs to /connect/."""
+    user = (
+        AppUser.objects
+        .select_related("wallet")
+        .filter(wallet_address=wallet_address)
+        .first()
+    )
+
+    if not user:
+        return Response(
+            {"error": "User not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    return Response(
+        WalletSerializer(user.wallet).data,
+        status=status.HTTP_200_OK,
+    )
 
 
 @api_view(["POST"])
 def create_purchase(request):
     """
-    Confirm TON/GRAM payment and create the real invoice automatically.
+    Create the purchase immediately after TON Connect reports sendTransaction
+    success. This path intentionally does NOT wait for TON Center / on-chain
+    indexing. The signed wallet BOC is hashed locally and used as the
+    idempotency key so frontend retries cannot create duplicate invoices.
 
-    The frontend never supplies a manual TX hash. It sends BOC/message_hash.
-    register_purchase() runs only after the transaction is verified on-chain.
-
-    Temporary TON provider/indexer failures return HTTP 202 with status=pending,
-    so the frontend keeps the invoice visible as CONFIRMING and retries.
+    IMPORTANT: blockchain_verified=False means this is wallet-accepted, not a
+    final on-chain confirmation. Use a later reconciliation job if finality is
+    required.
     """
     logger.info("=" * 60)
-    logger.info("💰 CREATE_PURCHASE / ON-CHAIN CONFIRMATION")
+    logger.info("💰 CREATE_PURCHASE / WALLET-IMMEDIATE")
     logger.info("📥 Data keys: %s", list(request.data.keys()))
 
     wallet_address = str(
@@ -488,10 +529,6 @@ def create_purchase(request):
         request.data.get("network", "-239")
     ).strip()
 
-    supplied_message_hash = str(
-        request.data.get("message_hash", "")
-    ).strip()
-
     expected_gram_amount_raw = str(
         request.data.get("expected_gram_amount", "")
     ).strip()
@@ -502,9 +539,9 @@ def create_purchase(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    if not boc and not supplied_message_hash:
+    if not boc:
         return Response(
-            {"error": "boc required for first confirmation attempt"},
+            {"error": "wallet BOC required"},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -520,23 +557,18 @@ def create_purchase(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    expected_gram_amount = None
-
-    if expected_gram_amount_raw:
-        try:
-            expected_gram_amount = int(
-                expected_gram_amount_raw
-            )
-            if expected_gram_amount <= 0:
-                raise ValueError()
-        except (TypeError, ValueError):
-            return Response(
-                {
-                    "error":
-                        "expected_gram_amount must be a positive integer in nanoTON"
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+    try:
+        gram_nano = int(expected_gram_amount_raw)
+        if gram_nano <= 0:
+            raise ValueError()
+    except (TypeError, ValueError):
+        return Response(
+            {
+                "error":
+                    "expected_gram_amount must be a positive integer in nanoTON"
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     gram_address = str(
         getattr(
@@ -552,103 +584,48 @@ def create_purchase(request):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
-    message_hash = supplied_message_hash
+    # Local receipt key. 64 hex chars keeps compatibility with a typical
+    # tx-hash CharField while avoiding any network/indexer dependency.
+    wallet_receipt_hash = hashlib.sha256(
+        boc.encode("utf-8")
+    ).hexdigest()
+
+    ton_amount = (
+        Decimal(gram_nano)
+        / Decimal("1000000000")
+    )
+
+    telegram_id = (
+        request.query_params.get("telegram_id")
+        or request.headers.get("X-Telegram-Id")
+    )
+
+    is_telegram = (
+        request.query_params.get("is_telegram", "false").lower() == "true"
+        or request.headers.get("X-Telegram") == "true"
+    )
 
     try:
-        if not message_hash:
-            message_hash = _get_external_message_hash(
-                boc=boc,
-                network=network,
-            )
-
-        logger.info(
-            "🔎 External message hash: %s",
-            message_hash,
-        )
-
-        if (
-            not supplied_message_hash
-            and not TONCENTER_API_KEY
-        ):
-            time.sleep(1.1)
-
-        verified = _find_verified_gram_payment(
-            message_hash=message_hash,
-            wallet_address=wallet_address,
-            gram_address=gram_address,
-            network=network,
-        )
-
-        if not verified:
-            return Response(
-                {
-                    "status": "pending",
-                    "message":
-                        "Payment was sent and is waiting for on-chain confirmation.",
-                    "message_hash": message_hash,
-                    "gram_address": gram_address,
-                },
-                status=status.HTTP_202_ACCEPTED,
-            )
-
-        tx_hash = str(
-            verified["tx_hash"]
-        ).strip()
-
-        gram_nano = int(
-            verified["gram_nano"]
-        )
-
-        if (
-            expected_gram_amount is not None
-            and gram_nano != expected_gram_amount
-        ):
-            logger.error(
-                "❌ Amount mismatch expected=%s actual=%s tx=%s",
-                expected_gram_amount,
-                gram_nano,
-                tx_hash,
-            )
-
-            return Response(
-                {
-                    "error":
-                        "Verified blockchain amount does not match requested payment amount.",
-                    "expected_gram_amount":
-                        str(expected_gram_amount),
-                    "verified_gram_amount":
-                        str(gram_nano),
-                    "ton_tx_hash":
-                        tx_hash,
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        ton_amount = (
-            Decimal(gram_nano)
-            / Decimal("1000000000")
-        )
-
-        telegram_id = (
-            request.query_params.get("telegram_id")
-            or request.headers.get("X-Telegram-Id")
-        )
-
-        is_telegram = (
-            request.query_params.get("is_telegram", "false").lower() == "true"
-            or request.headers.get("X-Telegram") == "true"
-        )
-
         user = get_or_create_user(
             wallet_address,
             int(telegram_id) if telegram_id else None,
             is_telegram if telegram_id else False,
         )
 
-        # idempotency: one blockchain TX => one invoice
+        logger.info(
+            "[WALLET_IMMEDIATE] user=%s user_id=%s inviter_id=%s amount=%s receipt=%s",
+            user.wallet_address,
+            user.id,
+            user.inviter_id,
+            ton_amount,
+            wallet_receipt_hash,
+        )
+
+        # Idempotency: the exact same signed wallet BOC can create only one
+        # Purchase, even if React retries because the HTTP response was lost.
         existing = (
             Purchase.objects
-            .filter(ton_tx_hash=tx_hash)
+            .filter(ton_tx_hash=wallet_receipt_hash)
             .first()
         )
 
@@ -657,7 +634,7 @@ def create_purchase(request):
                 return Response(
                     {
                         "error":
-                            "This blockchain transaction is already registered to another user."
+                            "This wallet receipt is already registered to another user."
                     },
                     status=status.HTTP_409_CONFLICT,
                 )
@@ -667,13 +644,18 @@ def create_purchase(request):
             )
             serialized["created_at"] = existing.created_at
             serialized["lock_period_days"] = 365
+            serialized["payment_status"] = "WALLET_CONFIRMED"
+            serialized["blockchain_verified"] = False
 
             return Response(
                 {
                     "status": "confirmed",
+                    "confirmation_source": "wallet",
+                    "blockchain_verified": False,
                     "already_registered": True,
-                    "ton_tx_hash": tx_hash,
-                    "message_hash": message_hash,
+                    "ton_tx_hash": wallet_receipt_hash,
+                    "wallet_receipt_hash": wallet_receipt_hash,
+                    "message_hash": wallet_receipt_hash,
                     "gram_address": gram_address,
                     "gram_amount": str(gram_nano),
                     "ton_amount": str(ton_amount),
@@ -686,45 +668,48 @@ def create_purchase(request):
             purchase = register_purchase(
                 user,
                 ton_amount,
-                tx_hash,
+                wallet_receipt_hash,
                 output_asset=output_asset,
             )
         except ValueError as exc:
             if "TX already registered" not in str(exc):
                 raise
 
-            existing = (
+            purchase = (
                 Purchase.objects
-                .filter(ton_tx_hash=tx_hash)
+                .filter(ton_tx_hash=wallet_receipt_hash)
                 .first()
             )
 
-            if (
-                not existing
-                or existing.user_id != user.id
-            ):
+            if not purchase or purchase.user_id != user.id:
                 raise
-
-            purchase = existing
 
         serialized = dict(
             PurchaseSerializer(purchase).data
         )
         serialized["created_at"] = purchase.created_at
         serialized["lock_period_days"] = 365
+        serialized["payment_status"] = "WALLET_CONFIRMED"
+        serialized["blockchain_verified"] = False
 
         logger.info(
-            "✅ REAL INVOICE CREATED AUTOMATICALLY: %s",
+            "✅ WALLET-CONFIRMED INVOICE CREATED: invoice=%s user=%s inviter_id=%s receipt=%s",
             purchase.invoice_no,
+            user.id,
+            user.inviter_id,
+            wallet_receipt_hash,
         )
         logger.info("=" * 60)
 
         return Response(
             {
                 "status": "confirmed",
+                "confirmation_source": "wallet",
+                "blockchain_verified": False,
                 "already_registered": False,
-                "ton_tx_hash": tx_hash,
-                "message_hash": message_hash,
+                "ton_tx_hash": wallet_receipt_hash,
+                "wallet_receipt_hash": wallet_receipt_hash,
+                "message_hash": wallet_receipt_hash,
                 "gram_address": gram_address,
                 "gram_amount": str(gram_nano),
                 "ton_amount": str(ton_amount),
@@ -733,40 +718,18 @@ def create_purchase(request):
             status=status.HTTP_201_CREATED,
         )
 
-    except ValueError as exc:
-        logger.exception("TON payment validation error")
+    except OperationalError as exc:
+        logger.exception("SQLite/database error during immediate purchase")
         return Response(
             {"error": str(exc)},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    except (requests.RequestException, RuntimeError) as exc:
-        # Wallet payment was already sent. Provider/indexer issue is temporary.
-        logger.exception("TON provider/indexer temporary error")
-        return Response(
-            {
-                "status": "pending",
-                "message":
-                    "Payment was sent. Blockchain provider/indexing is temporarily unavailable; retry confirmation.",
-                "message_hash": message_hash,
-                "gram_address": gram_address,
-                "provider_error": str(exc),
-            },
-            status=status.HTTP_202_ACCEPTED,
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
 
     except Exception as exc:
-        logger.exception("Unexpected TON confirmation error")
+        logger.exception("Immediate wallet purchase error")
         return Response(
-            {
-                "status": "pending",
-                "message":
-                    "Payment was sent. Confirmation will be retried.",
-                "message_hash": message_hash,
-                "gram_address": gram_address,
-                "provider_error": str(exc),
-            },
-            status=status.HTTP_202_ACCEPTED,
+            {"error": str(exc)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
 
@@ -776,19 +739,12 @@ def list_purchases(request):
     if not wallet_address:
         return Response({"error": "wallet param required"}, status=400)
 
-    telegram_id = request.query_params.get("telegram_id")
-    is_telegram = request.query_params.get("is_telegram", "false").lower() == "true"
-    
-    if telegram_id:
-        user = get_or_create_user(wallet_address, int(telegram_id), is_telegram)
-    else:
-        user = get_or_create_user(wallet_address, telegram_id=None, is_telegram=False)
-    
-    qs = user.purchases.order_by("-created_at")
+    user = AppUser.objects.filter(wallet_address=wallet_address).first()
+    if not user:
+        return Response([], status=status.HTTP_200_OK)
 
-    serialized = list(
-        PurchaseSerializer(qs, many=True).data
-    )
+    qs = user.purchases.order_by("-created_at")
+    serialized = list(PurchaseSerializer(qs, many=True).data)
 
     for item, purchase in zip(serialized, qs):
         item["created_at"] = purchase.created_at
@@ -951,17 +907,19 @@ def withdraw_history(request):
 def referral_count(request):
     wallet_address = request.query_params.get("wallet_address")
     if not wallet_address:
-        return Response({"error": "wallet_address required"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {"error": "wallet_address required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
-    telegram_id = request.query_params.get("telegram_id")
-    is_telegram = request.query_params.get("is_telegram", "false").lower() == "true"
-    
-    if telegram_id:
-        user = get_or_create_user(wallet_address, int(telegram_id), is_telegram)
-    else:
-        user = get_or_create_user(wallet_address, telegram_id=None, is_telegram=False)
-    
-    return Response({"count": user.invitees.count()}, status=status.HTTP_200_OK)
+    user = AppUser.objects.filter(wallet_address=wallet_address).first()
+    if not user:
+        return Response({"count": 0}, status=status.HTTP_200_OK)
+
+    return Response(
+        {"count": user.invitees.count()},
+        status=status.HTTP_200_OK,
+    )
 
 
 # =======================
@@ -974,44 +932,37 @@ COOLDOWN = timedelta(hours=24)
 
 @api_view(["GET"])
 def reward_status(request):
-    logger.info("=" * 60)
-    logger.info("⏰ REWARD_STATUS CALLED")
-    
     wallet_address = request.query_params.get("wallet_address")
     if not wallet_address:
-        logger.error("❌ wallet_address required")
-        return Response({"error": "wallet_address required"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {"error": "wallet_address required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
-    telegram_id = request.query_params.get("telegram_id")
-    is_telegram = request.query_params.get("is_telegram", "false").lower() == "true"
-    
-    logger.info(f"📊 wallet: {wallet_address}, telegram_id: {telegram_id}")
-    
-    if telegram_id:
-        user = get_or_create_user(wallet_address, int(telegram_id), is_telegram)
-    else:
-        user = get_or_create_user(wallet_address, telegram_id=None, is_telegram=False)
-    
-    w = user.wallet
+    user = (
+        AppUser.objects
+        .select_related("wallet")
+        .filter(wallet_address=wallet_address)
+        .first()
+    )
+    if not user:
+        return Response(
+            {"error": "User not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
     now = timezone.now()
-
     next_at = user.next_daily_claim_at
+    seconds_remaining = (
+        0
+        if not next_at
+        else max(0, int((next_at - now).total_seconds()))
+    )
 
-    if not next_at:
-        seconds_remaining = 0
-    else:
-        seconds_remaining = max(0, int((next_at - now).total_seconds()))
-
-    logger.info(f"✅ Reward status returned: {seconds_remaining}s remaining")
-    logger.info("=" * 60)
-    
     return Response({
         "status": "ok",
         "seconds_remaining": seconds_remaining,
-        "balance_ecg": str(w.withdrawable_total()),
-        "total_rewards": str(w.withdrawable_total()),
-        "referral_points": str(w.referral_bonus),
-        "rewards_count": user.ledgers.filter(typ="DAILY_UNLOCK").count(),
+        "next_claim_at": next_at,
     }, status=status.HTTP_200_OK)
 
 
@@ -1149,7 +1100,21 @@ def get_referral_levels(request):
             status=status.HTTP_404_NOT_FOUND
         )
 
-    level_obj, _ = ReferralLevel.objects.get_or_create(user=user)
+    level_obj = ReferralLevel.objects.filter(user=user).first()
+
+    if not level_obj:
+        empty_levels = {
+            f"level_{level_number}": {"count": 0, "users": []}
+            for level_number in range(1, 6)
+        }
+        return Response(
+            {
+                "levels": empty_levels,
+                "total_referrals": 0,
+                "is_test": False,
+            },
+            status=status.HTTP_200_OK,
+        )
 
     def serialize_level_users(stored_users):
         stored_users = stored_users or []
@@ -1369,7 +1334,10 @@ def list_purchases_usdt(request):
     if not wallet_address:
         return Response({"error": "wallet param required"}, status=400)
 
-    user = get_or_create_user(wallet_address, None, False)
+    user = AppUser.objects.filter(wallet_address=wallet_address).first()
+    if not user:
+        return Response([], status=status.HTTP_200_OK)
+
     qs = user.purchases_usdt.all().order_by("-created_at")
 
     return Response([{
@@ -1437,7 +1405,10 @@ def list_purchases_bnb(request):
     if not wallet_address:
         return Response({"error": "wallet param required"}, status=400)
 
-    user = get_or_create_user(wallet_address, None, False)
+    user = AppUser.objects.filter(wallet_address=wallet_address).first()
+    if not user:
+        return Response([], status=status.HTTP_200_OK)
+
     qs = user.purchases_bnb.all().order_by("-created_at")
 
     return Response([{
@@ -1530,6 +1501,27 @@ def create_ton_transaction(request):
                 "error":
                     "GRAM_MERCHANT_ADDRESS is not configured",
                 "gram_address": "",
+            },
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    # TON Connect requires messages[].address to be a valid TEP-2
+    # user-friendly address (48-char base64/base64url representation).
+    # Validate it on the backend so a malformed env value never reaches
+    # tonConnectUI.sendTransaction().
+    try:
+        _ton_address_to_raw(gram_address)
+    except ValueError as exc:
+        logger.error(
+            "❌ Invalid GRAM_MERCHANT_ADDRESS=%r: %s",
+            gram_address,
+            exc,
+        )
+        return Response(
+            {
+                "error": "Invalid GRAM_MERCHANT_ADDRESS configuration",
+                "detail": str(exc),
+                "gram_address": gram_address,
             },
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )

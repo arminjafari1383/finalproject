@@ -421,7 +421,7 @@ export default function Purchase() {
       addDebug(
         resumed
           ? "🔄 RESUMING SAVED PAYMENT CONFIRMATION"
-          : "🔎 START AUTOMATIC BLOCKCHAIN CONFIRMATION"
+          : "💾 START IMMEDIATE BACKEND REGISTRATION"
       );
 
       // حدود 30 دقیقه روی همین صفحه تلاش می‌کند.
@@ -537,7 +537,7 @@ export default function Purchase() {
             }
 
             addDebug(
-              "✅ REAL BLOCKCHAIN TX HASH",
+              "✅ WALLET RECEIPT HASH",
               txHash
             );
 
@@ -557,11 +557,11 @@ export default function Purchase() {
             await loadInvoices();
 
             addDebug(
-              "✅ PAYMENT CONFIRMED + INVOICE LOADED"
+              "✅ WALLET CONFIRMED + INVOICE SAVED + LOADED"
             );
 
             showSuccess(
-              `✅ Payment confirmed. Invoice created! TX: ${txHash.slice(0, 12)}...`
+              `✅ Wallet confirmed. Invoice saved immediately! Receipt: ${txHash.slice(0, 12)}...`
             );
 
             return data;
@@ -1001,21 +1001,27 @@ export default function Purchase() {
         "✅ Payment sent successfully. Invoice is visible below as CONFIRMING."
       );
 
-      // کاربر منتظر صفحه قفل‌شده نمی‌ماند؛ تایید در پس‌زمینه ادامه دارد.
-      setLoading(false);
+      // Wallet already accepted the transaction. Register the real invoice
+      // in Django immediately; backend no longer waits for chain indexing.
+      addDebug(
+        "💾 Saving wallet-confirmed payment to backend immediately"
+      );
 
-      confirmPendingPayment(
-        pendingPayment
-      ).catch((error) => {
-        addDebug(
-          "❌ Background confirmation error",
-          getErrorDetails(error)
+      const savedPurchase =
+        await confirmPendingPayment(
+          pendingPayment
         );
 
-        showSuccess(
-          "⏳ Payment was sent. Invoice remains CONFIRMING and will resume automatically."
+      if (!savedPurchase) {
+        throw new Error(
+          "Wallet accepted payment but backend did not save the invoice"
         );
-      });
+      }
+
+      addDebug(
+        "✅ WALLET-CONFIRMED PAYMENT SAVED IN DATABASE",
+        savedPurchase
+      );
     } catch (error) {
       console.error(
         "Payment error:",

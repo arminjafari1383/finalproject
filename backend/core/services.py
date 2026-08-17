@@ -46,40 +46,55 @@ COINGECKO_URL = (
 # ============================================================
 
 def ensure_user_has_wallet(user: AppUser) -> Wallet:
-    """
-    اطمینان از اینکه کاربر Wallet دارد.
-    اگر Wallet وجود نداشته باشد ساخته می‌شود.
-    """
+    """Return the user wallet, creating it only when it is genuinely missing."""
 
-    try:
-        return user.wallet
+    wallet, created = Wallet.objects.get_or_create(user=user)
 
-    except Wallet.DoesNotExist:
-
-        logger.warning(
-            "⚠️ Wallet not found for user %s, creating...",
-            user.wallet_address,
-        )
-
-        wallet = Wallet.objects.create(user=user)
-
+    if created:
         logger.info(
             "✅ Wallet created for user %s",
             user.wallet_address,
         )
 
-        return wallet
+    return wallet
 
 
 # ============================================================
 # Get/Create user
 # ============================================================
 
+USER_ACTIVITY_WRITE_INTERVAL = timezone.timedelta(minutes=5)
+
+
+def _activity_fields(user: AppUser):
+    """
+    Avoid turning every GET request into a SQLite WRITE.
+    last_active is persisted at most once every five minutes.
+    """
+    now = timezone.now()
+    fields = []
+
+    if not user.is_active:
+        user.is_active = True
+        fields.append("is_active")
+
+    if (
+        user.last_active is None
+        or now - user.last_active >= USER_ACTIVITY_WRITE_INTERVAL
+    ):
+        user.last_active = now
+        fields.append("last_active")
+
+    return fields
+
+
 def get_or_create_user(
     wallet_address: str,
     telegram_id: int = None,
     is_telegram: bool = False,
 ) -> AppUser:
+
+    wallet_address = str(wallet_address or "").strip()
 
     logger.info(
         "🔍 get_or_create_user: wallet=%s telegram_id=%s is_telegram=%s",
@@ -88,50 +103,35 @@ def get_or_create_user(
         is_telegram,
     )
 
-    # --------------------------------------------------------
-    # No Telegram ID
-    # --------------------------------------------------------
+    if not wallet_address:
+        raise ValueError("wallet_address required")
 
+    # --------------------------------------------------------
+    # No Telegram ID: prefer a read and only write when data
+    # actually needs to change.
+    # --------------------------------------------------------
     if not telegram_id:
-
-        logger.warning(
-            "⚠️ No telegram_id, trying to find by wallet_address"
+        user = (
+            AppUser.objects
+            .filter(wallet_address=wallet_address)
+            .first()
         )
 
-        user = AppUser.objects.filter(
-            wallet_address=wallet_address
-        ).first()
-
         if user:
-
-            logger.info(
-                "✅ User found by wallet_address: %s",
-                user.wallet_address,
-            )
-
-            user.is_active = True
-            user.last_active = timezone.now()
+            update_fields = _activity_fields(user)
 
             if (
                 not user.telegram_username
                 or user.telegram_username.startswith("browser_")
             ):
-                user.telegram_username = (
-                    f"user_{wallet_address[:8]}"
-                )
+                user.telegram_username = f"user_{wallet_address[:8]}"
+                update_fields.append("telegram_username")
 
-                logger.info(
-                    "✅ Fixed username for wallet user: %s",
-                    user.telegram_username,
-                )
-
-            user.save()
+            if update_fields:
+                user.save(update_fields=list(dict.fromkeys(update_fields)))
 
             ensure_user_has_wallet(user)
-
             return user
-
-        # Create new wallet-only user
 
         user = AppUser.objects.create(
             wallet_address=wallet_address,
@@ -143,20 +143,12 @@ def get_or_create_user(
             is_admin=False,
             telegram_username=f"user_{wallet_address[:8]}",
         )
-
-        Wallet.objects.create(user=user)
-
-        logger.info(
-            "✅ New user created with wallet only: %s",
-            wallet_address,
-        )
-
+        ensure_user_has_wallet(user)
         return user
 
     # --------------------------------------------------------
-    # Search by Telegram ID
+    # Existing Telegram identity
     # --------------------------------------------------------
-
     existing_user_by_telegram = (
         AppUser.objects
         .filter(telegram_id=telegram_id)
@@ -164,73 +156,40 @@ def get_or_create_user(
     )
 
     if existing_user_by_telegram:
-
-        logger.info(
-            "✅ User found by telegram_id: %s",
-            existing_user_by_telegram.wallet_address,
-        )
-
-        existing_user_by_telegram.is_active = True
-        existing_user_by_telegram.last_active = timezone.now()
+        user = existing_user_by_telegram
+        update_fields = _activity_fields(user)
 
         if (
-            not existing_user_by_telegram.telegram_username
-            or existing_user_by_telegram.telegram_username.startswith(
-                "browser_"
-            )
+            not user.telegram_username
+            or user.telegram_username.startswith("browser_")
         ):
-
-            if is_telegram:
-                existing_user_by_telegram.telegram_username = str(
-                    telegram_id
-                )
-            else:
-                existing_user_by_telegram.telegram_username = (
-                    f"user_{wallet_address[:8]}"
-                )
-
-            existing_user_by_telegram.save(
-                update_fields=["telegram_username"]
+            user.telegram_username = (
+                str(telegram_id)
+                if is_telegram
+                else f"user_{wallet_address[:8]}"
             )
+            update_fields.append("telegram_username")
 
-        if existing_user_by_telegram.wallet_locked:
-
-            if (
-                existing_user_by_telegram.wallet_address
-                != wallet_address
-            ):
+        if user.wallet_locked:
+            if user.wallet_address != wallet_address:
                 raise ValueError(
                     "This Telegram ID is already linked to wallet: "
-                    f"{existing_user_by_telegram.wallet_address[:6]}"
-                    "..."
-                    f"{existing_user_by_telegram.wallet_address[-4:]}"
+                    f"{user.wallet_address[:6]}...{user.wallet_address[-4:]}"
                 )
+        elif user.wallet_address != wallet_address:
+            user.wallet_address = wallet_address
+            user.wallet_locked = True
+            update_fields.extend(["wallet_address", "wallet_locked"])
 
-        else:
+        if update_fields:
+            user.save(update_fields=list(dict.fromkeys(update_fields)))
 
-            if (
-                existing_user_by_telegram.wallet_address
-                != wallet_address
-            ):
-
-                existing_user_by_telegram.wallet_address = (
-                    wallet_address
-                )
-
-                existing_user_by_telegram.wallet_locked = True
-
-        existing_user_by_telegram.save()
-
-        ensure_user_has_wallet(
-            existing_user_by_telegram
-        )
-
-        return existing_user_by_telegram
+        ensure_user_has_wallet(user)
+        return user
 
     # --------------------------------------------------------
-    # Search by Wallet
+    # Existing wallet, new Telegram identity
     # --------------------------------------------------------
-
     existing_user_by_wallet = (
         AppUser.objects
         .filter(wallet_address=wallet_address)
@@ -238,83 +197,55 @@ def get_or_create_user(
     )
 
     if existing_user_by_wallet:
-
-        logger.info(
-            "⚠️ Wallet address already registered with telegram_id: %s",
-            existing_user_by_wallet.telegram_id,
-        )
-
-        existing_user_by_wallet.is_active = True
-        existing_user_by_wallet.last_active = timezone.now()
+        user = existing_user_by_wallet
+        update_fields = _activity_fields(user)
 
         if (
-            not existing_user_by_wallet.telegram_username
-            or existing_user_by_wallet.telegram_username.startswith(
-                "browser_"
-            )
+            not user.telegram_username
+            or user.telegram_username.startswith("browser_")
         ):
-
-            if is_telegram:
-                existing_user_by_wallet.telegram_username = str(
-                    telegram_id
-                )
-
-            else:
-                existing_user_by_wallet.telegram_username = (
-                    f"user_{wallet_address[:8]}"
-                )
-
-            existing_user_by_wallet.save(
-                update_fields=["telegram_username"]
+            user.telegram_username = (
+                str(telegram_id)
+                if is_telegram
+                else f"user_{wallet_address[:8]}"
             )
+            update_fields.append("telegram_username")
 
-        if existing_user_by_wallet.wallet_locked:
-
-            if not existing_user_by_wallet.telegram_id:
-
-                existing_user_by_wallet.telegram_id = (
-                    telegram_id
+        if user.wallet_locked:
+            if not user.telegram_id:
+                user.telegram_id = telegram_id
+                user.is_telegram_user = True
+                user.telegram_verified = True
+                update_fields.extend([
+                    "telegram_id",
+                    "is_telegram_user",
+                    "telegram_verified",
+                ])
+            elif user.telegram_id != telegram_id:
+                raise ValueError(
+                    "This wallet is already linked to another Telegram account (Locked)"
                 )
+        else:
+            user.telegram_id = telegram_id
+            user.is_telegram_user = True
+            user.telegram_verified = True
+            user.wallet_locked = True
+            update_fields.extend([
+                "telegram_id",
+                "is_telegram_user",
+                "telegram_verified",
+                "wallet_locked",
+            ])
 
-                existing_user_by_wallet.is_telegram_user = True
-                existing_user_by_wallet.telegram_verified = True
-                existing_user_by_wallet.wallet_locked = True
+        if update_fields:
+            user.save(update_fields=list(dict.fromkeys(update_fields)))
 
-                existing_user_by_wallet.save()
-
-                ensure_user_has_wallet(
-                    existing_user_by_wallet
-                )
-
-                return existing_user_by_wallet
-
-            raise ValueError(
-                "This wallet is already linked to another "
-                "Telegram account (Locked)"
-            )
-
-        existing_user_by_wallet.telegram_id = telegram_id
-        existing_user_by_wallet.is_telegram_user = True
-        existing_user_by_wallet.telegram_verified = True
-        existing_user_by_wallet.wallet_locked = True
-
-        existing_user_by_wallet.save()
-
-        logger.info(
-            "✅ Wallet paired with Telegram ID: %s",
-            existing_user_by_wallet.wallet_address,
-        )
-
-        ensure_user_has_wallet(
-            existing_user_by_wallet
-        )
-
-        return existing_user_by_wallet
+        ensure_user_has_wallet(user)
+        return user
 
     # --------------------------------------------------------
     # Completely new user
     # --------------------------------------------------------
-
     user = AppUser.objects.create(
         wallet_address=wallet_address,
         telegram_id=telegram_id,
@@ -330,13 +261,7 @@ def get_or_create_user(
         ),
     )
 
-    Wallet.objects.create(user=user)
-
-    logger.info(
-        "✅ New user created with locked wallet: %s",
-        wallet_address,
-    )
-
+    ensure_user_has_wallet(user)
     return user
 
 
@@ -344,19 +269,16 @@ def get_or_create_user(
 # Referral
 # ============================================================
 
-@transaction.atomic
 def apply_referral(
     inviter_code: str,
     user: AppUser,
 ):
     """
-    اعمال referral به صورت Atomic.
+    Attach an inviter once and update the referral tree atomically.
 
-    جلوگیری از:
-    - ثبت چندباره inviter
-    - درخواست همزمان
-    - self referral
-    - پرداخت چندباره bonus
+    Important for SQLite: resolve the inviter before opening the write
+    transaction, then make the first transactional query an UPDATE.
+    This avoids the common DEFERRED read->write lock-upgrade race.
     """
 
     logger.info(
@@ -365,32 +287,6 @@ def apply_referral(
         user.wallet_address,
     )
 
-    # --------------------------------------------------------
-    # Lock invitee
-    # --------------------------------------------------------
-
-    locked_user = (
-        AppUser.objects
-        .select_for_update()
-        .get(pk=user.pk)
-    )
-
-    # دوباره بعد از lock بررسی می‌کنیم
-    if locked_user.inviter_id:
-
-        logger.info(
-            "[REF] skipped: inviter already set "
-            "user=%s inviter=%s",
-            locked_user.id,
-            locked_user.inviter_id,
-        )
-
-        return
-
-    # --------------------------------------------------------
-    # Find inviter
-    # --------------------------------------------------------
-
     inviter = (
         AppUser.objects
         .filter(referral_code=inviter_code)
@@ -398,60 +294,39 @@ def apply_referral(
     )
 
     if not inviter:
-
-        logger.warning(
-            "[REF] invalid inviter_code=%s",
-            inviter_code,
-        )
-
+        logger.warning("[REF] invalid inviter_code=%s", inviter_code)
         return
 
-    # --------------------------------------------------------
-    # Prevent self referral
-    # --------------------------------------------------------
-
-    if inviter.id == locked_user.id:
-
-        logger.warning(
-            "[REF] self referral blocked user_id=%s",
-            locked_user.id,
-        )
-
+    if inviter.id == user.id:
+        logger.warning("[REF] self referral blocked user_id=%s", user.id)
         return
 
-    # --------------------------------------------------------
-    # Save inviter
-    # --------------------------------------------------------
+    with transaction.atomic():
+        # Idempotent claim. If another /connect/ already attached an inviter,
+        # this UPDATE affects zero rows and we do not duplicate level/bonus work.
+        attached = (
+            AppUser.objects
+            .filter(pk=user.pk, inviter__isnull=True)
+            .update(inviter=inviter)
+        )
 
-    locked_user.inviter = inviter
+        if not attached:
+            logger.info(
+                "[REF] skipped: inviter already set user=%s",
+                user.id,
+            )
+            return
 
-    locked_user.save(
-        update_fields=["inviter"]
-    )
+        user.inviter = inviter
 
-    logger.info(
-        "[REF] success user=%s inviter=%s",
-        locked_user.id,
-        inviter.id,
-    )
+        update_referral_levels(user, inviter)
+        give_referral_bonus(inviter, user)
 
-    # --------------------------------------------------------
-    # Update levels
-    # --------------------------------------------------------
-
-    update_referral_levels(
-        locked_user,
-        inviter,
-    )
-
-    # --------------------------------------------------------
-    # Give direct referral bonus
-    # --------------------------------------------------------
-
-    give_referral_bonus(
-        inviter,
-        locked_user,
-    )
+        logger.info(
+            "[REF] success user=%s inviter=%s",
+            user.id,
+            inviter.id,
+        )
 
 
 # ============================================================
@@ -571,13 +446,6 @@ def update_referral_levels(
         level_obj, _ = (
             ReferralLevel.objects
             .get_or_create(user=current)
-        )
-
-        # Lock row
-        level_obj = (
-            ReferralLevel.objects
-            .select_for_update()
-            .get(pk=level_obj.pk)
         )
 
         # ----------------------------------------------------
