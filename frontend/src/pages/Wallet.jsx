@@ -11,145 +11,276 @@ const USER_DATA_KEY = "my_app_user_data";
 const INVITER_CODE_KEY = "inviter_code";
 const WITHDRAW_TARGET = 60;
 const ECG_PER_USDT = 312;
+
 const ECG_CONTRACT_ADDRESS = "0x1A2b7F3c9D8e4B2A";
-const ECG_CONTRACT_LINK = `https://bscscan.com/address/${ECG_CONTRACT_ADDRESS}`;
+
+const ECG_CONTRACT_LINK =
+  `https://bscscan.com/address/${ECG_CONTRACT_ADDRESS}`;
+
+
+// ======================================================
+// LOCAL STORAGE
+// ======================================================
 
 const loadUserDataFromStorage = () => {
   try {
-    const data = localStorage.getItem(USER_DATA_KEY);
-    return data ? JSON.parse(data) : null;
+    const data =
+      localStorage.getItem(USER_DATA_KEY);
+
+    return data
+      ? JSON.parse(data)
+      : null;
   } catch (e) {
-    console.error("Error parsing localStorage data:", e);
+    console.error(
+      "Error parsing localStorage data:",
+      e
+    );
+
     return null;
   }
 };
 
+
 const saveUserDataToStorage = (newData) => {
   try {
-    const currentData = loadUserDataFromStorage() || {};
-    const mergedData = { ...currentData, ...newData };
+    const currentData =
+      loadUserDataFromStorage() || {};
+
+    const mergedData = {
+      ...currentData,
+      ...newData,
+    };
 
     localStorage.setItem(
       USER_DATA_KEY,
       JSON.stringify(mergedData)
     );
   } catch (e) {
-    console.error("Error saving to localStorage:", e);
+    console.error(
+      "Error saving to localStorage:",
+      e
+    );
   }
 };
 
-const shortenMiddle = (value, start = 6, end = 6) => {
+
+const shortenMiddle = (
+  value,
+  start = 6,
+  end = 6
+) => {
   if (!value) return "-";
 
-  if (value.length <= start + end + 3) {
+  if (
+    value.length <=
+    start + end + 3
+  ) {
     return value;
   }
 
-  return `${value.slice(0, start)}...${value.slice(-end)}`;
+  return `${value.slice(
+    0,
+    start
+  )}...${value.slice(-end)}`;
 };
 
+
+// ======================================================
+// COMPONENT
+// ======================================================
+
 export default function Wallet() {
-  const tonWallet = useTonWallet();
+  const tonWallet =
+    useTonWallet();
 
-  const address = useMemo(
-    () => tonWallet?.account?.address,
-    [tonWallet]
-  );
+  const address =
+    useMemo(
+      () =>
+        tonWallet
+          ?.account
+          ?.address,
+      [tonWallet]
+    );
 
-  const hasConnected = useRef(false);
+  const hasConnected =
+    useRef(false);
 
-  const [wallet, setWallet] = useState(null);
-  const [walletLocked, setWalletLocked] = useState(false);
 
-  const [connectError, setConnectError] = useState("");
-  const [errorType, setErrorType] = useState("none");
+  // ====================================================
+  // STATES
+  // ====================================================
 
-  const [copiedText, setCopiedText] = useState("");
+  const [
+    wallet,
+    setWallet,
+  ] = useState(null);
 
-  const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
+  const [
+    walletLocked,
+    setWalletLocked,
+  ] = useState(false);
 
-  const [amount, setAmount] = useState("");
+  const [
+    connectError,
+    setConnectError,
+  ] = useState("");
 
-  const [tonPrice, setTonPrice] = useState(null);
+  const [
+    errorType,
+    setErrorType,
+  ] = useState("none");
 
-  const [withdrawAsset, setWithdrawAsset] = useState("ECG");
+  const [
+    copiedText,
+    setCopiedText,
+  ] = useState("");
 
-  const [destinationWallet, setDestinationWallet] =
-    useState("");
 
-  const [withdrawError, setWithdrawError] = useState("");
+  // ====================================================
+  // WITHDRAW STATES
+  // ====================================================
 
-  const [isWithdrawing, setIsWithdrawing] =
-    useState(false);
+  const [
+    isWithdrawOpen,
+    setIsWithdrawOpen,
+  ] = useState(false);
 
-  // ============================================
-  // WITHDRAW DEBUG LOG
-  // ============================================
+  const [
+    amount,
+    setAmount,
+  ] = useState("");
+
+  const [
+    tonPrice,
+    setTonPrice,
+  ] = useState(null);
+
+  const [
+    withdrawAsset,
+    setWithdrawAsset,
+  ] = useState("ECG");
+
+  const [
+    destinationWallet,
+    setDestinationWallet,
+  ] = useState("");
+
+  const [
+    withdrawError,
+    setWithdrawError,
+  ] = useState("");
+
+  const [
+    isWithdrawing,
+    setIsWithdrawing,
+  ] = useState(false);
+
+
+  // ====================================================
+  // DEBUG STATE
+  // ====================================================
 
   const [
     withdrawDebugLogs,
     setWithdrawDebugLogs,
   ] = useState([]);
 
-  const addWithdrawDebugLog = useCallback(
-    (label, data = null) => {
-      const time = new Date().toLocaleTimeString();
 
-      let details = "";
+  // ====================================================
+  // DEBUG LOGGER
+  // ====================================================
 
-      if (data !== null && data !== undefined) {
-        try {
-          details =
-            typeof data === "string"
-              ? data
-              : JSON.stringify(data, null, 2);
-        } catch {
-          details = String(data);
+  const addWithdrawDebugLog =
+    useCallback(
+      (
+        label,
+        data = null
+      ) => {
+        const now =
+          new Date();
+
+        let details = "";
+
+        if (
+          data !== null &&
+          data !== undefined
+        ) {
+          try {
+            details =
+              typeof data ===
+              "string"
+                ? data
+                : JSON.stringify(
+                    data,
+                    null,
+                    2
+                  );
+          } catch {
+            details =
+              String(data);
+          }
         }
-      }
 
-      setWithdrawDebugLogs((prev) => [
-        ...prev.slice(-29),
-        {
-          time,
-          label,
-          details,
-        },
-      ]);
-    },
-    []
-  );
+        setWithdrawDebugLogs(
+          (prev) => [
+            ...prev.slice(-79),
+            {
+              time:
+                now.toLocaleTimeString(),
 
-  // ============================================
-  // GET TON PRICE
-  // ============================================
+              isoTime:
+                now.toISOString(),
+
+              label,
+
+              details,
+            },
+          ]
+        );
+      },
+      []
+    );
+
+
+  // ====================================================
+  // TON PRICE
+  // ====================================================
 
   useEffect(() => {
     async function getTonPrice() {
       try {
-        const res = await fetch(
-          "https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd"
-        );
+        const res =
+          await fetch(
+            "https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd"
+          );
 
-        const data = await res.json();
+        const data =
+          await res.json();
 
         setTonPrice(
-          data?.["the-open-network"]?.usd || null
+          data?.[
+            "the-open-network"
+          ]?.usd || null
         );
       } catch (err) {
-        console.log("TON price error", err);
+        console.log(
+          "TON price error",
+          err
+        );
       }
     }
 
     getTonPrice();
   }, []);
 
-  // ============================================
+
+  // ====================================================
   // REFERRAL
-  // ============================================
+  // ====================================================
 
   useEffect(() => {
-    const inviterCode = captureInviterCode();
+    const inviterCode =
+      captureInviterCode();
 
     if (inviterCode) {
       localStorage.setItem(
@@ -158,18 +289,29 @@ export default function Wallet() {
       );
     }
 
-    const tg = window.Telegram?.WebApp;
+    const tg =
+      window.Telegram?.WebApp;
 
-    if (tg?.initDataUnsafe?.start_param) {
+    if (
+      tg
+        ?.initDataUnsafe
+        ?.start_param
+    ) {
       const startParamValue =
-        tg.initDataUnsafe.start_param;
+        tg.initDataUnsafe
+          .start_param;
 
       if (
         startParamValue &&
-        startParamValue.startsWith("ref_")
+        startParamValue.startsWith(
+          "ref_"
+        )
       ) {
         const refCode =
-          startParamValue.replace("ref_", "");
+          startParamValue.replace(
+            "ref_",
+            ""
+          );
 
         localStorage.setItem(
           "inviter_code",
@@ -179,447 +321,1893 @@ export default function Wallet() {
     }
   }, []);
 
-  // ============================================
-  // SAVE CONNECTED WALLET
-  // ============================================
+
+  // ====================================================
+  // SAVE WALLET ADDRESS
+  // ====================================================
 
   useEffect(() => {
     if (address) {
       const currentData =
-        loadUserDataFromStorage() || {};
+        loadUserDataFromStorage() ||
+        {};
 
       saveUserDataToStorage({
         ...currentData,
-        walletAddress: address,
+        walletAddress:
+          address,
       });
     }
   }, [address]);
 
-  // ============================================
-  // CONNECT USER + LOAD WALLET
-  // ============================================
 
-  const connectAndLoadWallet = useCallback(
-    async () => {
+  // ====================================================
+  // CONNECT + LOAD WALLET
+  // ====================================================
+
+  const connectAndLoadWallet =
+    useCallback(
+      async () => {
+        if (
+          hasConnected.current ||
+          !address
+        ) {
+          return;
+        }
+
+        hasConnected.current =
+          true;
+
+        setConnectError("");
+        setErrorType("none");
+
+        let inviter_code =
+          localStorage.getItem(
+            "inviter_code"
+          );
+
+        if (!inviter_code) {
+          inviter_code =
+            captureInviterCode();
+
+          if (inviter_code) {
+            localStorage.setItem(
+              "inviter_code",
+              inviter_code
+            );
+          }
+        }
+
+
+        let telegramId =
+          null;
+
+        let telegramUsername =
+          null;
+
+        let isTelegram =
+          false;
+
+        let telegramPhotoUrl =
+          null;
+
+
+        const savedData =
+          loadUserDataFromStorage();
+
+
+        if (
+          savedData
+            ?.telegramId &&
+          Number.isInteger(
+            Number(
+              savedData.telegramId
+            )
+          ) &&
+          Number(
+            savedData.telegramId
+          ) > 0
+        ) {
+          telegramId =
+            Number(
+              savedData.telegramId
+            );
+
+          telegramUsername =
+            savedData
+              .telegramUsername ||
+            null;
+
+          isTelegram =
+            savedData
+              .isTelegram ||
+            false;
+        } else {
+          const tg =
+            window.Telegram
+              ?.WebApp;
+
+          if (
+            tg
+              ?.initDataUnsafe
+              ?.user
+          ) {
+            const user =
+              tg.initDataUnsafe
+                .user;
+
+            telegramId =
+              Number(user.id);
+
+            telegramUsername =
+              user.username ||
+              null;
+
+            telegramPhotoUrl =
+              user.photo_url ||
+              null;
+
+            isTelegram =
+              true;
+
+            saveUserDataToStorage({
+              telegramId,
+
+              telegramUsername,
+
+              telegramPhotoUrl,
+
+              isTelegram:
+                true,
+            });
+          } else if (
+            address
+          ) {
+            let hash = 0;
+
+            for (
+              let i = 0;
+              i <
+              address.length;
+              i++
+            ) {
+              const char =
+                address.charCodeAt(
+                  i
+                );
+
+              hash =
+                (
+                  hash <<
+                  5
+                ) -
+                hash +
+                char;
+
+              hash =
+                hash &
+                hash;
+            }
+
+            telegramId =
+              Number(
+                Math.abs(
+                  hash
+                ) +
+                  1000000000000
+              );
+
+            telegramUsername =
+              `browser_${address.slice(
+                0,
+                8
+              )}`;
+
+            isTelegram =
+              false;
+
+            saveUserDataToStorage({
+              telegramId,
+
+              telegramUsername,
+
+              isTelegram:
+                false,
+
+              walletAddress:
+                address,
+            });
+          }
+        }
+
+
+        if (!telegramId) {
+          telegramId =
+            Number(
+              Math.floor(
+                Math.random() *
+                  1000000000
+              ) +
+                100000000
+            );
+        }
+
+
+        const payload = {
+          wallet_address:
+            address,
+
+          inviter_code:
+            inviter_code ||
+            null,
+
+          telegram_id:
+            telegramId,
+
+          telegram_username:
+            telegramUsername,
+
+          telegram_photo_url:
+            telegramPhotoUrl,
+
+          is_telegram:
+            isTelegram,
+        };
+
+
+        try {
+          const response =
+            await api.post(
+              "/connect/",
+              payload
+            );
+
+
+          if (
+            response.data
+              ?.user
+              ?.wallet_locked
+          ) {
+            setWalletLocked(
+              true
+            );
+          }
+
+
+          if (
+            response.data
+              ?.user
+          ) {
+            const user =
+              response.data
+                .user;
+
+            saveUserDataToStorage({
+              telegramId:
+                user.telegram_id ||
+                telegramId,
+
+              telegramUsername:
+                user.telegram_username ||
+                telegramUsername,
+
+              isTelegram:
+                user.is_telegram ||
+                isTelegram,
+
+              walletAddress:
+                address,
+            });
+          }
+
+
+          const r =
+            await api.get(
+              `/wallet/${address}/`
+            );
+
+          setWallet(
+            r.data
+          );
+
+          setErrorType(
+            "none"
+          );
+        } catch (e) {
+          const errorData =
+            e?.response
+              ?.data;
+
+          const statusCode =
+            e?.response
+              ?.status;
+
+          const isNetworkError =
+            e.message ===
+              "Network Error" ||
+            e.code ===
+              "ERR_NETWORK" ||
+            !e.response;
+
+
+          if (
+            isNetworkError
+          ) {
+            setErrorType(
+              "network_error"
+            );
+
+            setConnectError(
+              "Network Error! Please check your internet connection."
+            );
+          } else if (
+            errorData
+              ?.error
+              ?.includes(
+                "already linked"
+              ) ||
+            errorData
+              ?.error
+              ?.includes(
+                "locked"
+              ) ||
+            errorData
+              ?.detail
+              ?.includes(
+                "already linked"
+              )
+          ) {
+            setErrorType(
+              "locked"
+            );
+
+            setConnectError(
+              "This wallet is already linked to another Telegram account."
+            );
+          } else if (
+            statusCode ===
+            400
+          ) {
+            setErrorType(
+              "bad_request"
+            );
+
+            const msg =
+              errorData
+                ?.error ||
+              errorData
+                ?.detail ||
+              "Invalid wallet address format.";
+
+            setConnectError(
+              `Bad Request: ${msg}`
+            );
+          } else {
+            setErrorType(
+              "server_error"
+            );
+
+            const errorMessage =
+              errorData
+                ?.error ||
+              errorData
+                ?.detail ||
+              e?.message ||
+              "Server error.";
+
+            setConnectError(
+              `Server Error: ${errorMessage}`
+            );
+          }
+
+
+          if (
+            statusCode !==
+              400 &&
+            !isNetworkError
+          ) {
+            try {
+              const r =
+                await api.get(
+                  `/wallet/${address}/`
+                );
+
+              setWallet(
+                r.data
+              );
+            } catch {
+              // ignore fallback error
+            }
+          }
+        }
+      },
+      [address]
+    );
+
+
+  useEffect(() => {
+    connectAndLoadWallet();
+  }, [
+    connectAndLoadWallet,
+  ]);
+
+
+  // ====================================================
+  // DISCONNECT
+  // ====================================================
+
+  const disconnectWallet =
+    () => {
+      localStorage.removeItem(
+        "telegram_id"
+      );
+
+      localStorage.removeItem(
+        "inviter_code"
+      );
+
+      localStorage.removeItem(
+        INVITER_CODE_KEY
+      );
+
+      clearInviterCode();
+
+      localStorage.removeItem(
+        USER_DATA_KEY
+      );
+
+      setWallet(null);
+
+      setWalletLocked(
+        false
+      );
+
+      setConnectError("");
+
+      setErrorType("none");
+
+      hasConnected.current =
+        false;
+
+      window.location.reload();
+    };
+
+
+  const handleRetry =
+    () => {
+      setConnectError("");
+
+      setErrorType("none");
+
+      hasConnected.current =
+        false;
+
+      window.location.reload();
+    };
+
+
+  // ====================================================
+  // COPY
+  // ====================================================
+
+  const copyText =
+    async (
+      label,
+      value
+    ) => {
+      if (!value) return;
+
+      try {
+        await navigator
+          .clipboard
+          .writeText(
+            String(value)
+          );
+
+        setCopiedText(
+          `${label} copied`
+        );
+
+        window.setTimeout(
+          () =>
+            setCopiedText(
+              ""
+            ),
+          1800
+        );
+      } catch {
+        setCopiedText(
+          `Could not copy ${label.toLowerCase()}`
+        );
+
+        window.setTimeout(
+          () =>
+            setCopiedText(
+              ""
+            ),
+          1800
+        );
+      }
+    };
+
+
+  const openContractLink =
+    () => {
+      window.open(
+        ECG_CONTRACT_LINK,
+        "_blank",
+        "noopener,noreferrer"
+      );
+    };
+
+
+  // ====================================================
+  // OPEN / CLOSE WITHDRAW
+  // ====================================================
+
+  const openWithdraw =
+    () => {
+      setWithdrawError(
+        ""
+      );
+
+      setAmount("");
+
+      setWithdrawAsset(
+        "TON"
+      );
+
+      setDestinationWallet(
+        ""
+      );
+
+      setWithdrawDebugLogs(
+        []
+      );
+
+      setIsWithdrawOpen(
+        true
+      );
+    };
+
+
+  const closeWithdraw =
+    () => {
       if (
-        hasConnected.current ||
-        !address
+        isWithdrawing
       ) {
         return;
       }
 
-      hasConnected.current = true;
+      setIsWithdrawOpen(
+        false
+      );
+    };
 
-      setConnectError("");
-      setErrorType("none");
 
-      let inviter_code =
-        localStorage.getItem("inviter_code");
+  // ====================================================
+  // DEBUG HELPERS
+  // ====================================================
 
-      if (!inviter_code) {
-        inviter_code =
-          captureInviterCode();
+  const sleep =
+    (ms) =>
+      new Promise(
+        (resolve) =>
+          setTimeout(
+            resolve,
+            ms
+          )
+      );
 
-        if (inviter_code) {
-          localStorage.setItem(
-            "inviter_code",
-            inviter_code
-          );
-        }
+
+  // ====================================================
+  // REMOVE SECRET HEADERS FROM DEBUG
+  // ====================================================
+
+  const safeHeaders =
+    (headers) => {
+      if (!headers) {
+        return null;
       }
 
-      let telegramId = null;
-      let telegramUsername = null;
-      let isTelegram = false;
-      let telegramPhotoUrl = null;
+      try {
+        const raw =
+          typeof headers.toJSON ===
+          "function"
+            ? headers.toJSON()
+            : {
+                ...headers,
+              };
 
-      const savedData =
-        loadUserDataFromStorage();
+        const cleaned = {
+          ...raw,
+        };
 
-      if (
-        savedData?.telegramId &&
-        Number.isInteger(
-          Number(savedData.telegramId)
-        ) &&
-        Number(savedData.telegramId) > 0
-      ) {
-        telegramId =
-          Number(savedData.telegramId);
+        delete cleaned.Authorization;
+        delete cleaned.authorization;
 
-        telegramUsername =
-          savedData.telegramUsername || null;
+        delete cleaned.Cookie;
+        delete cleaned.cookie;
 
-        isTelegram =
-          savedData.isTelegram || false;
-      } else {
-        const tg =
-          window.Telegram?.WebApp;
+        delete cleaned[
+          "X-Api-Key"
+        ];
+
+        delete cleaned[
+          "x-api-key"
+        ];
+
+        return cleaned;
+      } catch {
+        return "[Could not serialize headers]";
+      }
+    };
+
+
+  // ====================================================
+  // FULL AXIOS ERROR SERIALIZER
+  // ====================================================
+
+  const serializeAxiosError =
+    (error) => {
+      let axiosJSON =
+        null;
+
+      try {
+        axiosJSON =
+          typeof error
+            ?.toJSON ===
+          "function"
+            ? error.toJSON()
+            : null;
 
         if (
-          tg?.initDataUnsafe?.user
+          axiosJSON
+            ?.config
+            ?.headers
         ) {
-          const user =
-            tg.initDataUnsafe.user;
-
-          telegramId =
-            Number(user.id);
-
-          telegramUsername =
-            user.username || null;
-
-          telegramPhotoUrl =
-            user.photo_url || null;
-
-          isTelegram = true;
-
-          saveUserDataToStorage({
-            telegramId,
-            telegramUsername,
-            telegramPhotoUrl,
-            isTelegram: true,
-          });
-        } else if (address) {
-          let hash = 0;
-
-          for (
-            let i = 0;
-            i < address.length;
-            i++
-          ) {
-            const char =
-              address.charCodeAt(i);
-
-            hash =
-              (hash << 5) -
-              hash +
-              char;
-
-            hash = hash & hash;
-          }
-
-          telegramId =
-            Number(
-              Math.abs(hash) +
-                1000000000000
+          axiosJSON.config.headers =
+            safeHeaders(
+              axiosJSON
+                .config
+                .headers
             );
-
-          telegramUsername =
-            `browser_${address.slice(
-              0,
-              8
-            )}`;
-
-          isTelegram = false;
-
-          saveUserDataToStorage({
-            telegramId,
-            telegramUsername,
-            isTelegram: false,
-            walletAddress: address,
-          });
         }
+      } catch {
+        axiosJSON =
+          null;
       }
 
-      if (!telegramId) {
-        telegramId =
-          Number(
-            Math.floor(
-              Math.random() *
-                1000000000
-            ) +
-              100000000
-          );
-      }
 
-      const payload = {
-        wallet_address: address,
+      return {
+        message:
+          error?.message ||
+          null,
 
-        inviter_code:
-          inviter_code || null,
+        name:
+          error?.name ||
+          null,
 
-        telegram_id:
-          telegramId,
+        code:
+          error?.code ||
+          null,
 
-        telegram_username:
-          telegramUsername,
+        stack:
+          error?.stack ||
+          null,
 
-        telegram_photo_url:
-          telegramPhotoUrl,
+        status:
+          error?.response
+            ?.status ||
+          null,
 
-        is_telegram:
-          isTelegram,
+        statusText:
+          error?.response
+            ?.statusText ||
+          null,
+
+        responseData:
+          error?.response
+            ?.data ??
+          null,
+
+        responseHeaders:
+          safeHeaders(
+            error?.response
+              ?.headers
+          ),
+
+        request: {
+          url:
+            error?.config
+              ?.url ||
+            null,
+
+          method:
+            error?.config
+              ?.method ||
+            null,
+
+          baseURL:
+            error?.config
+              ?.baseURL ||
+            api?.defaults
+              ?.baseURL ||
+            null,
+
+          timeout:
+            error?.config
+              ?.timeout ??
+            null,
+
+          data:
+            error?.config
+              ?.data ??
+            null,
+
+          headers:
+            safeHeaders(
+              error?.config
+                ?.headers
+            ),
+        },
+
+        axiosJSON,
       };
+    };
+
+
+  // ====================================================
+  // SAFE API HEALTH CHECK
+  //
+  // این تابع فقط GET می‌زند.
+  // هیچ برداشت دوباره‌ای انجام نمی‌دهد.
+  // ====================================================
+
+  const probeWalletEndpoint =
+    async (label) => {
+      const startedAt =
+        Date.now();
+
+      addWithdrawDebugLog(
+        `${label} START`,
+        {
+          endpoint:
+            `/wallet/${address}/`,
+
+          startedAt:
+            new Date(
+              startedAt
+            ).toISOString(),
+
+          browserOnline:
+            navigator.onLine,
+
+          apiBaseURL:
+            api?.defaults
+              ?.baseURL ||
+            null,
+        }
+      );
+
 
       try {
         const response =
+          await api.get(
+            `/wallet/${address}/`,
+            {
+              timeout:
+                15000,
+            }
+          );
+
+
+        const durationMs =
+          Date.now() -
+          startedAt;
+
+
+        const result = {
+          ok: true,
+
+          status:
+            response
+              ?.status ||
+            null,
+
+          durationMs,
+
+          responseHeaders:
+            safeHeaders(
+              response
+                ?.headers
+            ),
+
+          withdrawableTotal:
+            response
+              ?.data
+              ?.withdrawable_total ??
+            null,
+
+          data:
+            response
+              ?.data ??
+            null,
+        };
+
+
+        addWithdrawDebugLog(
+          `${label} OK`,
+          result
+        );
+
+
+        return result;
+      } catch (error) {
+        const durationMs =
+          Date.now() -
+          startedAt;
+
+
+        const result = {
+          ok: false,
+
+          durationMs,
+
+          error:
+            serializeAxiosError(
+              error
+            ),
+        };
+
+
+        addWithdrawDebugLog(
+          `${label} FAILED`,
+          result
+        );
+
+
+        return result;
+      }
+    };
+
+
+  // ====================================================
+  // AUTO DIAGNOSIS
+  // ====================================================
+
+  const diagnoseWithdrawFailure =
+    ({
+      error,
+      preProbe,
+      postProbeImmediate,
+      postProbeDelayed,
+    }) => {
+      const status =
+        error?.response
+          ?.status ||
+        null;
+
+
+      const data =
+        error?.response
+          ?.data ||
+        {};
+
+
+      const headers =
+        error?.response
+          ?.headers;
+
+
+      const cfRay =
+        data?.ray_id ||
+        headers?.[
+          "cf-ray"
+        ] ||
+        headers?.[
+          "CF-Ray"
+        ] ||
+        null;
+
+
+      const retryAfter =
+        data
+          ?.retry_after ||
+        headers?.[
+          "retry-after"
+        ] ||
+        headers?.[
+          "Retry-After"
+        ] ||
+        null;
+
+
+      const cloudflare =
+        Boolean(
+          data
+            ?.cloudflare_error ||
+          cfRay
+        );
+
+
+      let diagnosis =
+        "Unknown failure. Check detailed logs.";
+
+      let likelyLayer =
+        "unknown";
+
+
+      // ------------------------------------------
+      // CLIENT OFFLINE
+      // ------------------------------------------
+
+      if (
+        !navigator.onLine
+      ) {
+        diagnosis =
+          "Browser reports OFFLINE. Request may be failing before reaching the API.";
+
+        likelyLayer =
+          "client/network";
+      }
+
+      // ------------------------------------------
+      // NO HTTP RESPONSE
+      // ------------------------------------------
+
+      else if (
+        !error?.response
+      ) {
+        diagnosis =
+          "Axios received no HTTP response. Possible DNS, TLS, CORS, client network, proxy, or origin connection failure.";
+
+        likelyLayer =
+          "network/proxy";
+      }
+
+      // ------------------------------------------
+      // 4XX
+      // ------------------------------------------
+
+      else if (
+        status >= 400 &&
+        status < 500
+      ) {
+        diagnosis =
+          "Server returned a normal 4xx response. Check validation, authentication, permission, wallet address, amount, or payload.";
+
+        likelyLayer =
+          "application/request";
+      }
+
+      // ------------------------------------------
+      // 500
+      // ------------------------------------------
+
+      else if (
+        status === 500
+      ) {
+        diagnosis =
+          "Backend itself returned HTTP 500. Origin was reachable. Check backend traceback inside withdrawal handler.";
+
+        likelyLayer =
+          "backend application";
+      }
+
+      // ------------------------------------------
+      // GATEWAY / CLOUDFLARE
+      // ------------------------------------------
+
+      else if (
+        [
+          502,
+          503,
+          504,
+          520,
+          521,
+          522,
+          523,
+          524,
+        ].includes(
+          status
+        )
+      ) {
+        likelyLayer =
+          cloudflare
+            ? "cloudflare/origin"
+            : "reverse-proxy/origin";
+
+
+        // API healthy before + after.
+        if (
+          preProbe?.ok &&
+          postProbeImmediate?.ok &&
+          postProbeDelayed?.ok
+        ) {
+          diagnosis =
+            "The normal /wallet endpoint was healthy before and after the failed withdrawal. The problem is very likely specific to /withdraw/request/ or an upstream service used only during withdrawal, such as TON RPC, transaction sender, hot-wallet service, blockchain provider, or a dedicated withdrawal worker.";
+        }
+
+        // API healthy before, dead after.
+        else if (
+          preProbe?.ok &&
+          !postProbeImmediate?.ok &&
+          !postProbeDelayed?.ok
+        ) {
+          diagnosis =
+            "API was healthy before withdrawal, but the normal /wallet endpoint also became unavailable after withdrawal. The withdrawal request may be crashing the backend worker, restarting the application, exhausting resources, or killing the origin process.";
+        }
+
+        // API temporarily dead then recovers.
+        else if (
+          preProbe?.ok &&
+          !postProbeImmediate?.ok &&
+          postProbeDelayed?.ok
+        ) {
+          diagnosis =
+            "API was healthy before withdrawal, became unavailable immediately after the withdrawal attempt, then recovered. Strong sign of a worker crash/restart, temporary origin failure, upstream timeout, or withdrawal process killing/restarting the worker.";
+        }
+
+        // Server broken before withdrawal.
+        else if (
+          preProbe &&
+          !preProbe.ok
+        ) {
+          diagnosis =
+            "The normal /wallet endpoint was already unhealthy before the withdrawal POST. This indicates a broader backend/origin availability problem, not just the withdrawal payload.";
+        }
+
+        else {
+          diagnosis =
+            "Gateway/origin failure detected. Compare PRE-PROBE and POST-PROBE results and inspect origin logs using the Cloudflare Ray ID.";
+        }
+      }
+
+
+      return {
+        diagnosis,
+
+        likelyLayer,
+
+        httpStatus:
+          status,
+
+        cloudflare,
+
+        cloudflareRayId:
+          cfRay,
+
+        retryAfterSeconds:
+          retryAfter,
+
+        cloudflareErrorName:
+          data
+            ?.error_name ||
+          null,
+
+        cloudflareErrorCategory:
+          data
+            ?.error_category ||
+          null,
+
+        cloudflareInstance:
+          data
+            ?.instance ||
+          null,
+
+        preProbeOk:
+          preProbe
+            ?.ok ??
+          null,
+
+        postProbeImmediateOk:
+          postProbeImmediate
+            ?.ok ??
+          null,
+
+        postProbeDelayedOk:
+          postProbeDelayed
+            ?.ok ??
+          null,
+      };
+    };
+
+
+  // ====================================================
+  // WITHDRAW
+  // ====================================================
+
+  const onWithdraw =
+    async () => {
+      setWithdrawError(
+        ""
+      );
+
+
+      const n =
+        Number(amount);
+
+
+      const withdrawStartedAt =
+        Date.now();
+
+
+      // Calculate separately for logging.
+      const calculatedTon =
+        (() => {
+          const ecg =
+            Number(
+              wallet
+                ?.withdrawable_total ||
+                0
+            );
+
+          if (
+            !tonPrice ||
+            !ecg
+          ) {
+            return null;
+          }
+
+          return (
+            ecg /
+            (
+              tonPrice *
+              ECG_PER_USDT
+            )
+          );
+        })();
+
+
+      // =================================================
+      // CLICK LOG
+      // =================================================
+
+      addWithdrawDebugLog(
+        "WITHDRAW CLICK",
+        {
+          clickedAt:
+            new Date(
+              withdrawStartedAt
+            ).toISOString(),
+
+          asset:
+            withdrawAsset,
+
+          rawAmount:
+            amount,
+
+          parsedAmount:
+            n,
+
+          connectedWallet:
+            address ||
+            null,
+
+          destinationInput:
+            destinationWallet ||
+            null,
+
+          withdrawableECG:
+            Number(
+              wallet
+                ?.withdrawable_total ||
+                0
+            ),
+
+          calculatedWithdrawableTON:
+            calculatedTon ===
+            null
+              ? null
+              : calculatedTon.toFixed(
+                  8
+                ),
+
+          tonPrice,
+
+          ecgPerUsdt:
+            ECG_PER_USDT,
+
+          formula:
+            "ECG / (TON_USD_PRICE * ECG_PER_USDT)",
+        }
+      );
+
+
+      // =================================================
+      // CLIENT ENVIRONMENT
+      // =================================================
+
+      addWithdrawDebugLog(
+        "CLIENT ENVIRONMENT",
+        {
+          timestamp:
+            new Date()
+              .toISOString(),
+
+          browserOnline:
+            navigator.onLine,
+
+          userAgent:
+            navigator.userAgent,
+
+          language:
+            navigator.language,
+
+          pageOrigin:
+            window.location
+              .origin,
+
+          pagePath:
+            window.location
+              .pathname,
+
+          apiBaseURL:
+            api?.defaults
+              ?.baseURL ||
+            null,
+
+          axiosTimeout:
+            api?.defaults
+              ?.timeout ??
+            null,
+
+          telegramWebApp:
+            Boolean(
+              window
+                .Telegram
+                ?.WebApp
+            ),
+
+          telegramUserExists:
+            Boolean(
+              window
+                .Telegram
+                ?.WebApp
+                ?.initDataUnsafe
+                ?.user
+            ),
+
+          walletLocked,
+        }
+      );
+
+
+      // =================================================
+      // VALIDATION
+      // =================================================
+
+      if (
+        !Number.isFinite(
+          n
+        ) ||
+        n <= 0
+      ) {
+        const message =
+          "Invalid amount.";
+
+        addWithdrawDebugLog(
+          "VALIDATION ERROR",
+          {
+            message,
+
+            rawAmount:
+              amount,
+
+            parsedAmount:
+              n,
+          }
+        );
+
+        return setWithdrawError(
+          message
+        );
+      }
+
+
+      if (!address) {
+        const message =
+          "Please connect your wallet first.";
+
+        addWithdrawDebugLog(
+          "VALIDATION ERROR",
+          message
+        );
+
+        return setWithdrawError(
+          message
+        );
+      }
+
+
+      if (
+        withdrawAsset ===
+          "TON" &&
+        n < 1
+      ) {
+        const message =
+          "Minimum automatic TON withdrawal is 1 TON.";
+
+        addWithdrawDebugLog(
+          "VALIDATION ERROR",
+          {
+            message,
+
+            requested:
+              n,
+
+            minimum:
+              1,
+          }
+        );
+
+        return setWithdrawError(
+          message
+        );
+      }
+
+
+      if (
+        withdrawAsset ===
+        "ECG"
+      ) {
+        if (
+          n < 60
+        ) {
+          const message =
+            "Minimum withdrawal is 60 ECG.";
+
+          addWithdrawDebugLog(
+            "VALIDATION ERROR",
+            {
+              message,
+
+              requested:
+                n,
+
+              minimum:
+                60,
+            }
+          );
+
+          return setWithdrawError(
+            message
+          );
+        }
+
+
+        if (
+          !destinationWallet.trim()
+        ) {
+          const message =
+            "Please enter the destination ECG wallet address.";
+
+          addWithdrawDebugLog(
+            "VALIDATION ERROR",
+            message
+          );
+
+          return setWithdrawError(
+            message
+          );
+        }
+      }
+
+
+      // This stores API state BEFORE POST.
+      let preProbe =
+        null;
+
+
+      try {
+        setIsWithdrawing(
+          true
+        );
+
+
+        // ===============================================
+        // TEST API BEFORE WITHDRAW
+        // ===============================================
+
+        addWithdrawDebugLog(
+          "PRE-WITHDRAW HEALTH CHECK",
+          {
+            reason:
+              "Testing the normal /wallet endpoint immediately before withdrawal so we know whether the origin was healthy before POST.",
+          }
+        );
+
+
+        preProbe =
+          await probeWalletEndpoint(
+            "PRE-PROBE /wallet"
+          );
+
+
+        // ===============================================
+        // PAYLOAD
+        // ===============================================
+
+        const payload = {
+          wallet_address:
+            address,
+
+          destination_wallet:
+            withdrawAsset ===
+            "TON"
+              ? address
+              : destinationWallet.trim(),
+
+          asset:
+            withdrawAsset,
+
+          scope:
+            "ALL_WITHDRAWABLE",
+
+          amount:
+            n,
+        };
+
+
+        const requestStartedAt =
+          Date.now();
+
+
+        addWithdrawDebugLog(
+          "POST /withdraw/request/ START",
+          {
+            requestStartedAt:
+              new Date(
+                requestStartedAt
+              ).toISOString(),
+
+            endpoint:
+              "/withdraw/request/",
+
+            apiBaseURL:
+              api?.defaults
+                ?.baseURL ||
+              null,
+
+            browserOnline:
+              navigator.onLine,
+
+            payload,
+          }
+        );
+
+
+        console.log(
+          "[WITHDRAW] payload",
+          payload
+        );
+
+
+        // ===============================================
+        // ACTUAL WITHDRAW REQUEST
+        // ===============================================
+
+        const withdrawResponse =
           await api.post(
-            "/connect/",
+            "/withdraw/request/",
             payload
           );
 
-        if (
-          response.data?.user
-            ?.wallet_locked
-        ) {
-          setWalletLocked(true);
-        }
 
-        if (
-          response.data?.user
-        ) {
-          const user =
-            response.data.user;
+        const requestDurationMs =
+          Date.now() -
+          requestStartedAt;
 
-          saveUserDataToStorage({
-            telegramId:
-              user.telegram_id ||
-              telegramId,
 
-            telegramUsername:
-              user.telegram_username ||
-              telegramUsername,
+        // ===============================================
+        // SUCCESS RESPONSE
+        // ===============================================
 
-            isTelegram:
-              user.is_telegram ||
-              isTelegram,
+        addWithdrawDebugLog(
+          "WITHDRAW RESPONSE",
+          {
+            requestDurationMs,
 
-            walletAddress:
-              address,
-          });
-        }
+            status:
+              withdrawResponse
+                ?.status,
+
+            statusText:
+              withdrawResponse
+                ?.statusText,
+
+            headers:
+              safeHeaders(
+                withdrawResponse
+                  ?.headers
+              ),
+
+            data:
+              withdrawResponse
+                ?.data,
+          }
+        );
+
+
+        console.log(
+          "[WITHDRAW] response",
+          withdrawResponse
+        );
+
+
+        // ===============================================
+        // REFRESH WALLET
+        // ===============================================
+
+        addWithdrawDebugLog(
+          "REFRESH WALLET START",
+          {
+            endpoint:
+              `/wallet/${address}/`,
+          }
+        );
+
+
+        const refreshStartedAt =
+          Date.now();
+
 
         const r =
           await api.get(
             `/wallet/${address}/`
           );
 
-        setWallet(r.data);
 
-        setErrorType("none");
-      } catch (e) {
-        const errorData =
-          e?.response?.data;
+        addWithdrawDebugLog(
+          "WALLET REFRESH RESPONSE",
+          {
+            durationMs:
+              Date.now() -
+              refreshStartedAt,
 
-        const statusCode =
-          e?.response?.status;
+            status:
+              r?.status,
 
-        const isNetworkError =
-          e.message ===
-            "Network Error" ||
-          e.code ===
-            "ERR_NETWORK" ||
-          !e.response;
+            headers:
+              safeHeaders(
+                r?.headers
+              ),
 
-        if (isNetworkError) {
-          setErrorType(
-            "network_error"
+            data:
+              r?.data,
+          }
+        );
+
+
+        setWallet(
+          r.data
+        );
+
+
+        // ===============================================
+        // SUCCESS DIAGNOSIS
+        // ===============================================
+
+        addWithdrawDebugLog(
+          "AUTO DIAGNOSIS",
+          {
+            result:
+              "Withdrawal endpoint returned a successful HTTP response.",
+
+            likelyLayer:
+              "none",
+
+            totalDurationMs:
+              Date.now() -
+              withdrawStartedAt,
+          }
+        );
+
+
+        setIsWithdrawOpen(
+          false
+        );
+
+        setAmount("");
+
+        setDestinationWallet(
+          ""
+        );
+      } catch (error) {
+        // ===============================================
+        // EXACT TIME OF FAILURE
+        // ===============================================
+
+        const requestFailureAt =
+          Date.now();
+
+
+        const serializedError =
+          serializeAxiosError(
+            error
           );
 
-          setConnectError(
-            "Network Error! Please check your internet connection."
-          );
-        } else if (
-          errorData?.error?.includes(
-            "already linked"
-          ) ||
-          errorData?.error?.includes(
-            "locked"
-          ) ||
-          errorData?.detail?.includes(
-            "already linked"
-          )
-        ) {
-          setErrorType("locked");
 
-          setConnectError(
-            "This wallet is already linked to another Telegram account."
-          );
-        } else if (
-          statusCode === 400
-        ) {
-          setErrorType(
-            "bad_request"
-          );
+        addWithdrawDebugLog(
+          "WITHDRAW ERROR",
+          {
+            failedAt:
+              new Date(
+                requestFailureAt
+              ).toISOString(),
 
-          const msg =
-            errorData?.error ||
-            errorData?.detail ||
-            "Invalid wallet address format.";
+            totalDurationSinceClickMs:
+              requestFailureAt -
+              withdrawStartedAt,
 
-          setConnectError(
-            `Bad Request: ${msg}`
-          );
-        } else {
-          setErrorType(
-            "server_error"
-          );
+            ...serializedError,
+          }
+        );
 
-          const errorMessage =
-            errorData?.error ||
-            errorData?.detail ||
-            e?.message ||
-            "Server error.";
 
-          setConnectError(
-            `Server Error: ${errorMessage}`
-          );
-        }
+        console.error(
+          "[WITHDRAW] ERROR",
+          error
+        );
+
+
+        // ===============================================
+        // CLOUDFLARE INFORMATION
+        // ===============================================
+
+        const responseData =
+          error?.response
+            ?.data ||
+          {};
+
+
+        const cfHeaders =
+          error?.response
+            ?.headers;
+
 
         if (
-          statusCode !== 400 &&
-          !isNetworkError
+          responseData
+            ?.cloudflare_error ||
+          cfHeaders?.[
+            "cf-ray"
+          ] ||
+          cfHeaders?.[
+            "CF-Ray"
+          ]
         ) {
-          try {
-            const r =
-              await api.get(
-                `/wallet/${address}/`
-              );
+          addWithdrawDebugLog(
+            "CLOUDFLARE DETAILS",
+            {
+              status:
+                error
+                  ?.response
+                  ?.status ||
+                null,
 
-            setWallet(r.data);
-          } catch {
-            // ignore
-          }
+              errorName:
+                responseData
+                  ?.error_name ||
+                null,
+
+              errorCategory:
+                responseData
+                  ?.error_category ||
+                null,
+
+              detail:
+                responseData
+                  ?.detail ||
+                null,
+
+              rayId:
+                responseData
+                  ?.ray_id ||
+                cfHeaders?.[
+                  "cf-ray"
+                ] ||
+                cfHeaders?.[
+                  "CF-Ray"
+                ] ||
+                null,
+
+              instance:
+                responseData
+                  ?.instance ||
+                null,
+
+              timestamp:
+                responseData
+                  ?.timestamp ||
+                null,
+
+              retryable:
+                responseData
+                  ?.retryable ??
+                null,
+
+              retryAfter:
+                responseData
+                  ?.retry_after ||
+                cfHeaders?.[
+                  "retry-after"
+                ] ||
+                null,
+
+              ownerActionRequired:
+                responseData
+                  ?.owner_action_required ??
+                null,
+
+              whatYouShouldDo:
+                responseData
+                  ?.what_you_should_do ||
+                null,
+            }
+          );
         }
+
+
+        // ===============================================
+        // IMPORTANT:
+        // WE DO NOT RETRY THE WITHDRAWAL POST.
+        //
+        // ممکنه تراکنش در سرور انجام شده باشد
+        // ولی پاسخ HTTP به Cloudflare نرسیده باشد.
+        // ===============================================
+
+        addWithdrawDebugLog(
+          "POST-FAILURE HEALTH CHECK",
+          {
+            reason:
+              "Withdrawal failed. Testing normal /wallet endpoint to see whether only withdrawal failed or the whole backend/origin became unavailable.",
+
+            important:
+              "Withdrawal POST will NOT be retried automatically.",
+          }
+        );
+
+
+        // ===============================================
+        // FIRST PROBE AFTER FAILURE
+        // ===============================================
+
+        const postProbeImmediate =
+          await probeWalletEndpoint(
+            "POST-PROBE #1 /wallet"
+          );
+
+
+        // ===============================================
+        // WAIT 2 SECONDS
+        // ===============================================
+
+        addWithdrawDebugLog(
+          "SHORT RECOVERY WAIT",
+          {
+            delayMs:
+              2000,
+
+            note:
+              "No withdrawal retry. Only waiting before another safe GET health probe.",
+          }
+        );
+
+
+        await sleep(
+          2000
+        );
+
+
+        // ===============================================
+        // SECOND PROBE
+        // ===============================================
+
+        const postProbeDelayed =
+          await probeWalletEndpoint(
+            "POST-PROBE #2 /wallet"
+          );
+
+
+        // ===============================================
+        // AUTOMATIC DIAGNOSIS
+        // ===============================================
+
+        const diagnosis =
+          diagnoseWithdrawFailure({
+            error,
+
+            preProbe,
+
+            postProbeImmediate,
+
+            postProbeDelayed,
+          });
+
+
+        addWithdrawDebugLog(
+          "AUTO DIAGNOSIS",
+          {
+            ...diagnosis,
+
+            totalDurationMs:
+              Date.now() -
+              withdrawStartedAt,
+
+            important:
+              "The client does NOT automatically retry withdrawal POST, preventing accidental duplicate withdrawals.",
+          }
+        );
+
+
+        // ===============================================
+        // USER-FACING ERROR
+        // ===============================================
+
+        const backendMessage =
+          error
+            ?.response
+            ?.data
+            ?.error ||
+          error
+            ?.response
+            ?.data
+            ?.detail ||
+          error
+            ?.response
+            ?.data
+            ?.message ||
+          error
+            ?.message ||
+          "Withdrawal failed.";
+
+
+        setWithdrawError(
+          backendMessage
+        );
+      } finally {
+        setIsWithdrawing(
+          false
+        );
+
+
+        addWithdrawDebugLog(
+          "WITHDRAW FINISHED",
+          {
+            finishedAt:
+              new Date()
+                .toISOString(),
+
+            browserOnline:
+              navigator.onLine,
+
+            totalDurationMs:
+              Date.now() -
+              withdrawStartedAt,
+          }
+        );
       }
-    },
-    [address]
-  );
+    };
 
-  useEffect(() => {
-    connectAndLoadWallet();
-  }, [connectAndLoadWallet]);
 
-  // ============================================
-  // DISCONNECT
-  // ============================================
-
-  const disconnectWallet = () => {
-    localStorage.removeItem(
-      "telegram_id"
-    );
-
-    localStorage.removeItem(
-      "inviter_code"
-    );
-
-    localStorage.removeItem(
-      INVITER_CODE_KEY
-    );
-
-    clearInviterCode();
-
-    localStorage.removeItem(
-      USER_DATA_KEY
-    );
-
-    setWallet(null);
-
-    setWalletLocked(false);
-
-    setConnectError("");
-
-    setErrorType("none");
-
-    hasConnected.current = false;
-
-    window.location.reload();
-  };
-
-  const handleRetry = () => {
-    setConnectError("");
-
-    setErrorType("none");
-
-    hasConnected.current = false;
-
-    window.location.reload();
-  };
-
-  // ============================================
-  // COPY
-  // ============================================
-
-  const copyText = async (
-    label,
-    value
-  ) => {
-    if (!value) return;
-
-    try {
-      await navigator.clipboard.writeText(
-        String(value)
-      );
-
-      setCopiedText(
-        `${label} copied`
-      );
-
-      window.setTimeout(
-        () =>
-          setCopiedText(""),
-        1800
-      );
-    } catch {
-      setCopiedText(
-        `Could not copy ${label.toLowerCase()}`
-      );
-
-      window.setTimeout(
-        () =>
-          setCopiedText(""),
-        1800
-      );
-    }
-  };
-
-  const openContractLink = () => {
-    window.open(
-      ECG_CONTRACT_LINK,
-      "_blank",
-      "noopener,noreferrer"
-    );
-  };
-
-  // ============================================
-  // WITHDRAW OPEN
-  // ============================================
-
-  const openWithdraw = () => {
-    setWithdrawError("");
-
-    setAmount("");
-
-    setWithdrawAsset("TON");
-
-    setDestinationWallet("");
-
-    // Clear old debug
-    setWithdrawDebugLogs([]);
-
-    setIsWithdrawOpen(true);
-  };
-
-  const closeWithdraw = () => {
-    if (isWithdrawing) {
-      return;
-    }
-
-    setIsWithdrawOpen(false);
-  };
-
-  // ============================================
-  // TON CALCULATION
-  // ============================================
+  // ====================================================
+  // CALCULATIONS
+  // ====================================================
 
   const withdrawableTon =
     useMemo(() => {
       const ecg =
         Number(
-          wallet?.withdrawable_total ||
+          wallet
+            ?.withdrawable_total ||
             0
         );
 
-      if (!tonPrice || !ecg) {
+      if (
+        !tonPrice ||
+        !ecg
+      ) {
         return "0.0000";
       }
 
@@ -630,349 +2218,23 @@ export default function Wallet() {
           ECG_PER_USDT
         )
       ).toFixed(4);
-    }, [wallet, tonPrice]);
+    }, [
+      wallet,
+      tonPrice,
+    ]);
 
-  // ============================================
-  // WITHDRAW
-  // ============================================
-
-  const onWithdraw = async () => {
-    setWithdrawError("");
-
-    const n =
-      Number(amount);
-
-    // ------------------------------------------
-    // INITIAL DEBUG
-    // ------------------------------------------
-
-    addWithdrawDebugLog(
-      "WITHDRAW CLICK",
-      {
-        asset:
-          withdrawAsset,
-
-        rawAmount:
-          amount,
-
-        parsedAmount:
-          n,
-
-        connectedWallet:
-          address || null,
-
-        destinationInput:
-          destinationWallet ||
-          null,
-
-        withdrawableECG:
-          Number(
-            wallet?.withdrawable_total ||
-              0
-          ),
-
-        calculatedWithdrawableTON:
-          withdrawableTon,
-
-        tonPrice,
-      }
-    );
-
-    // ------------------------------------------
-    // VALIDATION
-    // ------------------------------------------
-
-    if (
-      !Number.isFinite(n) ||
-      n <= 0
-    ) {
-      const message =
-        "Invalid amount.";
-
-      addWithdrawDebugLog(
-        "VALIDATION ERROR",
-        {
-          message,
-          amount,
-          parsed: n,
-        }
-      );
-
-      return setWithdrawError(
-        message
-      );
-    }
-
-    if (!address) {
-      const message =
-        "Please connect your wallet first.";
-
-      addWithdrawDebugLog(
-        "VALIDATION ERROR",
-        message
-      );
-
-      return setWithdrawError(
-        message
-      );
-    }
-
-    if (
-      withdrawAsset === "TON" &&
-      n < 1
-    ) {
-      const message =
-        "Minimum automatic TON withdrawal is 1 TON.";
-
-      addWithdrawDebugLog(
-        "VALIDATION ERROR",
-        {
-          message,
-          amount: n,
-          minimum: 1,
-        }
-      );
-
-      return setWithdrawError(
-        message
-      );
-    }
-
-    if (
-      withdrawAsset === "ECG"
-    ) {
-      if (n < 60) {
-        const message =
-          "Minimum withdrawal is 60 ECG.";
-
-        addWithdrawDebugLog(
-          "VALIDATION ERROR",
-          {
-            message,
-            amount: n,
-            minimum: 60,
-          }
-        );
-
-        return setWithdrawError(
-          message
-        );
-      }
-
-      if (
-        !destinationWallet.trim()
-      ) {
-        const message =
-          "Please enter the destination ECG wallet address.";
-
-        addWithdrawDebugLog(
-          "VALIDATION ERROR",
-          message
-        );
-
-        return setWithdrawError(
-          message
-        );
-      }
-    }
-
-    // ------------------------------------------
-    // REQUEST
-    // ------------------------------------------
-
-    try {
-      setIsWithdrawing(true);
-
-      const payload = {
-        wallet_address:
-          address,
-
-        destination_wallet:
-          withdrawAsset === "TON"
-            ? address
-            : destinationWallet.trim(),
-
-        asset:
-          withdrawAsset,
-
-        scope:
-          "ALL_WITHDRAWABLE",
-
-        amount:
-          n,
-      };
-
-      addWithdrawDebugLog(
-        "POST /withdraw/request/",
-        payload
-      );
-
-      console.log(
-        "[WITHDRAW DEBUG] Request payload:",
-        payload
-      );
-
-      const withdrawResponse =
-        await api.post(
-          "/withdraw/request/",
-          payload
-        );
-
-      // ------------------------------------------
-      // SUCCESS RESPONSE
-      // ------------------------------------------
-
-      addWithdrawDebugLog(
-        "WITHDRAW RESPONSE",
-        {
-          status:
-            withdrawResponse?.status,
-
-          statusText:
-            withdrawResponse?.statusText,
-
-          data:
-            withdrawResponse?.data,
-        }
-      );
-
-      console.log(
-        "[WITHDRAW DEBUG] Response:",
-        withdrawResponse
-      );
-
-      // ------------------------------------------
-      // REFRESH WALLET
-      // ------------------------------------------
-
-      addWithdrawDebugLog(
-        "REFRESH WALLET",
-        {
-          endpoint:
-            `/wallet/${address}/`,
-        }
-      );
-
-      const r =
-        await api.get(
-          `/wallet/${address}/`
-        );
-
-      addWithdrawDebugLog(
-        "WALLET REFRESH RESPONSE",
-        {
-          status:
-            r?.status,
-
-          data:
-            r?.data,
-        }
-      );
-
-      setWallet(
-        r.data
-      );
-
-      setIsWithdrawOpen(false);
-
-      setAmount("");
-
-      setDestinationWallet("");
-    } catch (e) {
-      // ------------------------------------------
-      // COMPLETE AXIOS ERROR
-      // ------------------------------------------
-
-      const debugError = {
-        message:
-          e?.message || null,
-
-        name:
-          e?.name || null,
-
-        code:
-          e?.code || null,
-
-        status:
-          e?.response?.status ||
-          null,
-
-        statusText:
-          e?.response?.statusText ||
-          null,
-
-        responseData:
-          e?.response?.data ||
-          null,
-
-        responseHeaders:
-          e?.response?.headers ||
-          null,
-
-        requestUrl:
-          e?.config?.url ||
-          "/withdraw/request/",
-
-        requestMethod:
-          e?.config?.method ||
-          "post",
-
-        requestData:
-          e?.config?.data ||
-          null,
-
-        baseURL:
-          e?.config?.baseURL ||
-          null,
-      };
-
-      console.error(
-        "[WITHDRAW DEBUG] ERROR:",
-        e
-      );
-
-      console.error(
-        "[WITHDRAW DEBUG] Parsed:",
-        debugError
-      );
-
-      addWithdrawDebugLog(
-        "WITHDRAW ERROR",
-        debugError
-      );
-
-      const backendMessage =
-        e?.response?.data?.error ||
-        e?.response?.data?.detail ||
-        e?.response?.data?.message ||
-        e?.message ||
-        "Withdrawal failed.";
-
-      setWithdrawError(
-        backendMessage
-      );
-    } finally {
-      setIsWithdrawing(false);
-
-      addWithdrawDebugLog(
-        "WITHDRAW FINISHED"
-      );
-    }
-  };
-
-  // ============================================
-  // BALANCE
-  // ============================================
 
   const totalBalance =
     useMemo(
       () =>
         Number(
-          wallet?.withdrawable_total ||
+          wallet
+            ?.withdrawable_total ||
             0
         ),
       [wallet]
     );
+
 
   const progressPercent =
     Math.min(
@@ -983,6 +2245,7 @@ export default function Wallet() {
       100
     );
 
+
   const remainingToUnlock =
     Math.max(
       WITHDRAW_TARGET -
@@ -990,13 +2253,15 @@ export default function Wallet() {
       0
     );
 
+
   const canWithdraw =
     totalBalance >=
     WITHDRAW_TARGET;
 
-  // ============================================
-  // DEBUG TEXT FOR COPY
-  // ============================================
+
+  // ====================================================
+  // DEBUG COPY TEXT
+  // ====================================================
 
   const withdrawDebugText =
     useMemo(() => {
@@ -1004,22 +2269,33 @@ export default function Wallet() {
         .map(
           (log) =>
             `[${log.time}] ${log.label}${
+              log.isoTime
+                ? `\nISO: ${log.isoTime}`
+                : ""
+            }${
               log.details
                 ? `\n${log.details}`
                 : ""
             }`
         )
-        .join("\n\n");
-    }, [withdrawDebugLogs]);
+        .join(
+          "\n\n"
+        );
+    }, [
+      withdrawDebugLogs,
+    ]);
 
-  // ============================================
+
+  // ====================================================
   // UI
-  // ============================================
+  // ====================================================
 
   return (
     <div className="wallet-page-container">
 
       <div className="wallet-box wallet-box--redesigned">
+
+        {/* HEADER */}
 
         <div className="wallet-header-block">
 
@@ -1033,7 +2309,12 @@ export default function Wallet() {
 
         </div>
 
+
         {!address ? (
+
+          // =================================================
+          // NOT CONNECTED
+          // =================================================
 
           <div className="wallet-connect-state">
 
@@ -1050,6 +2331,10 @@ export default function Wallet() {
 
         ) : (
 
+          // =================================================
+          // CONNECTED
+          // =================================================
+
           <>
 
             {/* CONNECTED WALLET */}
@@ -1063,12 +2348,15 @@ export default function Wallet() {
                 </div>
 
                 <div>
+
                   <h3 className="panel-title">
                     Connected Wallet
                   </h3>
+
                 </div>
 
               </div>
+
 
               <div className="wallet-address-card">
 
@@ -1088,6 +2376,7 @@ export default function Wallet() {
 
                 </div>
 
+
                 <button
                   type="button"
                   className="icon-action-btn"
@@ -1105,6 +2394,7 @@ export default function Wallet() {
               </div>
 
             </div>
+
 
             {/* CONTRACT */}
 
@@ -1138,6 +2428,7 @@ export default function Wallet() {
 
               </div>
 
+
               <div className="contract-actions">
 
                 <button
@@ -1153,6 +2444,7 @@ export default function Wallet() {
                   Copy
                 </button>
 
+
                 <button
                   type="button"
                   className="small-outline-btn"
@@ -1167,13 +2459,17 @@ export default function Wallet() {
 
             </div>
 
+
             {/* COPY TOAST */}
 
             {copiedText && (
+
               <div className="wallet-toast">
                 {copiedText}
               </div>
+
             )}
+
 
             {/* CONNECTION ERROR */}
 
@@ -1182,22 +2478,29 @@ export default function Wallet() {
               <div className="wallet-error">
 
                 <div className="error-icon">
+
                   {errorType ===
                   "locked"
                     ? "🔒"
                     : "⚠️"}
+
                 </div>
 
+
                 <div className="error-title">
+
                   {errorType ===
                   "locked"
                     ? "Wallet already linked"
                     : "Connection issue"}
+
                 </div>
+
 
                 <div className="error-desc">
                   {connectError}
                 </div>
+
 
                 {(errorType ===
                   "locked" ||
@@ -1219,6 +2522,7 @@ export default function Wallet() {
                       </button>
 
                     )}
+
 
                     {errorType ===
                       "network_error" && (
@@ -1242,6 +2546,7 @@ export default function Wallet() {
 
             )}
 
+
             {!wallet ? (
 
               <div className="wallet-loading-card">
@@ -1260,6 +2565,7 @@ export default function Wallet() {
                     TOTAL BALANCE
                   </div>
 
+
                   <div className="wallet-balance-row">
 
                     <div className="balance-number">
@@ -1274,15 +2580,19 @@ export default function Wallet() {
 
                   </div>
 
+
                   {walletLocked && (
+
                     <div className="wallet-locked-pill">
                       🔒 Wallet Locked
                     </div>
+
                   )}
 
                 </div>
 
-                {/* GOAL */}
+
+                {/* WITHDRAW GOAL */}
 
                 <div className="withdraw-goal-card">
 
@@ -1300,14 +2610,18 @@ export default function Wallet() {
 
                     </div>
 
+
                     <div className="goal-percent-badge">
+
                       {progressPercent.toFixed(
                         1
                       )}
                       %
+
                     </div>
 
                   </div>
+
 
                   <div className="goal-progress-track">
 
@@ -1321,29 +2635,40 @@ export default function Wallet() {
 
                   </div>
 
+
                   <div className="goal-bottom-row">
 
                     <span>
+
                       {Number(
                         totalBalance
                       ).toFixed(0)}
+
                       {" / "}
+
                       {WITHDRAW_TARGET}
+
                       {" ECG"}
+
                     </span>
 
+
                     <span>
+
                       {Number(
                         remainingToUnlock
                       ).toFixed(0)}
+
                       {" ECG to go"}
+
                     </span>
 
                   </div>
 
                 </div>
 
-                {/* WITHDRAW BUTTON */}
+
+                {/* WITHDRAW */}
 
                 <button
                   className={`wallet-main-action ${
@@ -1367,6 +2692,7 @@ export default function Wallet() {
 
                   </span>
 
+
                   <span className="wallet-main-action-subtitle">
 
                     {canWithdraw
@@ -1376,6 +2702,7 @@ export default function Wallet() {
                   </span>
 
                 </button>
+
 
                 {/* DISCONNECT */}
 
@@ -1387,6 +2714,7 @@ export default function Wallet() {
                 >
                   Disconnect Wallet
                 </button>
+
 
                 {/* STATS */}
 
@@ -1408,6 +2736,7 @@ export default function Wallet() {
 
                   </div>
 
+
                   <div className="wallet-stat-card">
 
                     <div className="stat-icon">
@@ -1419,13 +2748,17 @@ export default function Wallet() {
                     </div>
 
                     <div className="stat-value">
+
                       {Number(
                         totalBalance
                       ).toFixed(0)}
+
                       {" ECG"}
+
                     </div>
 
                   </div>
+
 
                   <div className="wallet-stat-card">
 
@@ -1438,11 +2771,15 @@ export default function Wallet() {
                     </div>
 
                     <div className="stat-value">
+
                       {WITHDRAW_TARGET}
+
                       {" ECG"}
+
                     </div>
 
                   </div>
+
 
                   <div className="wallet-stat-card">
 
@@ -1472,599 +2809,653 @@ export default function Wallet() {
 
       </div>
 
-      {/* ===================================== */}
+
+      {/* ================================================= */}
       {/* WITHDRAW MODAL */}
-      {/* ===================================== */}
+      {/* ================================================= */}
 
       {isWithdrawOpen &&
         wallet && (
 
+        <div
+          className="modal-backdrop"
+          onClick={
+            closeWithdraw
+          }
+        >
+
           <div
-            className="modal-backdrop"
-            onClick={
-              closeWithdraw
+            className="modal"
+            onClick={(e) =>
+              e.stopPropagation()
             }
           >
 
-            <div
-              className="modal"
-              onClick={(e) =>
-                e.stopPropagation()
-              }
-            >
+            {/* HEADER */}
 
-              {/* HEADER */}
+            <div className="modal-header">
 
-              <div className="modal-header">
+              <h3>
+                Withdraw
+              </h3>
 
-                <h3>
-                  Withdraw
-                </h3>
+              <button
+                className="modal-close"
+                onClick={
+                  closeWithdraw
+                }
+                disabled={
+                  isWithdrawing
+                }
+              >
+                ×
+              </button>
+
+            </div>
+
+
+            {/* BODY */}
+
+            <div className="modal-body">
+
+              <label>
+                Withdrawal Method
+              </label>
+
+
+              {/* ASSET PICKER */}
+
+              <div className="asset-picker">
 
                 <button
-                  className="modal-close"
-                  onClick={
-                    closeWithdraw
+                  type="button"
+                  className={
+                    withdrawAsset ===
+                    "ECG"
+                      ? "selected"
+                      : ""
                   }
+                  onClick={() => {
+                    setWithdrawAsset(
+                      "ECG"
+                    );
+
+                    setDestinationWallet(
+                      ""
+                    );
+
+                    setAmount("");
+
+                    setWithdrawError(
+                      ""
+                    );
+                  }}
                   disabled={
                     isWithdrawing
                   }
                 >
-                  ×
+                  Withdraw with ECG
+                </button>
+
+
+                <button
+                  type="button"
+                  className={
+                    withdrawAsset ===
+                    "TON"
+                      ? "selected"
+                      : ""
+                  }
+                  onClick={() => {
+                    setWithdrawAsset(
+                      "TON"
+                    );
+
+                    setDestinationWallet(
+                      ""
+                    );
+
+                    setAmount("");
+
+                    setWithdrawError(
+                      ""
+                    );
+                  }}
+                  disabled={
+                    isWithdrawing
+                  }
+                >
+                  Withdraw with TON (Auto)
                 </button>
 
               </div>
 
-              {/* BODY */}
 
-              <div className="modal-body">
+              {/* DESTINATION */}
 
-                <label>
-                  Withdrawal Method
-                </label>
+              {withdrawAsset ===
+              "ECG" ? (
 
-                <div className="asset-picker">
+                <>
 
-                  {/* ECG */}
+                  <label htmlFor="withdraw-destination">
+                    ECG Wallet Address
+                  </label>
 
-                  <button
-                    type="button"
-                    className={
-                      withdrawAsset ===
-                      "ECG"
-                        ? "selected"
-                        : ""
-                    }
-                    onClick={() => {
-                      setWithdrawAsset(
-                        "ECG"
-                      );
-
-                      setDestinationWallet(
-                        ""
-                      );
-
-                      setAmount("");
-
-                      setWithdrawError(
-                        ""
-                      );
-                    }}
-                    disabled={
-                      isWithdrawing
-                    }
-                  >
-                    Withdraw with ECG
-                  </button>
-
-                  {/* TON */}
-
-                  <button
-                    type="button"
-                    className={
-                      withdrawAsset ===
-                      "TON"
-                        ? "selected"
-                        : ""
-                    }
-                    onClick={() => {
-                      setWithdrawAsset(
-                        "TON"
-                      );
-
-                      setDestinationWallet(
-                        ""
-                      );
-
-                      setAmount("");
-
-                      setWithdrawError(
-                        ""
-                      );
-                    }}
-                    disabled={
-                      isWithdrawing
-                    }
-                  >
-                    Withdraw with TON (Auto)
-                  </button>
-
-                </div>
-
-                {/* ECG DESTINATION */}
-
-                {withdrawAsset ===
-                "ECG" ? (
-
-                  <>
-
-                    <label htmlFor="withdraw-destination">
-                      ECG Wallet Address
-                    </label>
-
-                    <input
-                      id="withdraw-destination"
-                      type="text"
-                      value={
-                        destinationWallet
-                      }
-                      onChange={(e) =>
-                        setDestinationWallet(
-                          e.target
-                            .value
-                        )
-                      }
-                      placeholder="Enter destination ECG wallet address"
-                      disabled={
-                        isWithdrawing
-                      }
-                      autoComplete="off"
-                    />
-
-                  </>
-
-                ) : (
-
-                  <div className="ton-info">
-
-                    <div>
-                      Automatic destination:{" "}
-                      <b>
-                        {shortenMiddle(
-                          address,
-                          8,
-                          8
-                        )}
-                      </b>
-                    </div>
-
-                    <div>
-                      TON will be sent automatically to your connected wallet.
-                    </div>
-
-                  </div>
-
-                )}
-
-                {/* AMOUNT */}
-
-                <label htmlFor="withdraw-amount">
-
-                  {withdrawAsset ===
-                  "TON"
-                    ? "TON Amount"
-                    : "Withdrawable Amount (ECG)"}
-
-                </label>
-
-                <div className="amount-wrapper">
 
                   <input
-                    id="withdraw-amount"
-                    type="number"
-                    inputMode="decimal"
-                    value={amount}
+                    id="withdraw-destination"
+                    type="text"
+                    value={
+                      destinationWallet
+                    }
                     onChange={(e) =>
-                      setAmount(
-                        e.target.value
+                      setDestinationWallet(
+                        e.target
+                          .value
                       )
                     }
-                    placeholder={
-                      withdrawAsset ===
-                      "TON"
-                        ? "Minimum 1 TON"
-                        : "Minimum 60 ECG"
-                    }
-                    min={
-                      withdrawAsset ===
-                      "TON"
-                        ? "1"
-                        : "60"
-                    }
+                    placeholder="Enter destination ECG wallet address"
                     disabled={
                       isWithdrawing
                     }
+                    autoComplete="off"
                   />
 
-                  {/* TON MAX */}
+                </>
 
-                  {withdrawAsset ===
-                    "TON" && (
+              ) : (
 
-                    <button
-                      type="button"
-                      className="max-btn"
-                      onClick={() =>
-                        setAmount(
-                          withdrawableTon
-                        )
-                      }
-                      disabled={
-                        isWithdrawing
-                      }
-                    >
-                      MAX
-                    </button>
+                <div className="ton-info">
 
-                  )}
+                  <div>
 
-                  {/* ECG MAX */}
-
-                  {withdrawAsset ===
-                    "ECG" && (
-
-                    <button
-                      type="button"
-                      className="max-btn"
-                      onClick={() =>
-                        setAmount(
-                          Number(
-                            wallet?.withdrawable_total ||
-                              0
-                          )
-                        )
-                      }
-                      disabled={
-                        isWithdrawing
-                      }
-                    >
-                      MAX
-                    </button>
-
-                  )}
-
-                </div>
-
-                {/* ECG AVAILABLE */}
-
-                {withdrawAsset ===
-                  "ECG" && (
-
-                  <div className="max-balance-info">
-
-                    Available:{" "}
+                    Automatic destination:{" "}
 
                     <b>
-                      {Number(
-                        wallet?.withdrawable_total ||
-                          0
-                      ).toFixed(4)}
-                      {" ECG"}
+                      {shortenMiddle(
+                        address,
+                        8,
+                        8
+                      )}
                     </b>
 
                   </div>
 
-                )}
 
-                {/* TON INFO */}
+                  <div>
+                    TON will be sent automatically to your connected wallet.
+                  </div>
+
+                </div>
+
+              )}
+
+
+              {/* AMOUNT LABEL */}
+
+              <label htmlFor="withdraw-amount">
+
+                {withdrawAsset ===
+                "TON"
+                  ? "TON Amount"
+                  : "Withdrawable Amount (ECG)"}
+
+              </label>
+
+
+              {/* AMOUNT */}
+
+              <div className="amount-wrapper">
+
+                <input
+                  id="withdraw-amount"
+                  type="number"
+                  inputMode="decimal"
+                  value={
+                    amount
+                  }
+                  onChange={(e) =>
+                    setAmount(
+                      e.target.value
+                    )
+                  }
+                  placeholder={
+                    withdrawAsset ===
+                    "TON"
+                      ? "Minimum 1 TON"
+                      : "Minimum 60 ECG"
+                  }
+                  min={
+                    withdrawAsset ===
+                    "TON"
+                      ? "1"
+                      : "60"
+                  }
+                  disabled={
+                    isWithdrawing
+                  }
+                />
+
+
+                {/* TON MAX */}
 
                 {withdrawAsset ===
                   "TON" && (
 
-                  <div className="ton-info">
+                  <button
+                    type="button"
+                    className="max-btn"
+                    onClick={() =>
+                      setAmount(
+                        withdrawableTon
+                      )
+                    }
+                    disabled={
+                      isWithdrawing
+                    }
+                  >
+                    MAX
+                  </button>
 
-                    <div>
+                )}
 
-                      Withdrawable TON:{" "}
 
-                      <b>
-                        {withdrawableTon}
-                        {" TON"}
-                      </b>
+                {/* ECG MAX */}
 
-                    </div>
+                {withdrawAsset ===
+                  "ECG" && (
 
-                    <div>
-
-                      Based on:{" "}
-
-                      <b>
-                        {Number(
-                          wallet?.withdrawable_total ||
+                  <button
+                    type="button"
+                    className="max-btn"
+                    onClick={() =>
+                      setAmount(
+                        Number(
+                          wallet
+                            ?.withdrawable_total ||
                             0
-                        ).toFixed(2)}
-                        {" ECG"}
-                      </b>
-
-                    </div>
-
-                    <div>
-
-                      Minimum withdrawal:{" "}
-
-                      <b>
-                        1 TON
-                      </b>
-
-                    </div>
-
-                  </div>
+                        )
+                      )
+                    }
+                    disabled={
+                      isWithdrawing
+                    }
+                  >
+                    MAX
+                  </button>
 
                 )}
 
-                {/* ERROR */}
+              </div>
 
-                {withdrawError && (
 
-                  <div className="error-text">
+              {/* ECG INFO */}
 
-                    {withdrawError}
+              {withdrawAsset ===
+                "ECG" && (
+
+                <div className="max-balance-info">
+
+                  Available:{" "}
+
+                  <b>
+
+                    {Number(
+                      wallet
+                        ?.withdrawable_total ||
+                        0
+                    ).toFixed(4)}
+
+                    {" ECG"}
+
+                  </b>
+
+                </div>
+
+              )}
+
+
+              {/* TON INFO */}
+
+              {withdrawAsset ===
+                "TON" && (
+
+                <div className="ton-info">
+
+                  <div>
+
+                    Withdrawable TON:{" "}
+
+                    <b>
+                      {withdrawableTon}
+                      {" TON"}
+                    </b>
 
                   </div>
 
-                )}
 
-                {/* ===================================== */}
-                {/* WITHDRAW DEBUG LOG */}
-                {/* ===================================== */}
+                  <div>
+
+                    Based on:{" "}
+
+                    <b>
+
+                      {Number(
+                        wallet
+                          ?.withdrawable_total ||
+                          0
+                      ).toFixed(2)}
+
+                      {" ECG"}
+
+                    </b>
+
+                  </div>
+
+
+                  <div>
+
+                    Minimum withdrawal:{" "}
+
+                    <b>
+                      1 TON
+                    </b>
+
+                  </div>
+
+                </div>
+
+              )}
+
+
+              {/* WITHDRAW ERROR */}
+
+              {withdrawError && (
+
+                <div className="error-text">
+                  {withdrawError}
+                </div>
+
+              )}
+
+
+              {/* ================================================= */}
+              {/* DEEP DEBUG LOG */}
+              {/* ================================================= */}
+
+              <div
+                style={{
+                  marginTop:
+                    16,
+
+                  border:
+                    "1px solid rgba(255,255,255,0.18)",
+
+                  borderRadius:
+                    10,
+
+                  background:
+                    "#080b10",
+
+                  overflow:
+                    "hidden",
+                }}
+              >
+
+                {/* DEBUG HEADER */}
 
                 <div
                   style={{
-                    marginTop: 16,
+                    display:
+                      "flex",
 
-                    border:
-                      "1px solid rgba(255,255,255,0.18)",
+                    alignItems:
+                      "center",
 
-                    borderRadius:
-                      10,
+                    justifyContent:
+                      "space-between",
 
-                    background:
-                      "#080b10",
+                    gap:
+                      8,
 
-                    overflow:
-                      "hidden",
+                    padding:
+                      "10px 12px",
+
+                    borderBottom:
+                      "1px solid rgba(255,255,255,0.12)",
                   }}
                 >
 
-                  {/* DEBUG HEADER */}
+                  <b
+                    style={{
+                      fontSize:
+                        12,
+                    }}
+                  >
+                    Withdrawal Deep Debug
+                  </b>
+
 
                   <div
                     style={{
                       display:
                         "flex",
 
-                      alignItems:
-                        "center",
-
-                      justifyContent:
-                        "space-between",
-
-                      gap: 8,
-
-                      padding:
-                        "10px 12px",
-
-                      borderBottom:
-                        "1px solid rgba(255,255,255,0.12)",
+                      gap:
+                        6,
                     }}
                   >
 
-                    <b
-                      style={{
-                        fontSize:
-                          12,
-                      }}
-                    >
-                      Withdrawal Debug Log
-                    </b>
+                    {/* COPY */}
 
-                    <div
-                      style={{
-                        display:
-                          "flex",
-                        gap: 6,
-                      }}
-                    >
-
-                      {/* COPY DEBUG */}
-
-                      <button
-                        type="button"
-                        className="small-outline-btn"
-                        onClick={() =>
-                          copyText(
-                            "Debug log",
-                            withdrawDebugText
-                          )
-                        }
-                        disabled={
-                          !withdrawDebugLogs.length
-                        }
-                      >
-                        Copy
-                      </button>
-
-                      {/* CLEAR DEBUG */}
-
-                      <button
-                        type="button"
-                        className="small-outline-btn"
-                        onClick={() =>
-                          setWithdrawDebugLogs(
-                            []
-                          )
-                        }
-                        disabled={
-                          !withdrawDebugLogs.length ||
-                          isWithdrawing
-                        }
-                      >
-                        Clear
-                      </button>
-
-                    </div>
-
-                  </div>
-
-                  {/* DEBUG BODY */}
-
-                  <div
-                    style={{
-                      maxHeight:
-                        300,
-
-                      overflow:
-                        "auto",
-
-                      padding:
-                        10,
-
-                      fontFamily:
-                        "monospace",
-
-                      fontSize:
-                        11,
-
-                      lineHeight:
-                        1.5,
-
-                      whiteSpace:
-                        "pre-wrap",
-
-                      wordBreak:
-                        "break-word",
-
-                      textAlign:
-                        "left",
-                    }}
-                  >
-
-                    {!withdrawDebugLogs.length ? (
-
-                      <div
-                        style={{
-                          opacity:
-                            0.6,
-                        }}
-                      >
-                        Press the withdrawal button.
-                        Request / response / error details
-                        will appear here.
-                      </div>
-
-                    ) : (
-
-                      withdrawDebugLogs.map(
-                        (
-                          log,
-                          index
-                        ) => (
-
-                          <div
-                            key={`${log.time}-${index}`}
-                            style={{
-                              paddingBottom:
-                                9,
-
-                              marginBottom:
-                                9,
-
-                              borderBottom:
-                                index ===
-                                withdrawDebugLogs.length -
-                                  1
-                                  ? "none"
-                                  : "1px dashed rgba(255,255,255,0.10)",
-                            }}
-                          >
-
-                            <div>
-
-                              [
-                              {log.time}
-                              ]{" "}
-
-                              <b>
-                                {log.label}
-                              </b>
-
-                            </div>
-
-                            {log.details && (
-
-                              <div>
-                                {
-                                  log.details
-                                }
-                              </div>
-
-                            )}
-
-                          </div>
-
+                    <button
+                      type="button"
+                      className="small-outline-btn"
+                      onClick={() =>
+                        copyText(
+                          "Debug log",
+                          withdrawDebugText
                         )
-                      )
+                      }
+                      disabled={
+                        !withdrawDebugLogs.length
+                      }
+                    >
+                      Copy
+                    </button>
 
-                    )}
+
+                    {/* CLEAR */}
+
+                    <button
+                      type="button"
+                      className="small-outline-btn"
+                      onClick={() =>
+                        setWithdrawDebugLogs(
+                          []
+                        )
+                      }
+                      disabled={
+                        !withdrawDebugLogs.length ||
+                        isWithdrawing
+                      }
+                    >
+                      Clear
+                    </button>
 
                   </div>
 
                 </div>
 
-              </div>
 
-              {/* FOOTER */}
+                {/* DEBUG BODY */}
 
-              <div className="modal-footer">
+                <div
+                  style={{
+                    maxHeight:
+                      420,
 
-                <button
-                  className="btn-secondary"
-                  onClick={
-                    closeWithdraw
-                  }
-                  disabled={
-                    isWithdrawing
-                  }
+                    overflow:
+                      "auto",
+
+                    padding:
+                      10,
+
+                    fontFamily:
+                      "monospace",
+
+                    fontSize:
+                      11,
+
+                    lineHeight:
+                      1.5,
+
+                    whiteSpace:
+                      "pre-wrap",
+
+                    wordBreak:
+                      "break-word",
+
+                    textAlign:
+                      "left",
+                  }}
                 >
-                  Cancel
-                </button>
 
-                <button
-                  className="btn-primary"
-                  onClick={
-                    onWithdraw
-                  }
-                  disabled={
-                    isWithdrawing
-                  }
-                >
+                  {!withdrawDebugLogs.length ? (
 
-                  {isWithdrawing
-                    ? "Sending..."
-                    : withdrawAsset ===
-                      "TON"
-                    ? "Send TON Automatically"
-                    : "Confirm Withdrawal"}
+                    <div
+                      style={{
+                        opacity:
+                          0.6,
+                      }}
+                    >
+                      Press withdrawal. Deep request,
+                      Cloudflare, API health and automatic
+                      diagnosis logs will appear here.
+                    </div>
 
-                </button>
+                  ) : (
+
+                    withdrawDebugLogs.map(
+                      (
+                        log,
+                        index
+                      ) => (
+
+                        <div
+                          key={`${log.isoTime}-${index}`}
+                          style={{
+                            paddingBottom:
+                              9,
+
+                            marginBottom:
+                              9,
+
+                            borderBottom:
+                              index ===
+                              withdrawDebugLogs.length -
+                                1
+                                ? "none"
+                                : "1px dashed rgba(255,255,255,0.10)",
+                          }}
+                        >
+
+                          <div>
+
+                            [
+                            {log.time}
+                            ]{" "}
+
+                            <b>
+                              {log.label}
+                            </b>
+
+                          </div>
+
+
+                          {log.isoTime && (
+
+                            <div
+                              style={{
+                                opacity:
+                                  0.5,
+
+                                marginBottom:
+                                  3,
+                              }}
+                            >
+                              ISO: {log.isoTime}
+                            </div>
+
+                          )}
+
+
+                          {log.details && (
+
+                            <div>
+                              {log.details}
+                            </div>
+
+                          )}
+
+                        </div>
+
+                      )
+                    )
+
+                  )}
+
+                </div>
 
               </div>
 
             </div>
 
+
+            {/* FOOTER */}
+
+            <div className="modal-footer">
+
+              <button
+                className="btn-secondary"
+                onClick={
+                  closeWithdraw
+                }
+                disabled={
+                  isWithdrawing
+                }
+              >
+                Cancel
+              </button>
+
+
+              <button
+                className="btn-primary"
+                onClick={
+                  onWithdraw
+                }
+                disabled={
+                  isWithdrawing
+                }
+              >
+
+                {isWithdrawing
+                  ? "Sending / Diagnosing..."
+                  : withdrawAsset ===
+                    "TON"
+                  ? "Send TON Automatically"
+                  : "Confirm Withdrawal"}
+
+              </button>
+
+            </div>
+
           </div>
 
-        )}
+        </div>
+
+      )}
 
     </div>
   );
