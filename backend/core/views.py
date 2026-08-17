@@ -362,12 +362,40 @@ def _find_verified_gram_payment(
 
 @api_view(["POST"])
 def connect_wallet(request):
-    wallet_address = request.data.get("wallet_address")
+    wallet_address = str(
+        request.data.get("wallet_address", "") or ""
+    ).strip()
     inviter_code = request.data.get("inviter_code")
     telegram_id = request.data.get("telegram_id")
     telegram_username = request.data.get("telegram_username")
     telegram_photo_url = request.data.get("telegram_photo_url")
-    is_telegram = request.data.get("is_telegram", False)
+
+    def parse_bool(value):
+        if isinstance(value, bool):
+            return value
+        return str(value or "").strip().lower() in {
+            "1", "true", "yes", "on"
+        }
+
+    is_telegram = parse_bool(
+        request.data.get("is_telegram", False)
+    )
+    replace_wallet = parse_bool(
+        request.data.get("replace_wallet", False)
+    )
+    previous_wallet = str(
+        request.data.get("previous_wallet", "") or ""
+    ).strip()
+
+    logger.info(
+        "[CONNECT] wallet=%s telegram_id=%s is_telegram=%s "
+        "replace=%s previous=%s",
+        wallet_address,
+        telegram_id,
+        is_telegram,
+        replace_wallet,
+        previous_wallet or None,
+    )
 
     if not wallet_address:
         return Response(
@@ -381,17 +409,50 @@ def connect_wallet(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # SQLite allows only one writer at a time. A duplicate frontend mount or a
-    # concurrent write may briefly hold the file lock, so retry only this
-    # transient OperationalError. Referral registration itself is idempotent.
+    try:
+        telegram_id = int(telegram_id)
+    except (TypeError, ValueError):
+        return Response(
+            {"error": "Invalid telegram_id"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if replace_wallet:
+        if not is_telegram:
+            return Response(
+                {"error": "Wallet replacement requires Telegram authentication."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if not previous_wallet:
+            return Response(
+                {"error": "previous_wallet is required when replacing wallet."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
     max_attempts = 5
 
     for attempt in range(max_attempts):
         try:
+            old_wallet = None
+
+            if replace_wallet:
+                existing = (
+                    AppUser.objects
+                    .filter(telegram_id=telegram_id)
+                    .first()
+                )
+                if existing:
+                    old_wallet = existing.wallet_address
+
             user = get_or_create_user(
                 wallet_address=wallet_address,
-                telegram_id=int(telegram_id),
-                is_telegram=bool(is_telegram),
+                telegram_id=telegram_id,
+                is_telegram=is_telegram,
+                allow_wallet_replace=replace_wallet,
+                expected_previous_wallet=(
+                    previous_wallet if replace_wallet else None
+                ),
             )
 
             update_fields = []
@@ -408,32 +469,55 @@ def connect_wallet(request):
 
             if telegram_photo_url:
                 clean_photo = str(telegram_photo_url).strip()
-                if user.telegram_photo_url != clean_photo:
+                if clean_photo and user.telegram_photo_url != clean_photo:
                     user.telegram_photo_url = clean_photo
                     update_fields.append("telegram_photo_url")
 
             if update_fields:
                 user.save(update_fields=list(dict.fromkeys(update_fields)))
 
+            # Referral is attached only once. Replacing a wallet never creates a
+            # second referral relationship or a second referral bonus.
             if inviter_code and not user.inviter_id:
                 apply_referral(inviter_code, user)
 
+            actual_replaced = bool(
+                replace_wallet
+                and old_wallet
+                and old_wallet != user.wallet_address
+            )
+
+            logger.info(
+                "[CONNECT] success user_id=%s telegram_id=%s wallet=%s replaced=%s",
+                user.id,
+                user.telegram_id,
+                user.wallet_address,
+                actual_replaced,
+            )
+
             return Response(
                 {
+                    "success": True,
+                    "wallet_replaced": actual_replaced,
+                    "previous_wallet": old_wallet if actual_replaced else None,
                     "user": {
+                        "id": user.id,
                         "telegram_id": user.telegram_id,
                         "telegram_username": user.telegram_username,
                         "telegram_photo_url": user.telegram_photo_url,
                         "wallet_address": user.wallet_address,
                         "referral_code": user.referral_code,
                         "wallet_locked": user.wallet_locked,
-                    }
+                        "is_telegram": user.is_telegram_user,
+                        "telegram_verified": user.telegram_verified,
+                    },
                 },
                 status=status.HTTP_200_OK,
             )
 
         except OperationalError as exc:
             is_locked = "database is locked" in str(exc).lower()
+
             if not is_locked:
                 logger.exception("connect_wallet database error")
                 return Response(
@@ -464,18 +548,38 @@ def connect_wallet(request):
             time.sleep(delay)
 
         except (TypeError, ValueError) as exc:
-            logger.exception("connect_wallet validation error")
+            message = str(exc)
+            logger.warning("[CONNECT] validation/conflict: %s", message)
+
+            lower_message = message.lower()
+            if (
+                "already linked" in lower_message
+                or "currently linked" in lower_message
+                or "has changed" in lower_message
+            ):
+                return Response(
+                    {
+                        "error": message,
+                        "code": "wallet_conflict",
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+
             return Response(
-                {"error": str(exc)},
+                {"error": message},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        except Exception:
-            logger.exception("connect_wallet unexpected error")
+        except Exception as exc:
+            logger.exception("[CONNECT] unexpected error")
             return Response(
-                {"error": "Unable to connect wallet"},
+                {
+                    "error": "Unable to connect wallet",
+                    "detail": str(exc),
+                },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
 
 @api_view(["GET"])
 def wallet_view(request, wallet_address):
