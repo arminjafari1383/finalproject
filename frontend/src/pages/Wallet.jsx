@@ -9,7 +9,6 @@ import {
 
 const USER_DATA_KEY = "my_app_user_data";
 const INVITER_CODE_KEY = "inviter_code";
-const WALLET_REPLACE_STATE_KEY = "wallet_replace_state";
 const WITHDRAW_TARGET = 60;
 const ECG_PER_USDT = 312;
 
@@ -566,29 +565,6 @@ export default function Wallet() {
             );
         }
 
-
-        let replaceState = null;
-
-        try {
-          const rawReplaceState =
-            localStorage.getItem(
-              WALLET_REPLACE_STATE_KEY
-            );
-
-          replaceState =
-            rawReplaceState
-              ? JSON.parse(rawReplaceState)
-              : null;
-        } catch {
-          replaceState = null;
-        }
-
-        const isWalletReplacement =
-          Boolean(
-            replaceState?.previous_wallet &&
-            replaceState.previous_wallet !== address
-          );
-
         const payload = {
           wallet_address:
             address,
@@ -608,14 +584,6 @@ export default function Wallet() {
 
           is_telegram:
             isTelegram,
-
-          replace_wallet:
-            isWalletReplacement,
-
-          previous_wallet:
-            isWalletReplacement
-              ? replaceState.previous_wallet
-              : null,
         };
 
         console.log(
@@ -631,36 +599,10 @@ export default function Wallet() {
               payload
             );
 
-          if (
-            response?.data?.wallet_replaced
-          ) {
-            console.log(
-              "[WALLET_REPLACE] SUCCESS",
-              {
-                previous:
-                  response.data.previous_wallet,
-                current:
-                  response.data.user?.wallet_address,
-              }
-            );
-          }
 
-          // The replacement flow is complete once /connect/ succeeds,
-          // including when the user selected the same wallet again.
-          localStorage.removeItem(
-            WALLET_REPLACE_STATE_KEY
+          setWalletLocked(
+            Boolean(response.data?.user?.wallet_locked)
           );
-
-
-          if (
-            response.data
-              ?.user
-              ?.wallet_locked
-          ) {
-            setWalletLocked(
-              true
-            );
-          }
 
 
           if (
@@ -848,10 +790,6 @@ export default function Wallet() {
         INVITER_CODE_KEY
       );
 
-      localStorage.removeItem(
-        WALLET_REPLACE_STATE_KEY
-      );
-
       clearInviterCode();
 
       localStorage.removeItem(
@@ -886,24 +824,10 @@ export default function Wallet() {
       setErrorType("none");
 
       try {
-        const savedData =
-          loadUserDataFromStorage();
-
-        // Save the old wallet before disconnecting. The next /connect/ request
-        // uses this value to prove exactly which link is being replaced.
-        localStorage.setItem(
-          WALLET_REPLACE_STATE_KEY,
-          JSON.stringify({
-            previous_wallet: address,
-            telegram_id:
-              savedData?.telegramId || null,
-            started_at: Date.now(),
-          })
-        );
 
         console.log(
-          "[WALLET_REPLACE] pending",
-          { previous_wallet: address }
+          "[WALLET_CHANGE] disconnecting current wallet",
+          address
         );
 
         await tonConnectUI.disconnect();

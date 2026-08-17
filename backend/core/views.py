@@ -362,9 +362,17 @@ def _find_verified_gram_payment(
 
 @api_view(["POST"])
 def connect_wallet(request):
+    """
+    Connect a wallet to the Telegram identity.
+
+    There is no wallet-lock or explicit replacement flow anymore.
+    If the same telegram_id connects with another wallet_address, the same
+    AppUser is updated automatically by get_or_create_user().
+    """
     wallet_address = str(
         request.data.get("wallet_address", "") or ""
     ).strip()
+
     inviter_code = request.data.get("inviter_code")
     telegram_id = request.data.get("telegram_id")
     telegram_username = request.data.get("telegram_username")
@@ -380,21 +388,12 @@ def connect_wallet(request):
     is_telegram = parse_bool(
         request.data.get("is_telegram", False)
     )
-    replace_wallet = parse_bool(
-        request.data.get("replace_wallet", False)
-    )
-    previous_wallet = str(
-        request.data.get("previous_wallet", "") or ""
-    ).strip()
 
     logger.info(
-        "[CONNECT] wallet=%s telegram_id=%s is_telegram=%s "
-        "replace=%s previous=%s",
+        "[CONNECT_UNLOCKED] wallet=%s telegram_id=%s is_telegram=%s",
         wallet_address,
         telegram_id,
         is_telegram,
-        replace_wallet,
-        previous_wallet or None,
     )
 
     if not wallet_address:
@@ -417,48 +416,33 @@ def connect_wallet(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    if replace_wallet:
-        if not is_telegram:
-            return Response(
-                {"error": "Wallet replacement requires Telegram authentication."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        if not previous_wallet:
-            return Response(
-                {"error": "previous_wallet is required when replacing wallet."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
     max_attempts = 5
 
     for attempt in range(max_attempts):
         try:
-            old_wallet = None
+            previous_user = (
+                AppUser.objects
+                .filter(telegram_id=telegram_id)
+                .first()
+            )
 
-            if replace_wallet:
-                existing = (
-                    AppUser.objects
-                    .filter(telegram_id=telegram_id)
-                    .first()
-                )
-                if existing:
-                    old_wallet = existing.wallet_address
+            previous_wallet = (
+                previous_user.wallet_address
+                if previous_user
+                else None
+            )
 
             user = get_or_create_user(
                 wallet_address=wallet_address,
                 telegram_id=telegram_id,
                 is_telegram=is_telegram,
-                allow_wallet_replace=replace_wallet,
-                expected_previous_wallet=(
-                    previous_wallet if replace_wallet else None
-                ),
             )
 
             update_fields = []
 
             if telegram_username:
                 clean_username = str(telegram_username).strip().lstrip("@")
+
                 if (
                     clean_username
                     and not clean_username.startswith("browser_")
@@ -469,37 +453,50 @@ def connect_wallet(request):
 
             if telegram_photo_url:
                 clean_photo = str(telegram_photo_url).strip()
-                if clean_photo and user.telegram_photo_url != clean_photo:
+
+                if (
+                    clean_photo
+                    and user.telegram_photo_url != clean_photo
+                ):
                     user.telegram_photo_url = clean_photo
                     update_fields.append("telegram_photo_url")
+
+            # Keep wallet locking disabled even for legacy rows.
+            if user.wallet_locked:
+                user.wallet_locked = False
+                update_fields.append("wallet_locked")
 
             if update_fields:
                 user.save(update_fields=list(dict.fromkeys(update_fields)))
 
-            # Referral is attached only once. Replacing a wallet never creates a
-            # second referral relationship or a second referral bonus.
+            # Referral relationship remains one-time only. Wallet changes do not
+            # recreate inviter relationships or referral bonuses.
             if inviter_code and not user.inviter_id:
                 apply_referral(inviter_code, user)
 
-            actual_replaced = bool(
-                replace_wallet
-                and old_wallet
-                and old_wallet != user.wallet_address
+            wallet_changed = bool(
+                previous_wallet
+                and previous_wallet != user.wallet_address
             )
 
             logger.info(
-                "[CONNECT] success user_id=%s telegram_id=%s wallet=%s replaced=%s",
+                "[CONNECT_UNLOCKED] success user_id=%s telegram_id=%s "
+                "wallet=%s changed=%s",
                 user.id,
                 user.telegram_id,
                 user.wallet_address,
-                actual_replaced,
+                wallet_changed,
             )
 
             return Response(
                 {
                     "success": True,
-                    "wallet_replaced": actual_replaced,
-                    "previous_wallet": old_wallet if actual_replaced else None,
+                    "wallet_changed": wallet_changed,
+                    "previous_wallet": (
+                        previous_wallet
+                        if wallet_changed
+                        else None
+                    ),
                     "user": {
                         "id": user.id,
                         "telegram_id": user.telegram_id,
@@ -507,7 +504,7 @@ def connect_wallet(request):
                         "telegram_photo_url": user.telegram_photo_url,
                         "wallet_address": user.wallet_address,
                         "referral_code": user.referral_code,
-                        "wallet_locked": user.wallet_locked,
+                        "wallet_locked": False,
                         "is_telegram": user.is_telegram_user,
                         "telegram_verified": user.telegram_verified,
                     },
@@ -549,18 +546,13 @@ def connect_wallet(request):
 
         except (TypeError, ValueError) as exc:
             message = str(exc)
-            logger.warning("[CONNECT] validation/conflict: %s", message)
+            logger.warning("[CONNECT_UNLOCKED] validation/conflict: %s", message)
 
-            lower_message = message.lower()
-            if (
-                "already linked" in lower_message
-                or "currently linked" in lower_message
-                or "has changed" in lower_message
-            ):
+            if "another account" in message.lower():
                 return Response(
                     {
                         "error": message,
-                        "code": "wallet_conflict",
+                        "code": "wallet_collision",
                     },
                     status=status.HTTP_409_CONFLICT,
                 )
@@ -571,7 +563,7 @@ def connect_wallet(request):
             )
 
         except Exception as exc:
-            logger.exception("[CONNECT] unexpected error")
+            logger.exception("[CONNECT_UNLOCKED] unexpected error")
             return Response(
                 {
                     "error": "Unable to connect wallet",

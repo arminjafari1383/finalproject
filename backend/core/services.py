@@ -177,30 +177,39 @@ def get_or_create_user(
     wallet_address: str,
     telegram_id: int = None,
     is_telegram: bool = False,
-    allow_wallet_replace: bool = False,
-    expected_previous_wallet: str = None,
 ) -> AppUser:
+    """
+    Telegram ID is the primary identity.
+
+    Wallet locking/replacement restrictions are disabled:
+    - the same Telegram user may connect a different wallet at any time;
+    - no replace_wallet / previous_wallet flag is required;
+    - wallet_locked is always kept False;
+    - the same AppUser row is preserved, therefore balances, purchases,
+      ledgers, inviter and other FK-related data remain attached to the user.
+
+    We still reject a wallet that is already attached to a DIFFERENT AppUser.
+    That collision guard prevents two user rows from sharing/stealing the same
+    wallet identity and also avoids DB unique-constraint failures if the model
+    defines wallet_address as unique.
+    """
     wallet_address = str(wallet_address or "").strip()
-    expected_previous_wallet = str(expected_previous_wallet or "").strip()
 
     if telegram_id is not None:
         telegram_id = int(telegram_id)
 
     logger.info(
-        "[USER_CONNECT] wallet=%s telegram_id=%s is_telegram=%s "
-        "allow_replace=%s expected_previous=%s",
+        "[USER_CONNECT_UNLOCKED] wallet=%s telegram_id=%s is_telegram=%s",
         wallet_address,
         telegram_id,
         is_telegram,
-        allow_wallet_replace,
-        expected_previous_wallet or None,
     )
 
     if not wallet_address:
         raise ValueError("wallet_address required")
 
     # ------------------------------------------------------------------
-    # No Telegram identity: original browser-wallet behavior.
+    # No Telegram identity: keep browser-wallet behavior.
     # ------------------------------------------------------------------
     if not telegram_id:
         user = (
@@ -211,6 +220,10 @@ def get_or_create_user(
 
         if user:
             update_fields = _activity_fields(user)
+
+            if user.wallet_locked:
+                user.wallet_locked = False
+                update_fields.append("wallet_locked")
 
             if (
                 not user.telegram_username
@@ -235,11 +248,12 @@ def get_or_create_user(
             is_admin=False,
             telegram_username=f"user_{wallet_address[:8]}",
         )
+
         ensure_user_has_wallet(user)
         return user
 
     # ------------------------------------------------------------------
-    # Existing Telegram identity.
+    # Telegram identity is the main account identity.
     # ------------------------------------------------------------------
     existing_user_by_telegram = (
         AppUser.objects
@@ -248,10 +262,48 @@ def get_or_create_user(
     )
 
     if existing_user_by_telegram:
-        # Normal reconnect to the same wallet.
-        if existing_user_by_telegram.wallet_address == wallet_address:
-            user = existing_user_by_telegram
+        with transaction.atomic():
+            user = (
+                AppUser.objects
+                .select_for_update()
+                .get(pk=existing_user_by_telegram.pk)
+            )
+
+            old_wallet = str(user.wallet_address or "").strip()
+
+            # Collision guard only. This is NOT a replacement/lock restriction.
+            wallet_owner = (
+                AppUser.objects
+                .select_for_update()
+                .filter(wallet_address=wallet_address)
+                .exclude(pk=user.pk)
+                .first()
+            )
+
+            if wallet_owner:
+                raise ValueError(
+                    "This wallet is already used by another account."
+                )
+
             update_fields = _activity_fields(user)
+
+            if old_wallet != wallet_address:
+                user.wallet_address = wallet_address
+                update_fields.append("wallet_address")
+
+            # Wallet locking is disabled completely.
+            if user.wallet_locked:
+                user.wallet_locked = False
+                update_fields.append("wallet_locked")
+
+            if is_telegram:
+                if not user.is_telegram_user:
+                    user.is_telegram_user = True
+                    update_fields.append("is_telegram_user")
+
+                if not user.telegram_verified:
+                    user.telegram_verified = True
+                    update_fields.append("telegram_verified")
 
             if (
                 not user.telegram_username
@@ -264,112 +316,31 @@ def get_or_create_user(
                 )
                 update_fields.append("telegram_username")
 
-            if is_telegram:
-                if not user.is_telegram_user:
-                    user.is_telegram_user = True
-                    update_fields.append("is_telegram_user")
-
-                if not user.telegram_verified:
-                    user.telegram_verified = True
-                    update_fields.append("telegram_verified")
-
-            if not user.wallet_locked:
-                user.wallet_locked = True
-                update_fields.append("wallet_locked")
-
             if update_fields:
                 user.save(update_fields=list(dict.fromkeys(update_fields)))
 
             ensure_user_has_wallet(user)
-            return user
 
-        # A different wallet is still forbidden unless the request explicitly
-        # entered the replacement flow.
-        if not allow_wallet_replace:
-            raise ValueError(
-                "This Telegram ID is already linked to wallet: "
-                f"{existing_user_by_telegram.wallet_address[:6]}..."
-                f"{existing_user_by_telegram.wallet_address[-4:]}"
-            )
-
-        if not is_telegram:
-            raise ValueError(
-                "Wallet replacement requires Telegram authentication."
-            )
-
-        old_wallet = existing_user_by_telegram.wallet_address
-
-        if expected_previous_wallet and old_wallet != expected_previous_wallet:
-            raise ValueError(
-                "The currently linked wallet has changed. "
-                "Please restart wallet replacement."
-            )
-
-        # Keep the same AppUser row and therefore all FK-related business data.
-        with transaction.atomic():
-            user = (
-                AppUser.objects
-                .select_for_update()
-                .get(pk=existing_user_by_telegram.pk)
-            )
-
-            old_wallet = user.wallet_address
-
-            if expected_previous_wallet and old_wallet != expected_previous_wallet:
-                raise ValueError(
-                    "The currently linked wallet has changed. "
-                    "Please restart wallet replacement."
+            if old_wallet and old_wallet != wallet_address:
+                _sync_replaced_wallet_in_referral_tree(
+                    user=user,
+                    old_wallet=old_wallet,
+                    new_wallet=wallet_address,
                 )
 
-            # Never take a wallet that already belongs to another AppUser.
-            wallet_owner = (
-                AppUser.objects
-                .select_for_update()
-                .filter(wallet_address=wallet_address)
-                .exclude(pk=user.pk)
-                .first()
-            )
-
-            if wallet_owner:
-                raise ValueError(
-                    "The new wallet is already linked to another account."
+                logger.warning(
+                    "[WALLET_AUTO_CHANGED] user_id=%s telegram_id=%s old=%s new=%s",
+                    user.id,
+                    telegram_id,
+                    old_wallet,
+                    wallet_address,
                 )
-
-            user.wallet_address = wallet_address
-            user.wallet_locked = True
-            user.is_telegram_user = True
-            user.telegram_verified = True
-
-            update_fields = [
-                "wallet_address",
-                "wallet_locked",
-                "is_telegram_user",
-                "telegram_verified",
-                *_activity_fields(user),
-            ]
-
-            user.save(update_fields=list(dict.fromkeys(update_fields)))
-            ensure_user_has_wallet(user)
-
-            _sync_replaced_wallet_in_referral_tree(
-                user=user,
-                old_wallet=old_wallet,
-                new_wallet=wallet_address,
-            )
-
-            logger.warning(
-                "[WALLET_REPLACE] SUCCESS user_id=%s telegram_id=%s "
-                "old_wallet=%s new_wallet=%s",
-                user.id,
-                telegram_id,
-                old_wallet,
-                wallet_address,
-            )
 
             return user
 
     # ------------------------------------------------------------------
-    # New Telegram identity but wallet already exists.
+    # Telegram user does not exist yet. The wallet may be a browser-created
+    # row. Claim that row only if it has no different Telegram identity.
     # ------------------------------------------------------------------
     existing_user_by_wallet = (
         AppUser.objects
@@ -378,13 +349,28 @@ def get_or_create_user(
     )
 
     if existing_user_by_wallet:
+        if (
+            existing_user_by_wallet.telegram_id
+            and existing_user_by_wallet.telegram_id != telegram_id
+        ):
+            raise ValueError(
+                "This wallet is already used by another account."
+            )
+
         user = existing_user_by_wallet
         update_fields = _activity_fields(user)
 
-        if user.telegram_id and user.telegram_id != telegram_id:
-            raise ValueError(
-                "This wallet is already linked to another Telegram account."
-            )
+        user.telegram_id = telegram_id
+        user.is_telegram_user = True
+        user.telegram_verified = True
+        user.wallet_locked = False
+
+        update_fields.extend([
+            "telegram_id",
+            "is_telegram_user",
+            "telegram_verified",
+            "wallet_locked",
+        ])
 
         if (
             not user.telegram_username
@@ -396,17 +382,6 @@ def get_or_create_user(
                 else f"user_{wallet_address[:8]}"
             )
             update_fields.append("telegram_username")
-
-        user.telegram_id = telegram_id
-        user.is_telegram_user = True
-        user.telegram_verified = True
-        user.wallet_locked = True
-        update_fields.extend([
-            "telegram_id",
-            "is_telegram_user",
-            "telegram_verified",
-            "wallet_locked",
-        ])
 
         user.save(update_fields=list(dict.fromkeys(update_fields)))
         ensure_user_has_wallet(user)
@@ -420,7 +395,7 @@ def get_or_create_user(
         telegram_id=telegram_id,
         is_telegram_user=True,
         telegram_verified=True,
-        wallet_locked=True,
+        wallet_locked=False,
         is_active=True,
         is_admin=False,
         telegram_username=(
