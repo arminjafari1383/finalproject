@@ -662,9 +662,11 @@ def create_purchase(request):
                     status=status.HTTP_409_CONFLICT,
                 )
 
-            serialized = PurchaseSerializer(
-                existing
-            ).data
+            serialized = dict(
+                PurchaseSerializer(existing).data
+            )
+            serialized["created_at"] = existing.created_at
+            serialized["lock_period_days"] = 365
 
             return Response(
                 {
@@ -705,9 +707,11 @@ def create_purchase(request):
 
             purchase = existing
 
-        serialized = PurchaseSerializer(
-            purchase
-        ).data
+        serialized = dict(
+            PurchaseSerializer(purchase).data
+        )
+        serialized["created_at"] = purchase.created_at
+        serialized["lock_period_days"] = 365
 
         logger.info(
             "✅ REAL INVOICE CREATED AUTOMATICALLY: %s",
@@ -781,7 +785,16 @@ def list_purchases(request):
         user = get_or_create_user(wallet_address, telegram_id=None, is_telegram=False)
     
     qs = user.purchases.order_by("-created_at")
-    return Response(PurchaseSerializer(qs, many=True).data)
+
+    serialized = list(
+        PurchaseSerializer(qs, many=True).data
+    )
+
+    for item, purchase in zip(serialized, qs):
+        item["created_at"] = purchase.created_at
+        item["lock_period_days"] = 365
+
+    return Response(serialized)
 
 
 @api_view(["POST"])

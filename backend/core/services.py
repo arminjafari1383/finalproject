@@ -31,6 +31,7 @@ ECG_PER_USD = Decimal("312")
 
 SELF_BONUS_RATE = Decimal("0.05")
 UPLINE_RATE = Decimal("0.05")
+INDIRECT_UPLINE_RATE = Decimal("0.01")
 
 REFERRAL_TOKEN_REWARD = Decimal("3")
 
@@ -743,8 +744,18 @@ def update_user_investment(
                     == user.wallet_address
                 ):
 
+                    current_investment = Decimal(
+                        str(
+                            users[i].get(
+                                "investment",
+                                0,
+                            )
+                        )
+                    )
+
+                    # Referral Tree shows the user's cumulative investment.
                     users[i]["investment"] = float(
-                        amount
+                        current_investment + Decimal(str(amount))
                     )
 
                     if (
@@ -966,6 +977,7 @@ def credit_direct_upline_purchase_bonus(
             "invoice": invoice_no,
             "tx": tx_hash,
             "currency": currency,
+            "level": 1,
             "rate": "5%",
             "is_test": is_test,
         },
@@ -997,6 +1009,137 @@ def credit_direct_upline_purchase_bonus(
         "balance_before": str(before),
         "balance_after": str(after),
     }
+
+
+# ============================================================
+# Indirect uplines: Level 2 -> Level 5 = 1% each
+# ============================================================
+
+@transaction.atomic
+def credit_indirect_upline_purchase_bonuses(
+    buyer: AppUser,
+    purchase_ecg_value: Decimal,
+    invoice_no: str,
+    tx_hash: str,
+    currency: str,
+    is_test: bool = False,
+):
+    """
+    Credit 1% of the purchase ECG value to each indirect upline
+    from referral Level 2 through Level 5.
+
+    Each level is idempotent per invoice, and ReferralLevel.profit is
+    updated for the exact downline row shown in Referrals.jsx.
+    """
+
+    purchase_ecg_value = Decimal(str(purchase_ecg_value))
+
+    if purchase_ecg_value <= 0:
+        return []
+
+    # Level 1 is handled by credit_direct_upline_purchase_bonus (5%).
+    direct_inviter = buyer.inviter
+    current = direct_inviter.inviter if direct_inviter else None
+    level = 2
+    results = []
+
+    while current and level <= 5:
+        bonus = (purchase_ecg_value * INDIRECT_UPLINE_RATE)
+
+        ensure_user_has_wallet(current)
+
+        already_credited = (
+            Ledger.objects
+            .filter(
+                user=current,
+                typ="DOWNLINE_PROFIT",
+                meta__invoice=invoice_no,
+                meta__level=level,
+            )
+            .exists()
+        )
+
+        if already_credited:
+            results.append({
+                "level": level,
+                "credited": False,
+                "reason": "already_credited",
+                "upline": current.wallet_address,
+            })
+            current = current.inviter
+            level += 1
+            continue
+
+        wallet = (
+            Wallet.objects
+            .select_for_update()
+            .get(user=current)
+        )
+
+        before = Decimal(
+            str(
+                wallet.downline_profit_instant
+                or Decimal("0")
+            )
+        )
+        after = before + bonus
+
+        wallet.downline_profit_instant = after
+        wallet.save(
+            update_fields=[
+                "downline_profit_instant",
+                "updated_at",
+            ]
+        )
+
+        Ledger.objects.create(
+            user=current,
+            typ="DOWNLINE_PROFIT",
+            amount=bonus,
+            meta={
+                "from": buyer.wallet_address,
+                "invoice": invoice_no,
+                "tx": tx_hash,
+                "currency": currency,
+                "level": level,
+                "rate": "1%",
+                "is_test": is_test,
+            },
+        )
+
+        update_level_profit(
+            current,
+            level,
+            buyer.wallet_address,
+            bonus,
+        )
+
+        logger.info(
+            "[UPLINE1] CREDITED buyer=%s upline=%s level=%s "
+            "invoice=%s bonus=%s before=%s after=%s",
+            buyer.wallet_address,
+            current.wallet_address,
+            level,
+            invoice_no,
+            bonus,
+            before,
+            after,
+        )
+
+        results.append({
+            "level": level,
+            "credited": True,
+            "upline": current.wallet_address,
+            "bonus": str(bonus),
+            "balance_before": str(before),
+            "balance_after": str(after),
+        })
+
+        current = current.inviter
+        level += 1
+
+    return results
+
 
 # ============================================================
 # TON price
@@ -1318,21 +1461,19 @@ def register_purchase(
         ton_amount,
     )
 
-    level_obj = (
-        ReferralLevel.objects
-        .filter(user=user)
-        .first()
+    indirect_results = credit_indirect_upline_purchase_bonuses(
+        buyer=user,
+        purchase_ecg_value=ecg_value,
+        invoice_no=invoice_no,
+        tx_hash=ton_tx_hash,
+        currency="TON",
+        is_test=is_test,
     )
 
-    if (
-        level_obj
-        and level_obj.level_5_count > 0
-    ):
-
-        distribute_level_5_purchase(
-            user,
-            ecg_value,
-        )
+    logger.info(
+        "[BUY] indirect upline 1%% results: %s",
+        indirect_results,
+    )
 
     update_user_total_investment(
         user
@@ -1490,21 +1631,19 @@ def register_purchase_usdt(
         usdt_amount,
     )
 
-    level_obj = (
-        ReferralLevel.objects
-        .filter(user=user)
-        .first()
+    indirect_results = credit_indirect_upline_purchase_bonuses(
+        buyer=user,
+        purchase_ecg_value=ecg_value,
+        invoice_no=invoice_no,
+        tx_hash=usdt_tx_hash,
+        currency="USDT",
+        is_test=is_test,
     )
 
-    if (
-        level_obj
-        and level_obj.level_5_count > 0
-    ):
-
-        distribute_level_5_purchase(
-            user,
-            ecg_value,
-        )
+    logger.info(
+        "[REGISTER_PURCHASE_USDT] indirect upline 1%% results: %s",
+        indirect_results,
+    )
 
     update_user_total_investment(
         user
@@ -1662,21 +1801,19 @@ def register_purchase_bnb(
         bnb_amount,
     )
 
-    level_obj = (
-        ReferralLevel.objects
-        .filter(user=user)
-        .first()
+    indirect_results = credit_indirect_upline_purchase_bonuses(
+        buyer=user,
+        purchase_ecg_value=ecg_value,
+        invoice_no=invoice_no,
+        tx_hash=bnb_tx_hash,
+        currency="BNB",
+        is_test=is_test,
     )
 
-    if (
-        level_obj
-        and level_obj.level_5_count > 0
-    ):
-
-        distribute_level_5_purchase(
-            user,
-            ecg_value,
-        )
+    logger.info(
+        "[REGISTER_PURCHASE_BNB] indirect upline 1%% results: %s",
+        indirect_results,
+    )
 
     update_user_total_investment(
         user

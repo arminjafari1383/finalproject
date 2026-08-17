@@ -376,6 +376,8 @@ export default function Purchase() {
       ton_amount: String(payment?.ton_amount || "0"),
       ecg_value: ecg ? ecg.toFixed(2) : "-",
       self_profit_5: profit ? profit.toFixed(2) : "-",
+      created_at: new Date(createdAt).toISOString(),
+      lock_period_days: 365,
       principal_unlock_at: "Waiting for blockchain confirmation",
       self_profit_unlock_at: "Waiting for blockchain confirmation",
       ton_tx_hash: "",
@@ -1068,6 +1070,18 @@ export default function Purchase() {
       pendingInvoice,
     ]);
 
+  function formatInvoiceDate(value) {
+    if (!value) return "-";
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return String(value);
+    }
+
+    return date.toLocaleString();
+  }
+
   function Row({
     label,
     value,
@@ -1737,6 +1751,13 @@ export default function Purchase() {
 
                       <div className="invoice-body">
                         <Row
+                          label="Invoice Date"
+                          value={formatInvoiceDate(
+                            item.created_at
+                          )}
+                        />
+
+                        <Row
                           label="TON Amount"
                           value={
                             amount
@@ -1770,17 +1791,22 @@ export default function Purchase() {
                         />
 
                         <Row
+                          label="Investment Lock"
+                          value="1 Year"
+                        />
+
+                        <Row
                           label="Principal Unlock"
-                          value={
+                          value={formatInvoiceDate(
                             item.principal_unlock_at
-                          }
+                          )}
                         />
 
                         <Row
                           label="Profit Unlock"
-                          value={
+                          value={formatInvoiceDate(
                             item.self_profit_unlock_at
-                          }
+                          )}
                         />
                       </div>
 

@@ -1783,8 +1783,8 @@ export default function Referrals() {
   ) {
     const levelProfitMessage =
       level === 1
-        ? "Invite your friends and earn 5% profit from their activity."
-        : "Earn 1% profit from referrals in this level.";
+        ? "Earn 5% from each direct referral purchase."
+        : "Earn 1% from each purchase made by referrals in this level.";
 
     if (!data) {
       return (
@@ -1867,7 +1867,7 @@ export default function Referrals() {
                 <th>
                   {level === 1
                     ? "5% Profit (ECG)"
-                    : "Profit (ECG)"}
+                    : "1% Profit (ECG)"}
                 </th>
               </tr>
             </thead>
