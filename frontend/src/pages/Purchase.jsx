@@ -22,12 +22,7 @@ export default function Purchase() {
   const [tonPrice, setTonPrice] = useState(null);
   const [priceError, setPriceError] = useState("");
 
-  // =========================
-  // GRAM DEBUG
-  // =========================
-
-  const [debugLogs, setDebugLogs] = useState([]);
-
+  // GRAM transaction data returned by Backend.
   // این دو مقدار فقط از Backend می‌آیند
   const [gramAddress, setGramAddress] = useState("");
   const [gramAmount, setGramAmount] = useState("");
@@ -41,41 +36,9 @@ export default function Purchase() {
   const ECG_PER_USDT = 312;
   const PENDING_PAYMENT_PREFIX = "gram_pending_payment:";
 
-  // =========================
-  // DEBUG HELPERS
-  // =========================
-
-  function safeStringify(value) {
-    try {
-      return JSON.stringify(
-        value,
-        (_, v) => {
-          if (typeof v === "bigint") {
-            return v.toString();
-          }
-
-          return v;
-        },
-        2
-      );
-    } catch (error) {
-      return String(value);
-    }
-  }
-
-  function addDebug(label, value = "") {
-    const time = new Date().toLocaleTimeString();
-
-    const text =
-      value === ""
-        ? label
-        : `${label}: ${safeStringify(value)}`;
-
-    setDebugLogs((prev) => [
-      ...prev,
-      `[${time}] ${text}`,
-    ]);
-  }
+  // Payment debug panel was intentionally removed.
+  // Keep calls harmless without accumulating logs in React state.
+  function addDebug() {}
 
   function getErrorDetails(error) {
     return {
@@ -696,8 +659,6 @@ export default function Purchase() {
   }, [walletAddress]);
 
   async function payAndRegister() {
-    setDebugLogs([]);
-
     addDebug(
       "===================================="
     );
@@ -1088,6 +1049,22 @@ export default function Purchase() {
     return date.toLocaleString();
   }
 
+  async function copyTxHash(value) {
+    const hash = String(value || "").trim();
+
+    if (!hash || hash === "-") {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(hash);
+      showSuccess("✅ TX Hash copied");
+    } catch (error) {
+      console.error("Could not copy TX Hash:", error);
+      showSuccess("❌ Could not copy TX Hash");
+    }
+  }
+
   function Row({
     label,
     value,
@@ -1160,213 +1137,6 @@ export default function Purchase() {
                   : "Payment sent — confirming invoice on blockchain..."}
               </div>
             )}
-
-            {/* =========================
-                DEBUG PANEL
-            ========================= */}
-
-            <div
-              style={{
-                margin: "16px 0",
-                padding: 14,
-                border:
-                  "1px solid #334155",
-                borderRadius: 12,
-                background:
-                  "#020617",
-                color:
-                  "#e2e8f0",
-              }}
-            >
-              <div
-                style={{
-                  display:
-                    "flex",
-                  alignItems:
-                    "center",
-                  justifyContent:
-                    "space-between",
-                  gap: 10,
-                  marginBottom:
-                    10,
-                }}
-              >
-                <strong>
-                  🧪 Payment Debug Log
-                </strong>
-
-                <div
-                  style={{
-                    display:
-                      "flex",
-                    gap: 8,
-                  }}
-                >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigator
-                        .clipboard
-                        ?.writeText(
-                          debugLogs.join(
-                            "\n"
-                          )
-                        )
-                        .catch(
-                          () => {}
-                        );
-                    }}
-                    style={{
-                      cursor:
-                        "pointer",
-                    }}
-                  >
-                    Copy Log
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setDebugLogs(
-                        []
-                      )
-                    }
-                    style={{
-                      cursor:
-                        "pointer",
-                    }}
-                  >
-                    Clear
-                  </button>
-                </div>
-              </div>
-
-              <div
-                style={{
-                  marginBottom:
-                    10,
-                  opacity: 0.7,
-                  fontSize:
-                    12,
-                }}
-              >
-                GRAM merchant address is received
-                only from Backend.
-              </div>
-
-              {/* USER WALLET */}
-
-              <div
-                style={{
-                  marginBottom:
-                    8,
-                }}
-              >
-                <b>
-                  USER Wallet:
-                </b>{" "}
-
-                <span
-                  style={{
-                    wordBreak:
-                      "break-all",
-                  }}
-                >
-                  {walletAddress ||
-                    "-"}
-                </span>
-              </div>
-
-              {/* GRAM ADDRESS */}
-
-              <div
-                style={{
-                  marginBottom:
-                    8,
-                }}
-              >
-                <b>
-                  GRAM Merchant Address:
-                </b>{" "}
-
-                <span
-                  style={{
-                    wordBreak:
-                      "break-all",
-                  }}
-                >
-                  {gramAddress ||
-                    "Waiting for backend..."}
-                </span>
-              </div>
-
-              {/* GRAM AMOUNT */}
-
-              <div
-                style={{
-                  marginBottom:
-                    12,
-                }}
-              >
-                <b>
-                  GRAM Amount:
-                </b>{" "}
-
-                <span
-                  style={{
-                    wordBreak:
-                      "break-all",
-                  }}
-                >
-                  {gramAmount ||
-                    "Waiting for backend..."}
-
-                  {gramAmount
-                    ? ` nanoTON (≈ ${
-                        Number(
-                          gramAmount
-                        ) /
-                        1e9
-                      } TON)`
-                    : ""}
-                </span>
-              </div>
-
-              {/* RAW DEBUG LOG */}
-
-              <pre
-                style={{
-                  margin: 0,
-                  padding: 12,
-                  minHeight:
-                    150,
-                  maxHeight:
-                    520,
-                  overflow:
-                    "auto",
-                  whiteSpace:
-                    "pre-wrap",
-                  wordBreak:
-                    "break-word",
-                  borderRadius:
-                    8,
-                  background:
-                    "#000",
-                  color:
-                    "#d1fae5",
-                  fontSize:
-                    12,
-                  lineHeight:
-                    1.5,
-                }}
-              >
-                {debugLogs.length
-                  ? debugLogs.join(
-                      "\n"
-                    )
-                  : "Press Stake TON to start debug logging..."}
-              </pre>
-            </div>
 
             {/* =========================
                 CHART
@@ -1818,27 +1588,46 @@ export default function Purchase() {
 
                       <div
                         className="invoice-tx"
-                        title={
-                          txHash
-                        }
+                        title={txHash}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 10,
+                          flexWrap: "wrap",
+                        }}
                       >
-                        TX:{" "}
-                        <b>
-                          {isPending
-                            ? item.__message_hash
-                              ? `${item.__message_hash.slice(
-                                  0,
-                                  12
-                                )}... (message)`
-                              : "Waiting for TX hash..."
-                            : typeof txHash ===
-                              "string"
-                              ? `${txHash.slice(
-                                  0,
-                                  12
-                                )}...`
-                              : "-"}
-                        </b>
+                        <span>
+                          TX:{" "}
+                          <b>
+                            {isPending
+                              ? item.__message_hash
+                                ? `${item.__message_hash.slice(
+                                    0,
+                                    12
+                                  )}... (message)`
+                                : "Waiting for TX hash..."
+                              : typeof txHash === "string"
+                                ? `${txHash.slice(0, 12)}...`
+                                : "-"}
+                          </b>
+                        </span>
+
+                        {!isPending && txHash !== "-" && (
+                          <button
+                            type="button"
+                            onClick={() => copyTxHash(txHash)}
+                            title="Copy full TX Hash"
+                            style={{
+                              cursor: "pointer",
+                              padding: "6px 10px",
+                              borderRadius: 8,
+                              fontSize: 12,
+                            }}
+                          >
+                            Copy TX Hash
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
