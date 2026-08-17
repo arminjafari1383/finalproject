@@ -28,7 +28,11 @@ const saveUserDataToStorage = (newData) => {
   try {
     const currentData = loadUserDataFromStorage() || {};
     const mergedData = { ...currentData, ...newData };
-    localStorage.setItem(USER_DATA_KEY, JSON.stringify(mergedData));
+
+    localStorage.setItem(
+      USER_DATA_KEY,
+      JSON.stringify(mergedData)
+    );
   } catch (e) {
     console.error("Error saving to localStorage:", e);
   }
@@ -36,28 +40,89 @@ const saveUserDataToStorage = (newData) => {
 
 const shortenMiddle = (value, start = 6, end = 6) => {
   if (!value) return "-";
-  if (value.length <= start + end + 3) return value;
+
+  if (value.length <= start + end + 3) {
+    return value;
+  }
+
   return `${value.slice(0, start)}...${value.slice(-end)}`;
 };
 
 export default function Wallet() {
   const tonWallet = useTonWallet();
-  const address = useMemo(() => tonWallet?.account?.address, [tonWallet]);
+
+  const address = useMemo(
+    () => tonWallet?.account?.address,
+    [tonWallet]
+  );
+
   const hasConnected = useRef(false);
 
   const [wallet, setWallet] = useState(null);
   const [walletLocked, setWalletLocked] = useState(false);
+
   const [connectError, setConnectError] = useState("");
   const [errorType, setErrorType] = useState("none");
+
   const [copiedText, setCopiedText] = useState("");
 
   const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
+
   const [amount, setAmount] = useState("");
+
   const [tonPrice, setTonPrice] = useState(null);
+
   const [withdrawAsset, setWithdrawAsset] = useState("ECG");
-  const [destinationWallet, setDestinationWallet] = useState("");
+
+  const [destinationWallet, setDestinationWallet] =
+    useState("");
+
   const [withdrawError, setWithdrawError] = useState("");
-  const [isWithdrawing, setIsWithdrawing] = useState(false);
+
+  const [isWithdrawing, setIsWithdrawing] =
+    useState(false);
+
+  // ============================================
+  // WITHDRAW DEBUG LOG
+  // ============================================
+
+  const [
+    withdrawDebugLogs,
+    setWithdrawDebugLogs,
+  ] = useState([]);
+
+  const addWithdrawDebugLog = useCallback(
+    (label, data = null) => {
+      const time = new Date().toLocaleTimeString();
+
+      let details = "";
+
+      if (data !== null && data !== undefined) {
+        try {
+          details =
+            typeof data === "string"
+              ? data
+              : JSON.stringify(data, null, 2);
+        } catch {
+          details = String(data);
+        }
+      }
+
+      setWithdrawDebugLogs((prev) => [
+        ...prev.slice(-29),
+        {
+          time,
+          label,
+          details,
+        },
+      ]);
+    },
+    []
+  );
+
+  // ============================================
+  // GET TON PRICE
+  // ============================================
 
   useEffect(() => {
     async function getTonPrice() {
@@ -65,8 +130,12 @@ export default function Wallet() {
         const res = await fetch(
           "https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd"
         );
+
         const data = await res.json();
-        setTonPrice(data?.["the-open-network"]?.usd || null);
+
+        setTonPrice(
+          data?.["the-open-network"]?.usd || null
+        );
       } catch (err) {
         console.log("TON price error", err);
       }
@@ -75,26 +144,50 @@ export default function Wallet() {
     getTonPrice();
   }, []);
 
+  // ============================================
+  // REFERRAL
+  // ============================================
+
   useEffect(() => {
     const inviterCode = captureInviterCode();
 
     if (inviterCode) {
-      localStorage.setItem("inviter_code", inviterCode);
+      localStorage.setItem(
+        "inviter_code",
+        inviterCode
+      );
     }
 
     const tg = window.Telegram?.WebApp;
+
     if (tg?.initDataUnsafe?.start_param) {
-      const startParamValue = tg.initDataUnsafe.start_param;
-      if (startParamValue && startParamValue.startsWith("ref_")) {
-        const refCode = startParamValue.replace("ref_", "");
-        localStorage.setItem("inviter_code", refCode);
+      const startParamValue =
+        tg.initDataUnsafe.start_param;
+
+      if (
+        startParamValue &&
+        startParamValue.startsWith("ref_")
+      ) {
+        const refCode =
+          startParamValue.replace("ref_", "");
+
+        localStorage.setItem(
+          "inviter_code",
+          refCode
+        );
       }
     }
   }, []);
 
+  // ============================================
+  // SAVE CONNECTED WALLET
+  // ============================================
+
   useEffect(() => {
     if (address) {
-      const currentData = loadUserDataFromStorage() || {};
+      const currentData =
+        loadUserDataFromStorage() || {};
+
       saveUserDataToStorage({
         ...currentData,
         walletAddress: address,
@@ -102,565 +195,1877 @@ export default function Wallet() {
     }
   }, [address]);
 
-  const connectAndLoadWallet = useCallback(async () => {
-    if (hasConnected.current || !address) return;
+  // ============================================
+  // CONNECT USER + LOAD WALLET
+  // ============================================
 
-    hasConnected.current = true;
-    setConnectError("");
-    setErrorType("none");
-
-    let inviter_code = localStorage.getItem("inviter_code");
-    if (!inviter_code) {
-      inviter_code = captureInviterCode();
-      if (inviter_code) {
-        localStorage.setItem("inviter_code", inviter_code);
-      }
-    }
-
-    let telegramId = null;
-    let telegramUsername = null;
-    let isTelegram = false;
-    let telegramPhotoUrl = null;
-
-    const savedData = loadUserDataFromStorage();
-
-    if (
-      savedData?.telegramId &&
-      Number.isInteger(Number(savedData.telegramId)) &&
-      Number(savedData.telegramId) > 0
-    ) {
-      telegramId = Number(savedData.telegramId);
-      telegramUsername = savedData.telegramUsername || null;
-      isTelegram = savedData.isTelegram || false;
-    } else {
-      const tg = window.Telegram?.WebApp;
-      if (tg?.initDataUnsafe?.user) {
-        const user = tg.initDataUnsafe.user;
-        telegramId = Number(user.id);
-        telegramUsername = user.username || null;
-        telegramPhotoUrl = user.photo_url || null;
-        isTelegram = true;
-
-        saveUserDataToStorage({
-          telegramId,
-          telegramUsername,
-          telegramPhotoUrl,
-          isTelegram: true,
-        });
-      } else if (address) {
-        let hash = 0;
-        for (let i = 0; i < address.length; i++) {
-          const char = address.charCodeAt(i);
-          hash = ((hash << 5) - hash) + char;
-          hash = hash & hash;
-        }
-        telegramId = Number(Math.abs(hash) + 1000000000000);
-        telegramUsername = `browser_${address.slice(0, 8)}`;
-        isTelegram = false;
-
-        saveUserDataToStorage({
-          telegramId,
-          telegramUsername,
-          isTelegram: false,
-          walletAddress: address,
-        });
-      }
-    }
-
-    if (!telegramId) {
-      telegramId = Number(Math.floor(Math.random() * 1000000000) + 100000000);
-    }
-
-    const payload = {
-      wallet_address: address,
-      inviter_code: inviter_code || null,
-      telegram_id: telegramId,
-      telegram_username: telegramUsername,
-      telegram_photo_url: telegramPhotoUrl,
-      is_telegram: isTelegram,
-    };
-
-    try {
-      const response = await api.post("/connect/", payload);
-
-      if (response.data?.user?.wallet_locked) {
-        setWalletLocked(true);
-      }
-
-      if (response.data?.user) {
-        const user = response.data.user;
-        saveUserDataToStorage({
-          telegramId: user.telegram_id || telegramId,
-          telegramUsername: user.telegram_username || telegramUsername,
-          isTelegram: user.is_telegram || isTelegram,
-          walletAddress: address,
-        });
-      }
-
-      const r = await api.get(`/wallet/${address}/`);
-      setWallet(r.data);
-      setErrorType("none");
-    } catch (e) {
-      const errorData = e?.response?.data;
-      const statusCode = e?.response?.status;
-      const isNetworkError =
-        e.message === "Network Error" ||
-        e.code === "ERR_NETWORK" ||
-        !e.response;
-
-      if (isNetworkError) {
-        setErrorType("network_error");
-        setConnectError("Network Error! Please check your internet connection.");
-      } else if (
-        errorData?.error?.includes("already linked") ||
-        errorData?.error?.includes("locked") ||
-        errorData?.detail?.includes("already linked")
+  const connectAndLoadWallet = useCallback(
+    async () => {
+      if (
+        hasConnected.current ||
+        !address
       ) {
-        setErrorType("locked");
-        setConnectError("This wallet is already linked to another Telegram account.");
-      } else if (statusCode === 400) {
-        setErrorType("bad_request");
-        const msg = errorData?.error || errorData?.detail || "Invalid wallet address format.";
-        setConnectError(`Bad Request: ${msg}`);
-      } else {
-        setErrorType("server_error");
-        const errorMessage =
-          errorData?.error || errorData?.detail || e?.message || "Server error.";
-        setConnectError(`Server Error: ${errorMessage}`);
+        return;
       }
 
-      if (statusCode !== 400 && !isNetworkError) {
-        try {
-          const r = await api.get(`/wallet/${address}/`);
-          setWallet(r.data);
-        } catch {
-          // ignore fallback error
+      hasConnected.current = true;
+
+      setConnectError("");
+      setErrorType("none");
+
+      let inviter_code =
+        localStorage.getItem("inviter_code");
+
+      if (!inviter_code) {
+        inviter_code =
+          captureInviterCode();
+
+        if (inviter_code) {
+          localStorage.setItem(
+            "inviter_code",
+            inviter_code
+          );
         }
       }
-    }
-  }, [address]);
+
+      let telegramId = null;
+      let telegramUsername = null;
+      let isTelegram = false;
+      let telegramPhotoUrl = null;
+
+      const savedData =
+        loadUserDataFromStorage();
+
+      if (
+        savedData?.telegramId &&
+        Number.isInteger(
+          Number(savedData.telegramId)
+        ) &&
+        Number(savedData.telegramId) > 0
+      ) {
+        telegramId =
+          Number(savedData.telegramId);
+
+        telegramUsername =
+          savedData.telegramUsername || null;
+
+        isTelegram =
+          savedData.isTelegram || false;
+      } else {
+        const tg =
+          window.Telegram?.WebApp;
+
+        if (
+          tg?.initDataUnsafe?.user
+        ) {
+          const user =
+            tg.initDataUnsafe.user;
+
+          telegramId =
+            Number(user.id);
+
+          telegramUsername =
+            user.username || null;
+
+          telegramPhotoUrl =
+            user.photo_url || null;
+
+          isTelegram = true;
+
+          saveUserDataToStorage({
+            telegramId,
+            telegramUsername,
+            telegramPhotoUrl,
+            isTelegram: true,
+          });
+        } else if (address) {
+          let hash = 0;
+
+          for (
+            let i = 0;
+            i < address.length;
+            i++
+          ) {
+            const char =
+              address.charCodeAt(i);
+
+            hash =
+              (hash << 5) -
+              hash +
+              char;
+
+            hash = hash & hash;
+          }
+
+          telegramId =
+            Number(
+              Math.abs(hash) +
+                1000000000000
+            );
+
+          telegramUsername =
+            `browser_${address.slice(
+              0,
+              8
+            )}`;
+
+          isTelegram = false;
+
+          saveUserDataToStorage({
+            telegramId,
+            telegramUsername,
+            isTelegram: false,
+            walletAddress: address,
+          });
+        }
+      }
+
+      if (!telegramId) {
+        telegramId =
+          Number(
+            Math.floor(
+              Math.random() *
+                1000000000
+            ) +
+              100000000
+          );
+      }
+
+      const payload = {
+        wallet_address: address,
+
+        inviter_code:
+          inviter_code || null,
+
+        telegram_id:
+          telegramId,
+
+        telegram_username:
+          telegramUsername,
+
+        telegram_photo_url:
+          telegramPhotoUrl,
+
+        is_telegram:
+          isTelegram,
+      };
+
+      try {
+        const response =
+          await api.post(
+            "/connect/",
+            payload
+          );
+
+        if (
+          response.data?.user
+            ?.wallet_locked
+        ) {
+          setWalletLocked(true);
+        }
+
+        if (
+          response.data?.user
+        ) {
+          const user =
+            response.data.user;
+
+          saveUserDataToStorage({
+            telegramId:
+              user.telegram_id ||
+              telegramId,
+
+            telegramUsername:
+              user.telegram_username ||
+              telegramUsername,
+
+            isTelegram:
+              user.is_telegram ||
+              isTelegram,
+
+            walletAddress:
+              address,
+          });
+        }
+
+        const r =
+          await api.get(
+            `/wallet/${address}/`
+          );
+
+        setWallet(r.data);
+
+        setErrorType("none");
+      } catch (e) {
+        const errorData =
+          e?.response?.data;
+
+        const statusCode =
+          e?.response?.status;
+
+        const isNetworkError =
+          e.message ===
+            "Network Error" ||
+          e.code ===
+            "ERR_NETWORK" ||
+          !e.response;
+
+        if (isNetworkError) {
+          setErrorType(
+            "network_error"
+          );
+
+          setConnectError(
+            "Network Error! Please check your internet connection."
+          );
+        } else if (
+          errorData?.error?.includes(
+            "already linked"
+          ) ||
+          errorData?.error?.includes(
+            "locked"
+          ) ||
+          errorData?.detail?.includes(
+            "already linked"
+          )
+        ) {
+          setErrorType("locked");
+
+          setConnectError(
+            "This wallet is already linked to another Telegram account."
+          );
+        } else if (
+          statusCode === 400
+        ) {
+          setErrorType(
+            "bad_request"
+          );
+
+          const msg =
+            errorData?.error ||
+            errorData?.detail ||
+            "Invalid wallet address format.";
+
+          setConnectError(
+            `Bad Request: ${msg}`
+          );
+        } else {
+          setErrorType(
+            "server_error"
+          );
+
+          const errorMessage =
+            errorData?.error ||
+            errorData?.detail ||
+            e?.message ||
+            "Server error.";
+
+          setConnectError(
+            `Server Error: ${errorMessage}`
+          );
+        }
+
+        if (
+          statusCode !== 400 &&
+          !isNetworkError
+        ) {
+          try {
+            const r =
+              await api.get(
+                `/wallet/${address}/`
+              );
+
+            setWallet(r.data);
+          } catch {
+            // ignore
+          }
+        }
+      }
+    },
+    [address]
+  );
 
   useEffect(() => {
     connectAndLoadWallet();
   }, [connectAndLoadWallet]);
 
+  // ============================================
+  // DISCONNECT
+  // ============================================
+
   const disconnectWallet = () => {
-    localStorage.removeItem("telegram_id");
-    localStorage.removeItem("inviter_code");
-    localStorage.removeItem(INVITER_CODE_KEY);
+    localStorage.removeItem(
+      "telegram_id"
+    );
+
+    localStorage.removeItem(
+      "inviter_code"
+    );
+
+    localStorage.removeItem(
+      INVITER_CODE_KEY
+    );
+
     clearInviterCode();
-    localStorage.removeItem(USER_DATA_KEY);
+
+    localStorage.removeItem(
+      USER_DATA_KEY
+    );
 
     setWallet(null);
+
     setWalletLocked(false);
+
     setConnectError("");
+
     setErrorType("none");
+
     hasConnected.current = false;
+
     window.location.reload();
   };
 
   const handleRetry = () => {
     setConnectError("");
+
     setErrorType("none");
+
     hasConnected.current = false;
+
     window.location.reload();
   };
 
-  const copyText = async (label, value) => {
+  // ============================================
+  // COPY
+  // ============================================
+
+  const copyText = async (
+    label,
+    value
+  ) => {
     if (!value) return;
+
     try {
-      await navigator.clipboard.writeText(String(value));
-      setCopiedText(`${label} copied`);
-      window.setTimeout(() => setCopiedText(""), 1800);
+      await navigator.clipboard.writeText(
+        String(value)
+      );
+
+      setCopiedText(
+        `${label} copied`
+      );
+
+      window.setTimeout(
+        () =>
+          setCopiedText(""),
+        1800
+      );
     } catch {
-      setCopiedText(`Could not copy ${label.toLowerCase()}`);
-      window.setTimeout(() => setCopiedText(""), 1800);
+      setCopiedText(
+        `Could not copy ${label.toLowerCase()}`
+      );
+
+      window.setTimeout(
+        () =>
+          setCopiedText(""),
+        1800
+      );
     }
   };
 
   const openContractLink = () => {
-    window.open(ECG_CONTRACT_LINK, "_blank", "noopener,noreferrer");
+    window.open(
+      ECG_CONTRACT_LINK,
+      "_blank",
+      "noopener,noreferrer"
+    );
   };
+
+  // ============================================
+  // WITHDRAW OPEN
+  // ============================================
 
   const openWithdraw = () => {
     setWithdrawError("");
+
     setAmount("");
+
     setWithdrawAsset("TON");
+
     setDestinationWallet("");
+
+    // Clear old debug
+    setWithdrawDebugLogs([]);
+
     setIsWithdrawOpen(true);
   };
 
   const closeWithdraw = () => {
-    if (isWithdrawing) return;
+    if (isWithdrawing) {
+      return;
+    }
+
     setIsWithdrawOpen(false);
   };
+
+  // ============================================
+  // TON CALCULATION
+  // ============================================
+
+  const withdrawableTon =
+    useMemo(() => {
+      const ecg =
+        Number(
+          wallet?.withdrawable_total ||
+            0
+        );
+
+      if (!tonPrice || !ecg) {
+        return "0.0000";
+      }
+
+      return (
+        ecg /
+        (
+          tonPrice *
+          ECG_PER_USDT
+        )
+      ).toFixed(4);
+    }, [wallet, tonPrice]);
+
+  // ============================================
+  // WITHDRAW
+  // ============================================
 
   const onWithdraw = async () => {
     setWithdrawError("");
 
-    const n = Number(amount);
-    if (!Number.isFinite(n) || n <= 0) {
-      return setWithdrawError("Invalid amount.");
+    const n =
+      Number(amount);
+
+    // ------------------------------------------
+    // INITIAL DEBUG
+    // ------------------------------------------
+
+    addWithdrawDebugLog(
+      "WITHDRAW CLICK",
+      {
+        asset:
+          withdrawAsset,
+
+        rawAmount:
+          amount,
+
+        parsedAmount:
+          n,
+
+        connectedWallet:
+          address || null,
+
+        destinationInput:
+          destinationWallet ||
+          null,
+
+        withdrawableECG:
+          Number(
+            wallet?.withdrawable_total ||
+              0
+          ),
+
+        calculatedWithdrawableTON:
+          withdrawableTon,
+
+        tonPrice,
+      }
+    );
+
+    // ------------------------------------------
+    // VALIDATION
+    // ------------------------------------------
+
+    if (
+      !Number.isFinite(n) ||
+      n <= 0
+    ) {
+      const message =
+        "Invalid amount.";
+
+      addWithdrawDebugLog(
+        "VALIDATION ERROR",
+        {
+          message,
+          amount,
+          parsed: n,
+        }
+      );
+
+      return setWithdrawError(
+        message
+      );
     }
 
     if (!address) {
-      return setWithdrawError("Please connect your wallet first.");
+      const message =
+        "Please connect your wallet first.";
+
+      addWithdrawDebugLog(
+        "VALIDATION ERROR",
+        message
+      );
+
+      return setWithdrawError(
+        message
+      );
     }
 
-    if (withdrawAsset === "TON" && n < 1) {
-      return setWithdrawError("Minimum automatic TON withdrawal is 1 TON.");
+    if (
+      withdrawAsset === "TON" &&
+      n < 1
+    ) {
+      const message =
+        "Minimum automatic TON withdrawal is 1 TON.";
+
+      addWithdrawDebugLog(
+        "VALIDATION ERROR",
+        {
+          message,
+          amount: n,
+          minimum: 1,
+        }
+      );
+
+      return setWithdrawError(
+        message
+      );
     }
 
-    if (withdrawAsset === "ECG") {
+    if (
+      withdrawAsset === "ECG"
+    ) {
       if (n < 60) {
-        return setWithdrawError("Minimum withdrawal is 60 ECG.");
+        const message =
+          "Minimum withdrawal is 60 ECG.";
+
+        addWithdrawDebugLog(
+          "VALIDATION ERROR",
+          {
+            message,
+            amount: n,
+            minimum: 60,
+          }
+        );
+
+        return setWithdrawError(
+          message
+        );
       }
-      if (!destinationWallet.trim()) {
-        return setWithdrawError("Please enter the destination ECG wallet address.");
+
+      if (
+        !destinationWallet.trim()
+      ) {
+        const message =
+          "Please enter the destination ECG wallet address.";
+
+        addWithdrawDebugLog(
+          "VALIDATION ERROR",
+          message
+        );
+
+        return setWithdrawError(
+          message
+        );
       }
     }
+
+    // ------------------------------------------
+    // REQUEST
+    // ------------------------------------------
 
     try {
       setIsWithdrawing(true);
 
       const payload = {
-        wallet_address: address,
-        // TON is always sent back to the currently connected TON wallet.
+        wallet_address:
+          address,
+
         destination_wallet:
-          withdrawAsset === "TON" ? address : destinationWallet.trim(),
-        asset: withdrawAsset,
-        scope: "ALL_WITHDRAWABLE",
-        // For TON this is the requested TON amount. Backend converts the
-        // required ECG balance automatically and sends exactly this TON amount.
-        amount: n,
+          withdrawAsset === "TON"
+            ? address
+            : destinationWallet.trim(),
+
+        asset:
+          withdrawAsset,
+
+        scope:
+          "ALL_WITHDRAWABLE",
+
+        amount:
+          n,
       };
 
-      await api.post("/withdraw/request/", payload);
+      addWithdrawDebugLog(
+        "POST /withdraw/request/",
+        payload
+      );
 
-      const r = await api.get(`/wallet/${address}/`);
-      setWallet(r.data);
+      console.log(
+        "[WITHDRAW DEBUG] Request payload:",
+        payload
+      );
+
+      const withdrawResponse =
+        await api.post(
+          "/withdraw/request/",
+          payload
+        );
+
+      // ------------------------------------------
+      // SUCCESS RESPONSE
+      // ------------------------------------------
+
+      addWithdrawDebugLog(
+        "WITHDRAW RESPONSE",
+        {
+          status:
+            withdrawResponse?.status,
+
+          statusText:
+            withdrawResponse?.statusText,
+
+          data:
+            withdrawResponse?.data,
+        }
+      );
+
+      console.log(
+        "[WITHDRAW DEBUG] Response:",
+        withdrawResponse
+      );
+
+      // ------------------------------------------
+      // REFRESH WALLET
+      // ------------------------------------------
+
+      addWithdrawDebugLog(
+        "REFRESH WALLET",
+        {
+          endpoint:
+            `/wallet/${address}/`,
+        }
+      );
+
+      const r =
+        await api.get(
+          `/wallet/${address}/`
+        );
+
+      addWithdrawDebugLog(
+        "WALLET REFRESH RESPONSE",
+        {
+          status:
+            r?.status,
+
+          data:
+            r?.data,
+        }
+      );
+
+      setWallet(
+        r.data
+      );
+
       setIsWithdrawOpen(false);
+
       setAmount("");
+
       setDestinationWallet("");
     } catch (e) {
-      setWithdrawError(
+      // ------------------------------------------
+      // COMPLETE AXIOS ERROR
+      // ------------------------------------------
+
+      const debugError = {
+        message:
+          e?.message || null,
+
+        name:
+          e?.name || null,
+
+        code:
+          e?.code || null,
+
+        status:
+          e?.response?.status ||
+          null,
+
+        statusText:
+          e?.response?.statusText ||
+          null,
+
+        responseData:
+          e?.response?.data ||
+          null,
+
+        responseHeaders:
+          e?.response?.headers ||
+          null,
+
+        requestUrl:
+          e?.config?.url ||
+          "/withdraw/request/",
+
+        requestMethod:
+          e?.config?.method ||
+          "post",
+
+        requestData:
+          e?.config?.data ||
+          null,
+
+        baseURL:
+          e?.config?.baseURL ||
+          null,
+      };
+
+      console.error(
+        "[WITHDRAW DEBUG] ERROR:",
+        e
+      );
+
+      console.error(
+        "[WITHDRAW DEBUG] Parsed:",
+        debugError
+      );
+
+      addWithdrawDebugLog(
+        "WITHDRAW ERROR",
+        debugError
+      );
+
+      const backendMessage =
         e?.response?.data?.error ||
-          e?.response?.data?.detail ||
-          "Withdrawal failed."
+        e?.response?.data?.detail ||
+        e?.response?.data?.message ||
+        e?.message ||
+        "Withdrawal failed.";
+
+      setWithdrawError(
+        backendMessage
       );
     } finally {
       setIsWithdrawing(false);
+
+      addWithdrawDebugLog(
+        "WITHDRAW FINISHED"
+      );
     }
   };
 
-  const withdrawableTon = useMemo(() => {
-    const ecg = Number(wallet?.withdrawable_total || 0);
-    if (!tonPrice || !ecg) return "0.0000";
-    return (ecg / (tonPrice * ECG_PER_USDT)).toFixed(4);
-  }, [wallet, tonPrice]);
+  // ============================================
+  // BALANCE
+  // ============================================
 
-  const totalBalance = useMemo(() => Number(wallet?.withdrawable_total || 0), [wallet]);
-  const progressPercent = Math.min((totalBalance / WITHDRAW_TARGET) * 100, 100);
-  const remainingToUnlock = Math.max(WITHDRAW_TARGET - totalBalance, 0);
-  const canWithdraw = totalBalance >= WITHDRAW_TARGET;
+  const totalBalance =
+    useMemo(
+      () =>
+        Number(
+          wallet?.withdrawable_total ||
+            0
+        ),
+      [wallet]
+    );
+
+  const progressPercent =
+    Math.min(
+      (
+        totalBalance /
+        WITHDRAW_TARGET
+      ) * 100,
+      100
+    );
+
+  const remainingToUnlock =
+    Math.max(
+      WITHDRAW_TARGET -
+        totalBalance,
+      0
+    );
+
+  const canWithdraw =
+    totalBalance >=
+    WITHDRAW_TARGET;
+
+  // ============================================
+  // DEBUG TEXT FOR COPY
+  // ============================================
+
+  const withdrawDebugText =
+    useMemo(() => {
+      return withdrawDebugLogs
+        .map(
+          (log) =>
+            `[${log.time}] ${log.label}${
+              log.details
+                ? `\n${log.details}`
+                : ""
+            }`
+        )
+        .join("\n\n");
+    }, [withdrawDebugLogs]);
+
+  // ============================================
+  // UI
+  // ============================================
 
   return (
     <div className="wallet-page-container">
+
       <div className="wallet-box wallet-box--redesigned">
+
         <div className="wallet-header-block">
-          <h1 className="wallet-title">Wallet</h1>
-          <p className="wallet-subtitle">Connect your wallet and manage your ECG balance</p>
+
+          <h1 className="wallet-title">
+            Wallet
+          </h1>
+
+          <p className="wallet-subtitle">
+            Connect your wallet and manage your ECG balance
+          </p>
+
         </div>
 
         {!address ? (
+
           <div className="wallet-connect-state">
+
             <div className="connect-button-wrapper">
               <TonConnectButton />
             </div>
-            <p className="wallet-connect-hint">Connect your TON wallet to see your balance, lock status and withdrawal progress.</p>
+
+            <p className="wallet-connect-hint">
+              Connect your TON wallet to see your balance,
+              lock status and withdrawal progress.
+            </p>
+
           </div>
+
         ) : (
+
           <>
+
+            {/* CONNECTED WALLET */}
+
             <div className="wallet-connected-panel">
+
               <div className="wallet-panel-title-row">
-                <div className="wallet-panel-icon">🔗</div>
-                <div>
-                  <h3 className="panel-title">Connected Wallet</h3>
+
+                <div className="wallet-panel-icon">
+                  🔗
                 </div>
+
+                <div>
+                  <h3 className="panel-title">
+                    Connected Wallet
+                  </h3>
+                </div>
+
               </div>
 
               <div className="wallet-address-card">
+
                 <div className="wallet-address-left">
-                  <div className="wallet-avatar-badge">👛</div>
-                  <div className="wallet-address-main">{shortenMiddle(address, 4, 4)}</div>
+
+                  <div className="wallet-avatar-badge">
+                    👛
+                  </div>
+
+                  <div className="wallet-address-main">
+                    {shortenMiddle(
+                      address,
+                      4,
+                      4
+                    )}
+                  </div>
+
                 </div>
+
                 <button
                   type="button"
                   className="icon-action-btn"
-                  onClick={() => copyText("Wallet address", address)}
+                  onClick={() =>
+                    copyText(
+                      "Wallet address",
+                      address
+                    )
+                  }
                   aria-label="Copy wallet address"
                 >
                   ⧉
                 </button>
+
               </div>
+
             </div>
 
+            {/* CONTRACT */}
+
             <div className="contract-card">
+
               <div className="contract-left">
-                <div className="contract-icon">📄</div>
-                <div>
-                  <div className="contract-title">ECG Token Contract</div>
-                  <div className="contract-address">{shortenMiddle(ECG_CONTRACT_ADDRESS, 6, 8)}</div>
-                  <div className="contract-note">✓ Official ECG Token Contract</div>
+
+                <div className="contract-icon">
+                  📄
                 </div>
+
+                <div>
+
+                  <div className="contract-title">
+                    ECG Token Contract
+                  </div>
+
+                  <div className="contract-address">
+                    {shortenMiddle(
+                      ECG_CONTRACT_ADDRESS,
+                      6,
+                      8
+                    )}
+                  </div>
+
+                  <div className="contract-note">
+                    ✓ Official ECG Token Contract
+                  </div>
+
+                </div>
+
               </div>
 
               <div className="contract-actions">
-                <button type="button" className="small-outline-btn" onClick={() => copyText("Contract address", ECG_CONTRACT_ADDRESS)}>
+
+                <button
+                  type="button"
+                  className="small-outline-btn"
+                  onClick={() =>
+                    copyText(
+                      "Contract address",
+                      ECG_CONTRACT_ADDRESS
+                    )
+                  }
+                >
                   Copy
                 </button>
-                <button type="button" className="small-outline-btn" onClick={openContractLink}>
+
+                <button
+                  type="button"
+                  className="small-outline-btn"
+                  onClick={
+                    openContractLink
+                  }
+                >
                   View
                 </button>
+
               </div>
+
             </div>
 
-            {copiedText && <div className="wallet-toast">{copiedText}</div>}
+            {/* COPY TOAST */}
+
+            {copiedText && (
+              <div className="wallet-toast">
+                {copiedText}
+              </div>
+            )}
+
+            {/* CONNECTION ERROR */}
 
             {connectError && (
+
               <div className="wallet-error">
-                <div className="error-icon">{errorType === "locked" ? "🔒" : "⚠️"}</div>
-                <div className="error-title">
-                  {errorType === "locked" ? "Wallet already linked" : "Connection issue"}
+
+                <div className="error-icon">
+                  {errorType ===
+                  "locked"
+                    ? "🔒"
+                    : "⚠️"}
                 </div>
-                <div className="error-desc">{connectError}</div>
-                {(errorType === "locked" || errorType === "network_error") && (
+
+                <div className="error-title">
+                  {errorType ===
+                  "locked"
+                    ? "Wallet already linked"
+                    : "Connection issue"}
+                </div>
+
+                <div className="error-desc">
+                  {connectError}
+                </div>
+
+                {(errorType ===
+                  "locked" ||
+                  errorType ===
+                    "network_error") && (
+
                   <div className="wallet-error-actions">
-                    {errorType === "locked" && (
-                      <button className="wallet-inline-btn danger" onClick={disconnectWallet}>
+
+                    {errorType ===
+                      "locked" && (
+
+                      <button
+                        className="wallet-inline-btn danger"
+                        onClick={
+                          disconnectWallet
+                        }
+                      >
                         Disconnect & Try Again
                       </button>
+
                     )}
-                    {errorType === "network_error" && (
-                      <button className="wallet-inline-btn" onClick={handleRetry}>
+
+                    {errorType ===
+                      "network_error" && (
+
+                      <button
+                        className="wallet-inline-btn"
+                        onClick={
+                          handleRetry
+                        }
+                      >
                         Retry Connection
                       </button>
+
                     )}
+
                   </div>
+
                 )}
+
               </div>
+
             )}
 
             {!wallet ? (
-              <div className="wallet-loading-card">Loading wallet data...</div>
+
+              <div className="wallet-loading-card">
+                Loading wallet data...
+              </div>
+
             ) : (
+
               <>
+
+                {/* BALANCE */}
+
                 <div className="wallet-balance-card">
-                  <div className="balance-label">TOTAL BALANCE</div>
-                  <div className="wallet-balance-row">
-                    <div className="balance-number">{Number(totalBalance).toFixed(0)}</div>
-                    <div className="balance-token-pill">ECG</div>
+
+                  <div className="balance-label">
+                    TOTAL BALANCE
                   </div>
-                  {walletLocked && <div className="wallet-locked-pill">🔒 Wallet Locked</div>}
+
+                  <div className="wallet-balance-row">
+
+                    <div className="balance-number">
+                      {Number(
+                        totalBalance
+                      ).toFixed(0)}
+                    </div>
+
+                    <div className="balance-token-pill">
+                      ECG
+                    </div>
+
+                  </div>
+
+                  {walletLocked && (
+                    <div className="wallet-locked-pill">
+                      🔒 Wallet Locked
+                    </div>
+                  )}
+
                 </div>
 
+                {/* GOAL */}
+
                 <div className="withdraw-goal-card">
+
                   <div className="goal-top-row">
+
                     <div>
-                      <div className="goal-title">Withdrawal Goal</div>
-                      <div className="goal-subtitle">Reach 60 ECG to unlock withdrawal</div>
+
+                      <div className="goal-title">
+                        Withdrawal Goal
+                      </div>
+
+                      <div className="goal-subtitle">
+                        Reach 60 ECG to unlock withdrawal
+                      </div>
+
                     </div>
-                    <div className="goal-percent-badge">{progressPercent.toFixed(1)}%</div>
+
+                    <div className="goal-percent-badge">
+                      {progressPercent.toFixed(
+                        1
+                      )}
+                      %
+                    </div>
+
                   </div>
 
                   <div className="goal-progress-track">
+
                     <div
                       className="goal-progress-fill"
-                      style={{ width: `${progressPercent}%` }}
+                      style={{
+                        width:
+                          `${progressPercent}%`,
+                      }}
                     />
+
                   </div>
 
                   <div className="goal-bottom-row">
-                    <span>{Number(totalBalance).toFixed(0)} / {WITHDRAW_TARGET} ECG</span>
-                    <span>{Number(remainingToUnlock).toFixed(0)} ECG to go</span>
+
+                    <span>
+                      {Number(
+                        totalBalance
+                      ).toFixed(0)}
+                      {" / "}
+                      {WITHDRAW_TARGET}
+                      {" ECG"}
+                    </span>
+
+                    <span>
+                      {Number(
+                        remainingToUnlock
+                      ).toFixed(0)}
+                      {" ECG to go"}
+                    </span>
+
                   </div>
+
                 </div>
 
+                {/* WITHDRAW BUTTON */}
+
                 <button
-                  className={`wallet-main-action ${canWithdraw ? "" : "disabled"}`}
-                  onClick={openWithdraw}
-                  disabled={!canWithdraw}
+                  className={`wallet-main-action ${
+                    canWithdraw
+                      ? ""
+                      : "disabled"
+                  }`}
+                  onClick={
+                    openWithdraw
+                  }
+                  disabled={
+                    !canWithdraw
+                  }
                 >
+
                   <span className="wallet-main-action-title">
-                    {canWithdraw ? "Withdraw" : "Withdraw 🔒"}
+
+                    {canWithdraw
+                      ? "Withdraw"
+                      : "Withdraw 🔒"}
+
                   </span>
+
                   <span className="wallet-main-action-subtitle">
-                    {canWithdraw ? "Your withdrawal is unlocked" : "Available at 60 ECG"}
+
+                    {canWithdraw
+                      ? "Your withdrawal is unlocked"
+                      : "Available at 60 ECG"}
+
                   </span>
+
                 </button>
 
-                <button className="wallet-disconnect-btn" onClick={disconnectWallet}>
+                {/* DISCONNECT */}
+
+                <button
+                  className="wallet-disconnect-btn"
+                  onClick={
+                    disconnectWallet
+                  }
+                >
                   Disconnect Wallet
                 </button>
 
+                {/* STATS */}
+
                 <div className="wallet-stats-grid">
+
                   <div className="wallet-stat-card">
-                    <div className="stat-icon">⛏️</div>
-                    <div className="stat-title">Mining</div>
-                    <div className="stat-accent online">● Active</div>
+
+                    <div className="stat-icon">
+                      ⛏️
+                    </div>
+
+                    <div className="stat-title">
+                      Mining
+                    </div>
+
+                    <div className="stat-accent online">
+                      ● Active
+                    </div>
+
                   </div>
 
                   <div className="wallet-stat-card">
-                    <div className="stat-icon">🪙</div>
-                    <div className="stat-title">Total Mined</div>
-                    <div className="stat-value">{Number(totalBalance).toFixed(0)} ECG</div>
+
+                    <div className="stat-icon">
+                      🪙
+                    </div>
+
+                    <div className="stat-title">
+                      Total Mined
+                    </div>
+
+                    <div className="stat-value">
+                      {Number(
+                        totalBalance
+                      ).toFixed(0)}
+                      {" ECG"}
+                    </div>
+
                   </div>
 
                   <div className="wallet-stat-card">
-                    <div className="stat-icon">🚀</div>
-                    <div className="stat-title">Next Target</div>
-                    <div className="stat-value">{WITHDRAW_TARGET} ECG</div>
+
+                    <div className="stat-icon">
+                      🚀
+                    </div>
+
+                    <div className="stat-title">
+                      Next Target
+                    </div>
+
+                    <div className="stat-value">
+                      {WITHDRAW_TARGET}
+                      {" ECG"}
+                    </div>
+
                   </div>
 
                   <div className="wallet-stat-card">
-                    <div className="stat-icon">🏆</div>
-                    <div className="stat-title">Your Rank</div>
-                    <div className="stat-value">--</div>
+
+                    <div className="stat-icon">
+                      🏆
+                    </div>
+
+                    <div className="stat-title">
+                      Your Rank
+                    </div>
+
+                    <div className="stat-value">
+                      --
+                    </div>
+
                   </div>
+
                 </div>
+
               </>
+
             )}
+
           </>
+
         )}
+
       </div>
 
-      {isWithdrawOpen && wallet && (
-        <div className="modal-backdrop" onClick={closeWithdraw}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Withdraw</h3>
-              <button className="modal-close" onClick={closeWithdraw} disabled={isWithdrawing}>×</button>
-            </div>
-            <div className="modal-body">
-              <label>Withdrawal Method</label>
-              <div className="asset-picker">
+      {/* ===================================== */}
+      {/* WITHDRAW MODAL */}
+      {/* ===================================== */}
+
+      {isWithdrawOpen &&
+        wallet && (
+
+          <div
+            className="modal-backdrop"
+            onClick={
+              closeWithdraw
+            }
+          >
+
+            <div
+              className="modal"
+              onClick={(e) =>
+                e.stopPropagation()
+              }
+            >
+
+              {/* HEADER */}
+
+              <div className="modal-header">
+
+                <h3>
+                  Withdraw
+                </h3>
+
                 <button
-                  type="button"
-                  className={withdrawAsset === "ECG" ? "selected" : ""}
-                  onClick={() => {
-                    setWithdrawAsset("ECG");
-                    setDestinationWallet("");
-                    setAmount("");
-                    setWithdrawError("");
-                  }}
-                  disabled={isWithdrawing}
+                  className="modal-close"
+                  onClick={
+                    closeWithdraw
+                  }
+                  disabled={
+                    isWithdrawing
+                  }
                 >
-                  Withdraw with ECG
+                  ×
                 </button>
-                <button
-                  type="button"
-                  className={withdrawAsset === "TON" ? "selected" : ""}
-                  onClick={() => {
-                    setWithdrawAsset("TON");
-                    setDestinationWallet("");
-                    setAmount("");
-                    setWithdrawError("");
-                  }}
-                  disabled={isWithdrawing}
-                >
-                  Withdraw with TON (Auto)
-                </button>
+
               </div>
 
-              {withdrawAsset === "ECG" ? (
-                <>
-                  <label htmlFor="withdraw-destination">ECG Wallet Address</label>
-                  <input
-                    id="withdraw-destination"
-                    type="text"
-                    value={destinationWallet}
-                    onChange={(e) => setDestinationWallet(e.target.value)}
-                    placeholder="Enter destination ECG wallet address"
-                    disabled={isWithdrawing}
-                    autoComplete="off"
-                  />
-                </>
-              ) : (
-                <div className="ton-info">
-                  <div>
-                    Automatic destination: <b>{shortenMiddle(address, 8, 8)}</b>
-                  </div>
-                  <div>TON will be sent automatically to your connected wallet.</div>
-                </div>
-              )}
+              {/* BODY */}
 
-              <label htmlFor="withdraw-amount">
-                {withdrawAsset === "TON" ? "TON Amount" : "Withdrawable Amount (ECG)"}
-              </label>
+              <div className="modal-body">
 
-              <div className="amount-wrapper">
-                <input
-                  id="withdraw-amount"
-                  type="number"
-                  inputMode="decimal"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder={withdrawAsset === "TON" ? "Minimum 1 TON" : "Minimum 60 ECG"}
-                  min={withdrawAsset === "TON" ? "1" : "60"}
-                  disabled={isWithdrawing}
-                />
+                <label>
+                  Withdrawal Method
+                </label>
 
-                {withdrawAsset === "TON" && (
-                  <button type="button" className="max-btn" onClick={() => setAmount(withdrawableTon)} disabled={isWithdrawing}>
-                    MAX
-                  </button>
-                )}
+                <div className="asset-picker">
 
-                {withdrawAsset === "ECG" && (
+                  {/* ECG */}
+
                   <button
                     type="button"
-                    className="max-btn"
-                    onClick={() => setAmount(Number(wallet?.withdrawable_total || 0))}
-                    disabled={isWithdrawing}
+                    className={
+                      withdrawAsset ===
+                      "ECG"
+                        ? "selected"
+                        : ""
+                    }
+                    onClick={() => {
+                      setWithdrawAsset(
+                        "ECG"
+                      );
+
+                      setDestinationWallet(
+                        ""
+                      );
+
+                      setAmount("");
+
+                      setWithdrawError(
+                        ""
+                      );
+                    }}
+                    disabled={
+                      isWithdrawing
+                    }
                   >
-                    MAX
+                    Withdraw with ECG
                   </button>
+
+                  {/* TON */}
+
+                  <button
+                    type="button"
+                    className={
+                      withdrawAsset ===
+                      "TON"
+                        ? "selected"
+                        : ""
+                    }
+                    onClick={() => {
+                      setWithdrawAsset(
+                        "TON"
+                      );
+
+                      setDestinationWallet(
+                        ""
+                      );
+
+                      setAmount("");
+
+                      setWithdrawError(
+                        ""
+                      );
+                    }}
+                    disabled={
+                      isWithdrawing
+                    }
+                  >
+                    Withdraw with TON (Auto)
+                  </button>
+
+                </div>
+
+                {/* ECG DESTINATION */}
+
+                {withdrawAsset ===
+                "ECG" ? (
+
+                  <>
+
+                    <label htmlFor="withdraw-destination">
+                      ECG Wallet Address
+                    </label>
+
+                    <input
+                      id="withdraw-destination"
+                      type="text"
+                      value={
+                        destinationWallet
+                      }
+                      onChange={(e) =>
+                        setDestinationWallet(
+                          e.target
+                            .value
+                        )
+                      }
+                      placeholder="Enter destination ECG wallet address"
+                      disabled={
+                        isWithdrawing
+                      }
+                      autoComplete="off"
+                    />
+
+                  </>
+
+                ) : (
+
+                  <div className="ton-info">
+
+                    <div>
+                      Automatic destination:{" "}
+                      <b>
+                        {shortenMiddle(
+                          address,
+                          8,
+                          8
+                        )}
+                      </b>
+                    </div>
+
+                    <div>
+                      TON will be sent automatically to your connected wallet.
+                    </div>
+
+                  </div>
+
                 )}
+
+                {/* AMOUNT */}
+
+                <label htmlFor="withdraw-amount">
+
+                  {withdrawAsset ===
+                  "TON"
+                    ? "TON Amount"
+                    : "Withdrawable Amount (ECG)"}
+
+                </label>
+
+                <div className="amount-wrapper">
+
+                  <input
+                    id="withdraw-amount"
+                    type="number"
+                    inputMode="decimal"
+                    value={amount}
+                    onChange={(e) =>
+                      setAmount(
+                        e.target.value
+                      )
+                    }
+                    placeholder={
+                      withdrawAsset ===
+                      "TON"
+                        ? "Minimum 1 TON"
+                        : "Minimum 60 ECG"
+                    }
+                    min={
+                      withdrawAsset ===
+                      "TON"
+                        ? "1"
+                        : "60"
+                    }
+                    disabled={
+                      isWithdrawing
+                    }
+                  />
+
+                  {/* TON MAX */}
+
+                  {withdrawAsset ===
+                    "TON" && (
+
+                    <button
+                      type="button"
+                      className="max-btn"
+                      onClick={() =>
+                        setAmount(
+                          withdrawableTon
+                        )
+                      }
+                      disabled={
+                        isWithdrawing
+                      }
+                    >
+                      MAX
+                    </button>
+
+                  )}
+
+                  {/* ECG MAX */}
+
+                  {withdrawAsset ===
+                    "ECG" && (
+
+                    <button
+                      type="button"
+                      className="max-btn"
+                      onClick={() =>
+                        setAmount(
+                          Number(
+                            wallet?.withdrawable_total ||
+                              0
+                          )
+                        )
+                      }
+                      disabled={
+                        isWithdrawing
+                      }
+                    >
+                      MAX
+                    </button>
+
+                  )}
+
+                </div>
+
+                {/* ECG AVAILABLE */}
+
+                {withdrawAsset ===
+                  "ECG" && (
+
+                  <div className="max-balance-info">
+
+                    Available:{" "}
+
+                    <b>
+                      {Number(
+                        wallet?.withdrawable_total ||
+                          0
+                      ).toFixed(4)}
+                      {" ECG"}
+                    </b>
+
+                  </div>
+
+                )}
+
+                {/* TON INFO */}
+
+                {withdrawAsset ===
+                  "TON" && (
+
+                  <div className="ton-info">
+
+                    <div>
+
+                      Withdrawable TON:{" "}
+
+                      <b>
+                        {withdrawableTon}
+                        {" TON"}
+                      </b>
+
+                    </div>
+
+                    <div>
+
+                      Based on:{" "}
+
+                      <b>
+                        {Number(
+                          wallet?.withdrawable_total ||
+                            0
+                        ).toFixed(2)}
+                        {" ECG"}
+                      </b>
+
+                    </div>
+
+                    <div>
+
+                      Minimum withdrawal:{" "}
+
+                      <b>
+                        1 TON
+                      </b>
+
+                    </div>
+
+                  </div>
+
+                )}
+
+                {/* ERROR */}
+
+                {withdrawError && (
+
+                  <div className="error-text">
+
+                    {withdrawError}
+
+                  </div>
+
+                )}
+
+                {/* ===================================== */}
+                {/* WITHDRAW DEBUG LOG */}
+                {/* ===================================== */}
+
+                <div
+                  style={{
+                    marginTop: 16,
+
+                    border:
+                      "1px solid rgba(255,255,255,0.18)",
+
+                    borderRadius:
+                      10,
+
+                    background:
+                      "#080b10",
+
+                    overflow:
+                      "hidden",
+                  }}
+                >
+
+                  {/* DEBUG HEADER */}
+
+                  <div
+                    style={{
+                      display:
+                        "flex",
+
+                      alignItems:
+                        "center",
+
+                      justifyContent:
+                        "space-between",
+
+                      gap: 8,
+
+                      padding:
+                        "10px 12px",
+
+                      borderBottom:
+                        "1px solid rgba(255,255,255,0.12)",
+                    }}
+                  >
+
+                    <b
+                      style={{
+                        fontSize:
+                          12,
+                      }}
+                    >
+                      Withdrawal Debug Log
+                    </b>
+
+                    <div
+                      style={{
+                        display:
+                          "flex",
+                        gap: 6,
+                      }}
+                    >
+
+                      {/* COPY DEBUG */}
+
+                      <button
+                        type="button"
+                        className="small-outline-btn"
+                        onClick={() =>
+                          copyText(
+                            "Debug log",
+                            withdrawDebugText
+                          )
+                        }
+                        disabled={
+                          !withdrawDebugLogs.length
+                        }
+                      >
+                        Copy
+                      </button>
+
+                      {/* CLEAR DEBUG */}
+
+                      <button
+                        type="button"
+                        className="small-outline-btn"
+                        onClick={() =>
+                          setWithdrawDebugLogs(
+                            []
+                          )
+                        }
+                        disabled={
+                          !withdrawDebugLogs.length ||
+                          isWithdrawing
+                        }
+                      >
+                        Clear
+                      </button>
+
+                    </div>
+
+                  </div>
+
+                  {/* DEBUG BODY */}
+
+                  <div
+                    style={{
+                      maxHeight:
+                        300,
+
+                      overflow:
+                        "auto",
+
+                      padding:
+                        10,
+
+                      fontFamily:
+                        "monospace",
+
+                      fontSize:
+                        11,
+
+                      lineHeight:
+                        1.5,
+
+                      whiteSpace:
+                        "pre-wrap",
+
+                      wordBreak:
+                        "break-word",
+
+                      textAlign:
+                        "left",
+                    }}
+                  >
+
+                    {!withdrawDebugLogs.length ? (
+
+                      <div
+                        style={{
+                          opacity:
+                            0.6,
+                        }}
+                      >
+                        Press the withdrawal button.
+                        Request / response / error details
+                        will appear here.
+                      </div>
+
+                    ) : (
+
+                      withdrawDebugLogs.map(
+                        (
+                          log,
+                          index
+                        ) => (
+
+                          <div
+                            key={`${log.time}-${index}`}
+                            style={{
+                              paddingBottom:
+                                9,
+
+                              marginBottom:
+                                9,
+
+                              borderBottom:
+                                index ===
+                                withdrawDebugLogs.length -
+                                  1
+                                  ? "none"
+                                  : "1px dashed rgba(255,255,255,0.10)",
+                            }}
+                          >
+
+                            <div>
+
+                              [
+                              {log.time}
+                              ]{" "}
+
+                              <b>
+                                {log.label}
+                              </b>
+
+                            </div>
+
+                            {log.details && (
+
+                              <div>
+                                {
+                                  log.details
+                                }
+                              </div>
+
+                            )}
+
+                          </div>
+
+                        )
+                      )
+
+                    )}
+
+                  </div>
+
+                </div>
+
               </div>
 
-              {withdrawAsset === "ECG" && (
-                <div className="max-balance-info">
-                  Available: <b>{Number(wallet?.withdrawable_total || 0).toFixed(4)} ECG</b>
-                </div>
-              )}
+              {/* FOOTER */}
 
-              {withdrawAsset === "TON" && (
-                <div className="ton-info">
-                  <div>
-                    Withdrawable TON: <b>{withdrawableTon} TON</b>
-                  </div>
-                  <div>
-                    Based on: <b>{Number(wallet?.withdrawable_total || 0).toFixed(2)} ECG</b>
-                  </div>
-                  <div>
-                    Minimum withdrawal: <b>1 TON</b>
-                  </div>
-                </div>
-              )}
+              <div className="modal-footer">
 
-              {withdrawError && <div className="error-text">{withdrawError}</div>}
+                <button
+                  className="btn-secondary"
+                  onClick={
+                    closeWithdraw
+                  }
+                  disabled={
+                    isWithdrawing
+                  }
+                >
+                  Cancel
+                </button>
+
+                <button
+                  className="btn-primary"
+                  onClick={
+                    onWithdraw
+                  }
+                  disabled={
+                    isWithdrawing
+                  }
+                >
+
+                  {isWithdrawing
+                    ? "Sending..."
+                    : withdrawAsset ===
+                      "TON"
+                    ? "Send TON Automatically"
+                    : "Confirm Withdrawal"}
+
+                </button>
+
+              </div>
+
             </div>
-            <div className="modal-footer">
-              <button className="btn-secondary" onClick={closeWithdraw} disabled={isWithdrawing}>
-                Cancel
-              </button>
-              <button className="btn-primary" onClick={onWithdraw} disabled={isWithdrawing}>
-                {isWithdrawing ? "Sending..." : withdrawAsset === "TON" ? "Send TON Automatically" : "Confirm Withdrawal"}
-              </button>
-            </div>
+
           </div>
-        </div>
-      )}
+
+        )}
+
     </div>
   );
 }
