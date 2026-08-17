@@ -285,7 +285,7 @@ export default function Wallet() {
   const openWithdraw = () => {
     setWithdrawError("");
     setAmount("");
-    setWithdrawAsset("ECG");
+    setWithdrawAsset("TON");
     setDestinationWallet("");
     setIsWithdrawOpen(true);
   };
@@ -299,42 +299,44 @@ export default function Wallet() {
     setWithdrawError("");
 
     const n = Number(amount);
-    if (!Number.isFinite(n)) return setWithdrawError("Invalid amount.");
-    if (withdrawAsset === "ECG" && n < 60) {
-      return setWithdrawError("Minimum withdrawal is 60 ECG.");
-    }
-    if (withdrawAsset === "TON" && n < 60) {
-      return setWithdrawError("Minimum TON withdrawal is 1 TON.");
-    }
-    if (!address) return setWithdrawError("Please connect your wallet first.");
-    if (!destinationWallet.trim()) {
-      return setWithdrawError(
-        withdrawAsset === "TON"
-          ? "Please enter the destination TON wallet address."
-          : "Please enter the destination ECG wallet address."
-      );
+    if (!Number.isFinite(n) || n <= 0) {
+      return setWithdrawError("Invalid amount.");
     }
 
-    if (withdrawAsset === "TON") {
-      const tonAddress = destinationWallet.trim();
-      const isRawAddress = /^-?\d:[0-9a-fA-F]{64}$/.test(tonAddress);
-      const isFriendlyAddress = /^[A-Za-z0-9_-]{48}$/.test(tonAddress);
+    if (!address) {
+      return setWithdrawError("Please connect your wallet first.");
+    }
 
-      if (!isRawAddress && !isFriendlyAddress) {
-        return setWithdrawError("Please enter a valid TON Network wallet address.");
+    if (withdrawAsset === "TON" && n < 1) {
+      return setWithdrawError("Minimum automatic TON withdrawal is 1 TON.");
+    }
+
+    if (withdrawAsset === "ECG") {
+      if (n < 60) {
+        return setWithdrawError("Minimum withdrawal is 60 ECG.");
+      }
+      if (!destinationWallet.trim()) {
+        return setWithdrawError("Please enter the destination ECG wallet address.");
       }
     }
 
     try {
       setIsWithdrawing(true);
+
       const payload = {
         wallet_address: address,
-        destination_wallet: destinationWallet.trim(),
+        // TON is always sent back to the currently connected TON wallet.
+        destination_wallet:
+          withdrawAsset === "TON" ? address : destinationWallet.trim(),
         asset: withdrawAsset,
         scope: "ALL_WITHDRAWABLE",
+        // For TON this is the requested TON amount. Backend converts the
+        // required ECG balance automatically and sends exactly this TON amount.
         amount: n,
       };
+
       await api.post("/withdraw/request/", payload);
+
       const r = await api.get(`/wallet/${address}/`);
       setWallet(r.data);
       setIsWithdrawOpen(false);
@@ -566,29 +568,34 @@ export default function Wallet() {
                   }}
                   disabled={isWithdrawing}
                 >
-                  Withdraw with TON
+                  Withdraw with TON (Auto)
                 </button>
               </div>
 
-              <label htmlFor="withdraw-destination">
-                {withdrawAsset === "TON" ? "TON Wallet Address" : "ECG Wallet Address"}
-              </label>
-              <input
-                id="withdraw-destination"
-                type="text"
-                value={destinationWallet}
-                onChange={(e) => setDestinationWallet(e.target.value)}
-                placeholder={
-                  withdrawAsset === "TON"
-                    ? "Enter destination TON wallet address"
-                    : "Enter destination ECG wallet address"
-                }
-                disabled={isWithdrawing}
-                autoComplete="off"
-              />
+              {withdrawAsset === "ECG" ? (
+                <>
+                  <label htmlFor="withdraw-destination">ECG Wallet Address</label>
+                  <input
+                    id="withdraw-destination"
+                    type="text"
+                    value={destinationWallet}
+                    onChange={(e) => setDestinationWallet(e.target.value)}
+                    placeholder="Enter destination ECG wallet address"
+                    disabled={isWithdrawing}
+                    autoComplete="off"
+                  />
+                </>
+              ) : (
+                <div className="ton-info">
+                  <div>
+                    Automatic destination: <b>{shortenMiddle(address, 8, 8)}</b>
+                  </div>
+                  <div>TON will be sent automatically to your connected wallet.</div>
+                </div>
+              )}
 
               <label htmlFor="withdraw-amount">
-                {withdrawAsset === "TON" ? "Withdrawable Amount (TON)" : "Withdrawable Amount (ECG)"}
+                {withdrawAsset === "TON" ? "TON Amount" : "Withdrawable Amount (ECG)"}
               </label>
 
               <div className="amount-wrapper">
@@ -648,7 +655,7 @@ export default function Wallet() {
                 Cancel
               </button>
               <button className="btn-primary" onClick={onWithdraw} disabled={isWithdrawing}>
-                {isWithdrawing ? "Submitting..." : "Confirm Withdrawal"}
+                {isWithdrawing ? "Sending..." : withdrawAsset === "TON" ? "Send TON Automatically" : "Confirm Withdrawal"}
               </button>
             </div>
           </div>
