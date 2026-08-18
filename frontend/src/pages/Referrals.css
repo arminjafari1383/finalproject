@@ -380,27 +380,13 @@
     0 0 6px rgba(255,255,255,.8),
     0 0 12px rgba(255,255,255,.4);
 
-  animation: referral-note-blink 1.8s ease-in-out infinite;
+  animation: none;
 }
 
 
 /* حالت اصلی چشمک ریز */
 
-@keyframes referral-note-blink {
 
-  0%,
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-
-
-  50% {
-    opacity: .55;
-    transform: scale(1.02);
-  }
-
-}
 
 .level-profit-main {
   border-color: rgba(250, 204, 21, 0.18);

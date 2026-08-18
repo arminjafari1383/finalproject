@@ -1575,46 +1575,39 @@ export default function Wallet() {
 
                 {/* WITHDRAW HISTORY */}
 
-                <div
-                  style={{
-                    marginTop: 18,
-                    padding: 14,
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    borderRadius: 12,
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: 10,
-                      marginBottom: 12,
-                    }}
-                  >
-                    <b>Withdrawal History</b>
+                <section className="withdraw-history-card">
+                  <div className="withdraw-history-header">
+                    <div>
+                      <div className="withdraw-history-eyebrow">TRANSACTIONS</div>
+                      <h3 className="withdraw-history-title">Withdrawal History</h3>
+                      <p className="withdraw-history-subtitle">
+                        Track your withdrawal requests and transaction receipts.
+                      </p>
+                    </div>
 
                     <button
                       type="button"
-                      className="small-outline-btn"
+                      className="withdraw-history-refresh"
                       onClick={loadWithdrawHistory}
                       disabled={withdrawHistoryLoading}
                     >
-                      {withdrawHistoryLoading ? "Refreshing..." : "Refresh"}
+                      <span className={withdrawHistoryLoading ? "withdraw-refresh-icon spinning" : "withdraw-refresh-icon"}>
+                        ↻
+                      </span>
+                      {withdrawHistoryLoading ? "Refreshing" : "Refresh"}
                     </button>
                   </div>
 
                   {!withdrawHistory.length ? (
-                    <div style={{ opacity: 0.65 }}>
-                      No withdrawal requests yet.
+                    <div className="withdraw-history-empty">
+                      <div className="withdraw-history-empty-icon">↗</div>
+                      <div>
+                        <strong>No withdrawal requests yet</strong>
+                        <span>Your withdrawal requests will appear here.</span>
+                      </div>
                     </div>
                   ) : (
-                    <div
-                      style={{
-                        display: "grid",
-                        gap: 10,
-                      }}
-                    >
+                    <div className="withdraw-history-list">
                       {withdrawHistory.map((item) => {
                         const rawStatus = String(
                           item.display_status || item.status || ""
@@ -1629,60 +1622,130 @@ export default function Wallet() {
                             ? "Failed"
                             : rawStatus || "—";
 
+                        const statusClass =
+                          statusText === "Complete"
+                            ? "complete"
+                            : statusText === "Pending"
+                            ? "pending"
+                            : statusText === "Failed"
+                            ? "failed"
+                            : "default";
+
                         const isTon =
                           String(item.raw_asset || item.asset || "").toUpperCase() === "TON";
 
                         const requestedValue = isTon
-                          ? `${Number(item.ton_amount || 0).toLocaleString(undefined, { maximumFractionDigits: 9 })} TON`
-                          : `${Number(item.amount || 0).toLocaleString(undefined, { maximumFractionDigits: 6 })} ECG`;
+                          ? `${Number(item.ton_amount || 0).toLocaleString(undefined, {
+                              maximumFractionDigits: 9,
+                            })} TON`
+                          : `${Number(item.amount || 0).toLocaleString(undefined, {
+                              maximumFractionDigits: 6,
+                            })} ECG`;
 
                         return (
-                          <div
+                          <article
                             key={item.id}
-                            style={{
-                              padding: 12,
-                              border: "1px solid rgba(255,255,255,0.10)",
-                              borderRadius: 10,
-                            }}
+                            className="withdraw-history-item"
                           >
-                            <div
-                              style={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                gap: 10,
-                                marginBottom: 8,
-                              }}
-                            >
-                              <b>#{item.id} · {requestedValue}</b>
-                              <b>{statusText}</b>
-                            </div>
+                            <div className="withdraw-history-item-top">
+                              <div className="withdraw-history-amount-wrap">
+                                <div className="withdraw-history-coin">
+                                  {isTon ? "T" : "E"}
+                                </div>
 
-                            <div style={{ fontSize: 12, opacity: 0.8, wordBreak: "break-all" }}>
-                              Destination: {item.destination_wallet || "—"}
-                            </div>
-
-                            {isTon && (
-                              <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
-                                ECG reserved: {Number(item.ecg_debited || item.amount || 0).toLocaleString(undefined, { maximumFractionDigits: 6 })} ECG
+                                <div>
+                                  <div className="withdraw-history-amount">
+                                    {requestedValue}
+                                  </div>
+                                  <div className="withdraw-history-id">
+                                    Request #{item.id}
+                                  </div>
+                                </div>
                               </div>
-                            )}
 
-                            <div style={{ fontSize: 12, opacity: 0.65, marginTop: 4 }}>
-                              Requested: {item.created_at ? new Date(item.created_at).toLocaleString() : "—"}
+                              <span className={`withdraw-status-badge ${statusClass}`}>
+                                <span className="withdraw-status-dot" />
+                                {statusText}
+                              </span>
                             </div>
 
-                            {statusText === "Complete" && (
-                              <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4, wordBreak: "break-all" }}>
-                                Completed: {item.completed_at ? new Date(item.completed_at).toLocaleString() : "—"}
-                                {item.tx_hash ? ` · TX: ${item.tx_hash}` : ""}
+                            <div className="withdraw-history-details">
+                              <div className="withdraw-history-detail-row">
+                                <span className="withdraw-history-label">Destination</span>
+                                <span
+                                  className="withdraw-history-value withdraw-history-address"
+                                  title={item.destination_wallet || ""}
+                                >
+                                  {item.destination_wallet
+                                    ? shortenMiddle(item.destination_wallet, 8, 8)
+                                    : "—"}
+                                </span>
                               </div>
-                            )}
-                          </div>
+
+                              {isTon && (
+                                <div className="withdraw-history-detail-row">
+                                  <span className="withdraw-history-label">ECG reserved</span>
+                                  <span className="withdraw-history-value">
+                                    {Number(
+                                      item.ecg_debited || item.amount || 0
+                                    ).toLocaleString(undefined, {
+                                      maximumFractionDigits: 6,
+                                    })} ECG
+                                  </span>
+                                </div>
+                              )}
+
+                              <div className="withdraw-history-detail-row">
+                                <span className="withdraw-history-label">Requested</span>
+                                <span className="withdraw-history-value">
+                                  {item.created_at
+                                    ? new Date(item.created_at).toLocaleString()
+                                    : "—"}
+                                </span>
+                              </div>
+
+                              {statusText === "Complete" && (
+                                <>
+                                  <div className="withdraw-history-detail-row">
+                                    <span className="withdraw-history-label">Completed</span>
+                                    <span className="withdraw-history-value">
+                                      {item.completed_at
+                                        ? new Date(item.completed_at).toLocaleString()
+                                        : "—"}
+                                    </span>
+                                  </div>
+
+                                  {item.tx_hash && (
+                                    <div className="withdraw-history-tx-box">
+                                      <div className="withdraw-history-tx-main">
+                                        <span className="withdraw-history-label">TX Hash</span>
+                                        <span
+                                          className="withdraw-history-tx-value"
+                                          title={item.tx_hash}
+                                        >
+                                          {shortenMiddle(item.tx_hash, 12, 10)}
+                                        </span>
+                                      </div>
+
+                                      <button
+                                        type="button"
+                                        className="withdraw-history-copy-btn"
+                                        onClick={() => copyText("TX Hash", item.tx_hash)}
+                                      >
+                                        <span>⧉</span>
+                                        Copy
+                                      </button>
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </article>
                         );
                       })}
                     </div>
                   )}
-                </div>
+                </section>
 
 
                 {/* REPLACE WALLET */}

@@ -687,3 +687,345 @@ body {
     min-width: 0;
   }
 }
+
+
+/* ==========================================================
+   WITHDRAWAL HISTORY
+   ========================================================== */
+
+.withdraw-history-card {
+  margin: 1.15rem 0 1.2rem;
+  padding: 1rem;
+  border-radius: 22px;
+  border: 1px solid rgba(110, 158, 255, 0.18);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(58, 126, 255, 0.12), transparent 34%),
+    linear-gradient(180deg, rgba(9, 31, 75, 0.92), rgba(7, 19, 49, 0.96));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 16px 38px rgba(0, 0, 0, 0.22);
+}
+
+.withdraw-history-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.withdraw-history-eyebrow {
+  color: #69a8ff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 1.8px;
+  margin-bottom: 0.28rem;
+}
+
+.withdraw-history-title {
+  margin: 0;
+  color: #f5f9ff;
+  font-size: 1.08rem;
+  font-weight: 800;
+}
+
+.withdraw-history-subtitle {
+  margin: 0.34rem 0 0;
+  max-width: 260px;
+  color: #8fa9d4;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.withdraw-history-refresh {
+  min-height: 38px;
+  padding: 0.55rem 0.72rem;
+  border-radius: 12px;
+  border: 1px solid rgba(120, 169, 255, 0.22);
+  background: rgba(74, 126, 255, 0.09);
+  color: #dbe9ff;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+  font-size: 0.76rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.withdraw-history-refresh:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.withdraw-refresh-icon {
+  display: inline-flex;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.withdraw-refresh-icon.spinning {
+  animation: withdraw-history-spin 0.9s linear infinite;
+}
+
+@keyframes withdraw-history-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.withdraw-history-empty {
+  min-height: 92px;
+  padding: 1rem;
+  border-radius: 16px;
+  border: 1px dashed rgba(129, 167, 235, 0.2);
+  background: rgba(255, 255, 255, 0.025);
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.withdraw-history-empty-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(69, 130, 255, 0.14);
+  color: #77b1ff;
+  font-size: 1.25rem;
+}
+
+.withdraw-history-empty strong,
+.withdraw-history-empty span {
+  display: block;
+}
+
+.withdraw-history-empty strong {
+  color: #e9f2ff;
+  font-size: 0.88rem;
+}
+
+.withdraw-history-empty span {
+  margin-top: 0.22rem;
+  color: #8ca5cf;
+  font-size: 0.74rem;
+}
+
+.withdraw-history-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.withdraw-history-item {
+  padding: 0.9rem;
+  border-radius: 17px;
+  border: 1px solid rgba(123, 165, 245, 0.14);
+  background:
+    linear-gradient(180deg, rgba(20, 43, 91, 0.72), rgba(10, 25, 58, 0.78));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+.withdraw-history-item-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.055);
+}
+
+.withdraw-history-amount-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.withdraw-history-coin {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #ffffff;
+  font-size: 0.86rem;
+  font-weight: 900;
+  background: linear-gradient(145deg, rgba(90, 153, 255, 0.95), rgba(44, 88, 219, 0.95));
+  box-shadow: 0 8px 18px rgba(42, 101, 233, 0.22);
+}
+
+.withdraw-history-amount {
+  color: #f6f9ff;
+  font-size: 0.96rem;
+  font-weight: 800;
+}
+
+.withdraw-history-id {
+  margin-top: 0.15rem;
+  color: #829bc5;
+  font-size: 0.7rem;
+}
+
+.withdraw-status-badge {
+  min-height: 30px;
+  padding: 0.35rem 0.62rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  font-size: 0.7rem;
+  font-weight: 800;
+  border: 1px solid transparent;
+  flex-shrink: 0;
+}
+
+.withdraw-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 9px currentColor;
+}
+
+.withdraw-status-badge.complete {
+  color: #62efaa;
+  background: rgba(38, 203, 125, 0.09);
+  border-color: rgba(76, 232, 156, 0.18);
+}
+
+.withdraw-status-badge.pending {
+  color: #ffd66b;
+  background: rgba(240, 179, 36, 0.09);
+  border-color: rgba(255, 209, 91, 0.18);
+}
+
+.withdraw-status-badge.failed {
+  color: #ff8fa9;
+  background: rgba(255, 87, 125, 0.09);
+  border-color: rgba(255, 112, 146, 0.18);
+}
+
+.withdraw-status-badge.default {
+  color: #aec7ef;
+  background: rgba(120, 157, 218, 0.09);
+  border-color: rgba(141, 177, 235, 0.18);
+}
+
+.withdraw-history-details {
+  display: grid;
+  gap: 0.5rem;
+  padding-top: 0.7rem;
+}
+
+.withdraw-history-detail-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.withdraw-history-label {
+  color: #8299bf;
+  font-size: 0.7rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.withdraw-history-value {
+  color: #d8e4f8;
+  font-size: 0.72rem;
+  text-align: right;
+  min-width: 0;
+}
+
+.withdraw-history-address {
+  max-width: 68%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.withdraw-history-tx-box {
+  margin-top: 0.15rem;
+  padding: 0.65rem;
+  border-radius: 13px;
+  border: 1px solid rgba(98, 150, 255, 0.14);
+  background: rgba(2, 9, 27, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+
+.withdraw-history-tx-main {
+  min-width: 0;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.withdraw-history-tx-value {
+  display: block;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #bcd4fb;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.7rem;
+}
+
+.withdraw-history-copy-btn {
+  min-width: 70px;
+  min-height: 34px;
+  padding: 0.45rem 0.65rem;
+  border-radius: 11px;
+  border: 1px solid rgba(100, 161, 255, 0.22);
+  background: rgba(69, 130, 255, 0.14);
+  color: #ddebff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  cursor: pointer;
+  font-size: 0.7rem;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.withdraw-history-copy-btn:active {
+  transform: scale(0.97);
+}
+
+@media (max-width: 420px) {
+  .withdraw-history-card {
+    padding: 0.85rem;
+  }
+
+  .withdraw-history-header {
+    align-items: center;
+  }
+
+  .withdraw-history-subtitle {
+    display: none;
+  }
+
+  .withdraw-history-refresh {
+    padding-inline: 0.58rem;
+  }
+
+  .withdraw-history-detail-row {
+    align-items: flex-start;
+  }
+
+  .withdraw-history-value {
+    max-width: 64%;
+  }
+
+  .withdraw-history-tx-value {
+    max-width: 165px;
+  }
+}

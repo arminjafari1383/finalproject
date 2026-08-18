@@ -80,6 +80,9 @@ export default function AdminDashboard() {
   const [error, setError] =
     useState("");
 
+  const [copiedAdminText, setCopiedAdminText] =
+    useState("");
+
   const [loading, setLoading] =
     useState(false);
 
@@ -211,6 +214,32 @@ export default function AdminDashboard() {
         setLoading(false);
       }
     }, [otp]);
+
+
+  // =========================================================
+  // COPY ADMIN VALUE
+  // =========================================================
+
+  const copyAdminValue =
+    useCallback(async (label, value) => {
+      const text = String(value || "").trim();
+
+      if (!text) {
+        return;
+      }
+
+      try {
+        await navigator.clipboard.writeText(text);
+        setCopiedAdminText(`${label} copied`);
+      } catch (copyError) {
+        console.error("[ADMIN COPY ERROR]", copyError);
+        setCopiedAdminText(`Could not copy ${label.toLowerCase()}`);
+      }
+
+      window.setTimeout(() => {
+        setCopiedAdminText("");
+      }, 1800);
+    }, []);
 
 
   // =========================================================
@@ -695,6 +724,23 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {copiedAdminText && (
+        <div
+          style={{
+            marginBottom: 14,
+            padding: "10px 14px",
+            borderRadius: 12,
+            border: "1px solid rgba(89, 196, 142, 0.22)",
+            background: "rgba(39, 174, 96, 0.10)",
+            color: "#9af0be",
+            fontSize: 13,
+            fontWeight: 700,
+          }}
+        >
+          ✓ {copiedAdminText}
+        </div>
+      )}
+
 
       {/* ================================================== */}
       {/* TREASURY WARNING */}
@@ -981,6 +1027,10 @@ export default function AdminDashboard() {
           completingWithdrawalId={
             completingWithdrawalId
           }
+
+          onCopyValue={
+            copyAdminValue
+          }
         />
 
       </section>
@@ -1028,6 +1078,7 @@ function Table({
   rows,
   onCompleteWithdrawal,
   completingWithdrawalId,
+  onCopyValue,
 }) {
   let columns = [];
 
@@ -1439,6 +1490,85 @@ function Table({
 
 
                     // ========================================
+                    // DESTINATION WALLET + COPY
+                    // ========================================
+
+                    if (
+                      tab === "withdrawals" &&
+                      key === "destination_wallet"
+                    ) {
+                      const fullDestination = String(
+                        row.destination_wallet || ""
+                      );
+
+                      return (
+                        <td
+                          key={key}
+                          title={fullDestination}
+                          style={{
+                            minWidth: 280,
+                            maxWidth: 420,
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 8,
+                              width: "100%",
+                            }}
+                          >
+                            <span
+                              style={{
+                                flex: 1,
+                                minWidth: 0,
+                                whiteSpace: "normal",
+                                wordBreak: "break-all",
+                                fontFamily:
+                                  "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                                fontSize: 12,
+                                lineHeight: 1.45,
+                              }}
+                            >
+                              {fullDestination || "—"}
+                            </span>
+
+                            {fullDestination && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onCopyValue(
+                                    "Destination wallet",
+                                    fullDestination
+                                  )
+                                }
+                                title="Copy destination wallet"
+                                style={{
+                                  flexShrink: 0,
+                                  minWidth: 68,
+                                  height: 34,
+                                  padding: "0 10px",
+                                  borderRadius: 10,
+                                  border:
+                                    "1px solid rgba(105, 163, 255, 0.28)",
+                                  background:
+                                    "rgba(63, 126, 255, 0.12)",
+                                  color: "#dceaff",
+                                  cursor: "pointer",
+                                  fontSize: 12,
+                                  fontWeight: 700,
+                                }}
+                              >
+                                ⧉ Copy
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      );
+                    }
+
+
+                    // ========================================
                     // FULL WALLET / TX
                     // ========================================
 
@@ -1448,7 +1578,6 @@ function Table({
                       &&
                       [
                         "wallet_address",
-                        "destination_wallet",
                         "tx_hash",
                       ].includes(
                         key
