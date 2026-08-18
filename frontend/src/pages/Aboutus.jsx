@@ -21,7 +21,7 @@ function TasksPage({ tasks, setTasks, setCoins, showSnackbar }) {
     telegram: "https://t.me/EcoSmartECS",
     instagram: "https://www.instagram.com/ecosmartecs/",
     website: "https://ecosmartecs.com/",
-    whitepaper: "https://main--hlx--ecosmartecs.hlx.live/",
+    whitepaper: "https://main--hlx--ecosmartecs.aem.live/",
     staking: "https://bscscan.com/address/0x4685e9111696eff9c81a6f5ece2d83ab6b423b91#code",
   };
 

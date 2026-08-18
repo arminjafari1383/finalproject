@@ -12,7 +12,7 @@ const INVITER_CODE_KEY = "inviter_code";
 const WITHDRAW_TARGET = 60;
 const ECG_PER_USDT = 312;
 
-const ECG_CONTRACT_ADDRESS = "0x1A2b7F3c9D8e4B2A";
+const ECG_CONTRACT_ADDRESS = "0x79b88B5298C6025b09d910428A30e960dcEeB282";
 
 const ECG_CONTRACT_LINK =
   `https://bscscan.com/address/${ECG_CONTRACT_ADDRESS}`;
