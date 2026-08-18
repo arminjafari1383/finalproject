@@ -1205,15 +1205,15 @@ export default function Wallet() {
     );
 
 
-  // Lifetime DAILY mining reward.
-  // This must NOT use withdrawable_total because withdrawals/referrals/profits
-  // would make "Total Mined" incorrect.
+  // Total completed withdrawals.
+  // Backend updates wallet.total_withdrawn only when admin marks
+  // a withdrawal Complete/Success, so Pending requests are not counted.
   const totalMined =
     useMemo(
       () =>
         Number(
           wallet
-            ?.total_mined ??
+            ?.total_withdrawn ??
           0
         ),
       [wallet]
