@@ -719,6 +719,91 @@ export default function Wallet() {
 
 
   // ====================================================
+  // LIVE WALLET VALUES
+  // ====================================================
+
+  const refreshWalletValues =
+    useCallback(async () => {
+      if (!address) {
+        return;
+      }
+
+      try {
+        const response =
+          await api.get(
+            `/wallet/${address}/`
+          );
+
+        setWallet(
+          response.data
+        );
+      } catch (error) {
+        console.error(
+          "[WALLET VALUES] refresh error",
+          error
+        );
+      }
+    }, [address]);
+
+
+  useEffect(() => {
+    if (!address) {
+      return undefined;
+    }
+
+    // Refresh immediately when this page is mounted.
+    refreshWalletValues();
+
+    // Keep values fresh while the user stays on Wallet.
+    const timer =
+      window.setInterval(
+        refreshWalletValues,
+        15000
+      );
+
+    const onVisible = () => {
+      if (
+        document.visibilityState ===
+        "visible"
+      ) {
+        refreshWalletValues();
+      }
+    };
+
+    const onFocus = () => {
+      refreshWalletValues();
+    };
+
+    document.addEventListener(
+      "visibilitychange",
+      onVisible
+    );
+
+    window.addEventListener(
+      "focus",
+      onFocus
+    );
+
+    return () => {
+      window.clearInterval(timer);
+
+      document.removeEventListener(
+        "visibilitychange",
+        onVisible
+      );
+
+      window.removeEventListener(
+        "focus",
+        onFocus
+      );
+    };
+  }, [
+    address,
+    refreshWalletValues,
+  ]);
+
+
+  // ====================================================
   // DISCONNECT / REPLACE WALLET
   // ====================================================
 
@@ -1105,13 +1190,57 @@ export default function Wallet() {
     ]);
 
 
+  // Current amount that can actually be withdrawn.
   const totalBalance =
     useMemo(
       () =>
         Number(
           wallet
-            ?.withdrawable_total ||
-            0
+            ?.available_balance ??
+          wallet
+            ?.withdrawable_total ??
+          0
+        ),
+      [wallet]
+    );
+
+
+  // Lifetime DAILY mining reward.
+  // This must NOT use withdrawable_total because withdrawals/referrals/profits
+  // would make "Total Mined" incorrect.
+  const totalMined =
+    useMemo(
+      () =>
+        Number(
+          wallet
+            ?.total_mined ??
+          0
+        ),
+      [wallet]
+    );
+
+
+  const referralBonus =
+    useMemo(
+      () =>
+        Number(
+          wallet
+            ?.referral_bonus_total ??
+          wallet
+            ?.referral_bonus ??
+          0
+        ),
+      [wallet]
+    );
+
+
+  const miningDays =
+    useMemo(
+      () =>
+        Number(
+          wallet
+            ?.mining_days ??
+          0
         ),
       [wallet]
     );
@@ -1415,7 +1544,7 @@ export default function Wallet() {
                 <div className="wallet-balance-card">
 
                   <div className="balance-label">
-                    TOTAL BALANCE
+                    AVAILABLE BALANCE
                   </div>
 
 
@@ -1424,7 +1553,7 @@ export default function Wallet() {
                     <div className="balance-number">
                       {Number(
                         totalBalance
-                      ).toFixed(0)}
+                      ).toFixed(4)}
                     </div>
 
                     <div className="balance-token-pill">
@@ -1495,7 +1624,7 @@ export default function Wallet() {
 
                       {Number(
                         totalBalance
-                      ).toFixed(0)}
+                      ).toFixed(2)}
 
                       {" / "}
 
@@ -1510,7 +1639,7 @@ export default function Wallet() {
 
                       {Number(
                         remainingToUnlock
-                      ).toFixed(0)}
+                      ).toFixed(2)}
 
                       {" ECG to go"}
 
@@ -1816,8 +1945,8 @@ export default function Wallet() {
                     <div className="stat-value">
 
                       {Number(
-                        totalBalance
-                      ).toFixed(0)}
+                        totalMined
+                      ).toFixed(4)}
 
                       {" ECG"}
 
@@ -1850,15 +1979,33 @@ export default function Wallet() {
                   <div className="wallet-stat-card">
 
                     <div className="stat-icon">
-                      🏆
+                      🎁
                     </div>
 
                     <div className="stat-title">
-                      Your Rank
+                      Referral Bonus
                     </div>
 
                     <div className="stat-value">
-                      --
+                      {referralBonus.toFixed(4)}
+                      {" ECG"}
+                    </div>
+
+                  </div>
+
+
+                  <div className="wallet-stat-card">
+
+                    <div className="stat-icon">
+                      📅
+                    </div>
+
+                    <div className="stat-title">
+                      Days Mined
+                    </div>
+
+                    <div className="stat-value">
+                      {miningDays}
                     </div>
 
                   </div>

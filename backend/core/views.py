@@ -653,8 +653,19 @@ def wallet_view(request, wallet_address):
         or Decimal("0")
     )
 
+    # Current referral balance can decrease after a withdrawal.
     referral_bonus_current = (
         wallet.referral_bonus
+        or Decimal("0")
+    )
+
+    # Lifetime DIRECT referral bonus earned by the user.
+    # Every successful direct referral reward is recorded as REF_BONUS,
+    # so this value stays correct even after the user spends/withdraws it.
+    referral_bonus_total = (
+        user.ledgers
+        .filter(typ="REF_BONUS")
+        .aggregate(total=Sum("amount"))["total"]
         or Decimal("0")
     )
 
@@ -696,7 +707,12 @@ def wallet_view(request, wallet_address):
         "total_mined": str(total_mined),
         "mining_days": mining_days,
 
+        # Keep current balance for accounting/backward compatibility.
         "referral_bonus": str(referral_bonus_current),
+
+        # Use this field for the Referral Bonus statistic shown to the user.
+        "referral_bonus_total": str(referral_bonus_total),
+
         "downline_profit_instant": str(downline_profit_current),
 
         "principal_locked": str(principal_locked),
@@ -1453,12 +1469,16 @@ def _daily_reward_stats(user):
         or Decimal("0")
     )
 
+    referral_points = (
+        user.ledgers
+        .filter(typ="REF_BONUS")
+        .aggregate(total=Sum("amount"))["total"]
+        or Decimal("0")
+    )
+
     return {
         "total_rewards": str(total_rewards),
-        "referral_points": str(
-            user.wallet.referral_bonus
-            or Decimal("0")
-        ),
+        "referral_points": str(referral_points),
         "rewards_count": daily_qs.count(),
     }
 
@@ -2213,4 +2233,3 @@ def create_ton_transaction(request):
         },
         status=status.HTTP_200_OK,
     )
-
