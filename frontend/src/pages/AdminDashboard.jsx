@@ -57,6 +57,7 @@ export default function AdminDashboard() {
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [completingWithdrawalId, setCompletingWithdrawalId] = useState(null);
 
 
   const loadDashboard = useCallback(async () => {
@@ -100,6 +101,47 @@ export default function AdminDashboard() {
       setLoading(false);
     }
   }, [otp]);
+
+
+  const completeWithdrawal = useCallback(
+    async (withdrawal) => {
+      if (!withdrawal?.id) return;
+
+      const txHash = window.prompt(
+        "Transaction hash / payment receipt (optional). Leave empty if unavailable:",
+        withdrawal.tx_hash || ""
+      );
+
+      if (txHash === null) return;
+
+      try {
+        setCompletingWithdrawalId(withdrawal.id);
+        setError("");
+
+        await api.post(
+          `/admin/withdrawals/${withdrawal.id}/complete/`,
+          {
+            tx_hash: txHash.trim(),
+          },
+          {
+            headers: {
+              "X-Admin-OTP": otp.trim(),
+            },
+          }
+        );
+
+        await loadDashboard();
+      } catch (err) {
+        setError(
+          err.response?.data?.error ||
+            "Unable to complete withdrawal."
+        );
+      } finally {
+        setCompletingWithdrawalId(null);
+      }
+    },
+    [loadDashboard, otp]
+  );
 
 
   useEffect(() => {
@@ -489,6 +531,8 @@ export default function AdminDashboard() {
         <Table
           tab={tab}
           rows={rows}
+          onCompleteWithdrawal={completeWithdrawal}
+          completingWithdrawalId={completingWithdrawalId}
         />
       </section>
     </main>
@@ -520,6 +564,8 @@ function Stat({
 function Table({
   tab,
   rows,
+  onCompleteWithdrawal,
+  completingWithdrawalId,
 }) {
   let columns = [];
 
@@ -696,55 +742,18 @@ function Table({
 
   if (tab === "withdrawals") {
     columns = [
-      [
-        "username",
-        "User",
-      ],
-
-      [
-        "wallet_address",
-        "Wallet",
-      ],
-
-      [
-        "asset",
-        "Asset",
-      ],
-
-      [
-        "scope",
-        "Scope",
-      ],
-
-      [
-        "amount",
-        "Amount",
-      ],
-
-      [
-        "ton_amount",
-        "TON Amount",
-      ],
-
-      [
-        "status",
-        "Status",
-      ],
-
-      [
-        "destination_wallet",
-        "Destination",
-      ],
-
-      [
-        "tx_hash",
-        "TX Hash",
-      ],
-
-      [
-        "created_at",
-        "Created",
-      ],
+      ["id", "ID"],
+      ["username", "User"],
+      ["wallet_address", "Connected Wallet"],
+      ["asset", "Asset"],
+      ["requested_amount", "Requested"],
+      ["ecg_reserved", "ECG Reserved"],
+      ["destination_wallet", "Destination Wallet"],
+      ["status", "Status"],
+      ["tx_hash", "TX Hash / Receipt"],
+      ["created_at", "Created"],
+      ["completed_at", "Completed"],
+      ["action", "Action"],
     ];
   }
 
@@ -770,6 +779,94 @@ function Table({
               key={`${tab}-${row.id}`}
             >
               {columns.map(([key]) => {
+                if (
+                  tab === "withdrawals" &&
+                  key === "requested_amount"
+                ) {
+                  const isTon = ["TON", "GRAM"].includes(
+                    String(row.asset || "").toUpperCase()
+                  );
+
+                  return (
+                    <td key={key}>
+                      <strong>
+                        {isTon
+                          ? `${number(row.ton_amount)} TON`
+                          : `${number(row.amount)} ECG`}
+                      </strong>
+                    </td>
+                  );
+                }
+
+                if (tab === "withdrawals" && key === "ecg_reserved") {
+                  return (
+                    <td key={key}>
+                      {`${number(row.amount)} ECG`}
+                    </td>
+                  );
+                }
+
+                if (tab === "withdrawals" && key === "status") {
+                  const rawStatus = String(row.status || "").toUpperCase();
+                  const text = ["SUCCESS", "COMPLETE", "COMPLETED"].includes(rawStatus)
+                    ? "Complete"
+                    : rawStatus === "PENDING"
+                    ? "Pending"
+                    : rawStatus === "FAILED"
+                    ? "Failed"
+                    : rawStatus || "—";
+
+                  return <td key={key}><strong>{text}</strong></td>;
+                }
+
+                if (tab === "withdrawals" && key === "action") {
+                  const pending = String(row.status || "").toUpperCase() === "PENDING";
+                  const completing = completingWithdrawalId === row.id;
+
+                  return (
+                    <td key={key}>
+                      {pending ? (
+                        <button
+                          type="button"
+                          onClick={() => onCompleteWithdrawal(row)}
+                          disabled={completing}
+                        >
+                          {completing ? "Completing…" : "Pending → Complete"}
+                        </button>
+                      ) : (
+                        <span>
+                          {["SUCCESS", "COMPLETE", "COMPLETED"].includes(
+                            String(row.status || "").toUpperCase()
+                          )
+                            ? "Complete"
+                            : "—"}
+                        </span>
+                      )}
+                    </td>
+                  );
+                }
+
+                if (
+                  tab === "withdrawals" &&
+                  ["wallet_address", "destination_wallet", "tx_hash"].includes(key)
+                ) {
+                  const full = String(row[key] || "");
+                  return (
+                    <td
+                      key={key}
+                      title={full}
+                      style={{
+                        minWidth: 220,
+                        maxWidth: 360,
+                        whiteSpace: "normal",
+                        wordBreak: "break-all",
+                      }}
+                    >
+                      {full || "—"}
+                    </td>
+                  );
+                }
+
                 const value = formatCell(
                   key,
                   row[key]
@@ -823,6 +920,7 @@ function formatCell(
 
   if (
     key === "created_at" ||
+    key === "completed_at" ||
     key === "last_active"
   ) {
     if (!value) {

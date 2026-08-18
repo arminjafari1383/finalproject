@@ -32,6 +32,8 @@ import requests
 import re
 import base64
 import hashlib
+import hmac
+import struct
 
 # =======================
 # تنظیمات لاگینگ
@@ -853,14 +855,19 @@ def list_purchases(request):
 
 @api_view(["POST"])
 def request_withdraw(request):
-    wallet_address = str(request.data.get("wallet_address", "")).strip()
-    requested_asset = str(request.data.get("asset", "")).strip().upper()
+    """
+    Create a MANUAL withdrawal request for both ECG and TON.
+
+    Nothing is sent on-chain here. The requested ECG value is reserved immediately
+    so the same balance cannot be requested twice. An admin must pay the user and
+    then mark the request complete from the admin dashboard.
+    """
+    wallet_address = str(request.data.get("wallet_address", "") or "").strip()
+    requested_asset = str(request.data.get("asset", "") or "").strip().upper()
     scope = request.data.get("scope", "ALL_WITHDRAWABLE")
 
-    # Frontend calls it GRAM. The existing WithdrawRequest/TON service still
-    # stores/sends the native TON amount, so GRAM is normalized to TON internally.
-    is_gram = requested_asset in {"GRAM", "TON"}
-    asset = "TON" if is_gram else requested_asset
+    is_ton = requested_asset in {"GRAM", "TON"}
+    asset = "TON" if is_ton else requested_asset
 
     try:
         requested_amount = Decimal(str(request.data.get("amount", "0")))
@@ -879,48 +886,49 @@ def request_withdraw(request):
     if scope not in {"DOWNLINE_ONLY", "ALL_WITHDRAWABLE"}:
         return Response({"error": "Invalid scope."}, status=400)
 
-    # GRAM withdrawal:
-    # - user enters the GRAM amount
-    # - minimum is 1 GRAM
-    # - destination is ALWAYS the currently connected wallet
-    # - ECG debit is calculated from the same TON/USD * ECG/USD mechanism
-    if is_gram:
+    # ECG and TON intentionally use the same manual withdrawal flow:
+    # the user supplies BOTH the requested amount and the destination wallet.
+    destination = str(
+        request.data.get("destination_wallet", "") or ""
+    ).strip()
+    if not destination:
+        return Response(
+            {"error": f"destination_wallet is required for {asset} withdrawal."},
+            status=400,
+        )
+
+    if is_ton:
         if requested_amount < Decimal("1"):
-            return Response({"error": "Minimum GRAM withdrawal is 1 GRAM."}, status=400)
+            return Response({"error": "Minimum TON withdrawal is 1 TON."}, status=400)
 
-        destination = wallet_address
-
+        # TON only needs to be a valid TON address. It does NOT have to match
+        # the connected/account wallet because admin pays the user-entered target.
         try:
-            # Canonical validation also accepts raw TON addresses.
             _ton_address_to_raw(destination)
         except ValueError:
             return Response(
-                {"error": "Connected wallet is not a valid TON/GRAM address."},
+                {"error": "destination_wallet is not a valid TON address."},
                 status=400,
             )
 
         ton_rate = fetch_ton_usd_rate()
         if ton_rate <= 0:
-            return Response({"error": "Unable to calculate GRAM conversion rate."}, status=503)
+            return Response(
+                {"error": "Unable to calculate TON conversion rate."},
+                status=503,
+            )
 
-        # Same conversion used by ecg_to_ton(), inverted:
-        # 1 GRAM(TON) = TON_USD_RATE * ECG_PER_USD ECG
+        # Internal accounting is still ECG-denominated.
         ecg_amount = (
             requested_amount * ton_rate * ECG_PER_USD
         ).quantize(Decimal("0.000001"), rounding=ROUND_UP)
-
-        gram_amount = requested_amount.quantize(Decimal("0.000000001"))
+        ton_amount = requested_amount.quantize(Decimal("0.000000001"))
     else:
-        # Existing ECG withdrawal remains manual and keeps the 60 ECG minimum.
         if requested_amount < Decimal("60"):
             return Response({"error": "Minimum withdrawal is 60 ECG."}, status=400)
 
-        destination = str(request.data.get("destination_wallet", "")).strip()
-        if not destination:
-            return Response({"error": "destination_wallet is required for ECG withdrawal."}, status=400)
-
         ecg_amount = requested_amount
-        gram_amount = Decimal("0")
+        ton_amount = Decimal("0")
 
     telegram_id = request.headers.get("X-Telegram-Id")
     is_telegram = request.headers.get("X-Telegram") == "true"
@@ -930,11 +938,7 @@ def request_withdraw(request):
         is_telegram if telegram_id else False,
     )
 
-    # Never allow a GRAM withdrawal to be redirected to a different wallet.
-    if is_gram and user.wallet_address != wallet_address:
-        return Response({"error": "Connected wallet mismatch."}, status=409)
-
-    # Reserve ECG balance before the network call to prevent double-spend.
+    # Reserve ECG immediately. Admin completion must NOT deduct again.
     with transaction.atomic():
         locked_wallet = Wallet.objects.select_for_update().get(user=user)
         available = (
@@ -944,14 +948,14 @@ def request_withdraw(request):
         )
 
         if ecg_amount > available:
-            if is_gram:
-                max_gram = ecg_to_ton(available) if available > 0 else Decimal("0")
+            if is_ton:
+                max_ton = ecg_to_ton(available) if available > 0 else Decimal("0")
                 return Response(
                     {
-                        "error": "Insufficient ECG balance for this GRAM withdrawal.",
+                        "error": "Insufficient ECG balance for this TON withdrawal.",
                         "required_ecg": str(ecg_amount),
                         "available_ecg": str(available),
-                        "max_gram": str(max_gram),
+                        "max_ton": str(max_ton),
                     },
                     status=400,
                 )
@@ -988,9 +992,8 @@ def request_withdraw(request):
             user=user,
             scope=scope,
             asset=asset,
-            # amount remains ECG-denominated so accounting/total_withdrawn stays consistent.
             amount=ecg_amount,
-            ton_amount=gram_amount,
+            ton_amount=ton_amount,
             destination_wallet=destination,
             status="PENDING",
             balance_breakdown=breakdown,
@@ -1002,131 +1005,45 @@ def request_withdraw(request):
             amount=-ecg_amount,
             meta={
                 "withdraw_id": req.id,
-                "asset": "GRAM" if is_gram else "ECG",
+                "asset": asset,
                 "status": "PENDING",
-                "requested_gram": str(gram_amount) if is_gram else None,
+                "requested_amount": str(ton_amount if is_ton else ecg_amount),
+                "requested_ton": str(ton_amount) if is_ton else None,
                 "ecg_debited": str(ecg_amount),
                 "destination": destination,
-                "destination_source": "connected_wallet" if is_gram else "user_input",
+                "approval_required": True,
             },
         )
 
-    # ECG remains a manual admin request; funds are already reserved.
-    if not is_gram:
-        return Response(serialize_withdraw(req), status=201)
-
-    try:
-        response = requests.post(
-            f"{TON_SERVICE_URL}/send-ton",
-            json={
-                "destination": wallet_address,
-                "amountTon": str(gram_amount),
-                "comment": f"GRAM withdraw #{req.id}",
-                "idempotencyKey": f"withdraw-{req.id}",
-            },
-            timeout=30,
-        )
-
-        try:
-            data = response.json()
-        except Exception as exc:
-            raise RuntimeError("TON service returned invalid JSON") from exc
-
-        if response.status_code not in (200, 201) or not data.get("ok"):
-            raise RuntimeError(data.get("error") or "TON service failed")
-
-        tx_hash = str(
-            data.get("tx_hash")
-            or data.get("txHash")
-            or data.get("receipt_id")
-            or data.get("receiptId")
-            or ""
-        ).strip()
-
-        # WalletContractV4.sendTransfer() does not return a blockchain tx hash
-        # directly. The current tonservice returns sent_seqno instead. Do NOT
-        # turn a successful transfer into FAILED just because tx_hash is absent.
-        sent_seqno = data.get("sent_seqno")
-        if not tx_hash:
-            if sent_seqno is None:
-                raise RuntimeError(
-                    "TON service returned success without tx_hash/receipt_id/sent_seqno"
-                )
-
-            # 64-char local receipt keeps the existing DB tx_hash field useful
-            # until a later reconciliation job resolves the real on-chain hash.
-            tx_hash = hashlib.sha256(
-                (
-                    f"tonservice:{req.id}:{wallet_address}:"
-                    f"{gram_amount}:{sent_seqno}"
-                ).encode("utf-8")
-            ).hexdigest()
-
-        with transaction.atomic():
-            req = WithdrawRequest.objects.select_for_update().get(pk=req.pk)
-            req.status = "SUCCESS"
-            req.tx_hash = tx_hash
-            req.completed_at = timezone.now()
-            req.save(update_fields=["status", "tx_hash", "completed_at"])
-
-            locked_wallet = Wallet.objects.select_for_update().get(user=user)
-            locked_wallet.total_withdrawn += ecg_amount
-            locked_wallet.last_withdraw_at = timezone.now()
-            locked_wallet.save(
-                update_fields=["total_withdrawn", "last_withdraw_at", "updated_at"]
-            )
-
-        payload = serialize_withdraw(req)
-        payload["asset"] = "GRAM"
-        payload["gram_amount"] = str(req.ton_amount)
-        payload["ecg_debited"] = str(req.amount)
-        payload["destination_source"] = "connected_wallet"
-        payload["sent_seqno"] = sent_seqno
-        payload["tonservice_receipt"] = tx_hash
-        return Response(payload, status=201)
-
-    except Exception as exc:
-        # Restore exactly the ECG buckets reserved above if the TON service fails.
-        with transaction.atomic():
-            req = WithdrawRequest.objects.select_for_update().get(pk=req.pk)
-            locked_wallet = Wallet.objects.select_for_update().get(user=user)
-
-            for field, value in req.balance_breakdown.items():
-                setattr(
-                    locked_wallet,
-                    field,
-                    getattr(locked_wallet, field) + Decimal(value),
-                )
-
-            locked_wallet.save(
-                update_fields=list(req.balance_breakdown.keys()) + ["updated_at"]
-            )
-
-            req.status = "FAILED"
-            req.fail_reason = str(exc)[:500]
-            req.completed_at = timezone.now()
-            req.save(update_fields=["status", "fail_reason", "completed_at"])
-
-        logger.exception("GRAM withdrawal failed")
-        return Response(
-            {"error": "GRAM transfer failed; ECG balance was restored."},
-            status=502,
-        )
+    payload = serialize_withdraw(req)
+    payload.update({
+        "message": "Withdrawal request submitted. Please wait for admin approval.",
+        "approval_required": True,
+    })
+    return Response(payload, status=201)
 
 
 def serialize_withdraw(item):
-    is_gram = item.asset == "TON"
+    is_ton = item.asset == "TON"
+    raw_status = str(item.status or "").upper()
+    display_status = (
+        "COMPLETE" if raw_status in {"SUCCESS", "COMPLETE", "COMPLETED"}
+        else raw_status
+    )
+
     return {
         "id": item.id,
-        "asset": "GRAM" if is_gram else item.asset,
+        "asset": "TON" if is_ton else item.asset,
         "raw_asset": item.asset,
-        # amount is always the ECG amount debited from the internal wallet.
+        # amount is the ECG amount reserved/debited from the internal wallet.
         "amount": str(item.amount),
         "ecg_debited": str(item.amount),
         "ton_amount": str(item.ton_amount),
-        "gram_amount": str(item.ton_amount) if is_gram else "0",
+        "requested_amount": str(item.ton_amount if is_ton else item.amount),
+        "requested_asset": "TON" if is_ton else "ECG",
         "destination_wallet": item.destination_wallet,
         "status": item.status,
+        "display_status": display_status,
         "tx_hash": item.tx_hash,
         "created_at": item.created_at,
         "completed_at": item.completed_at,
@@ -1143,6 +1060,139 @@ def withdraw_history(request):
         return Response([], status=200)
     rows = user.withdraws.order_by("-created_at")[:50]
     return Response([serialize_withdraw(row) for row in rows])
+
+
+
+
+# ============================================================
+# MANUAL WITHDRAWAL ADMIN APPROVAL
+# ============================================================
+
+def _admin_totp_secret():
+    """Use the same Google Authenticator secret for admin-only write actions."""
+    candidates = [
+        getattr(settings, "ADMIN_TOTP_SECRET", None),
+        getattr(settings, "ADMIN_OTP_SECRET", None),
+        getattr(settings, "GOOGLE_AUTH_SECRET", None),
+        os.getenv("ADMIN_TOTP_SECRET"),
+        os.getenv("ADMIN_OTP_SECRET"),
+        os.getenv("GOOGLE_AUTH_SECRET"),
+    ]
+    return next((str(value).strip() for value in candidates if value), "")
+
+
+def _totp_code(secret: str, counter: int) -> str:
+    normalized = secret.replace(" ", "").upper()
+    normalized += "=" * ((-len(normalized)) % 8)
+    key = base64.b32decode(normalized, casefold=True)
+    msg = struct.pack(">Q", counter)
+    digest = hmac.new(key, msg, hashlib.sha1).digest()
+    offset = digest[-1] & 0x0F
+    binary = struct.unpack(">I", digest[offset:offset + 4])[0] & 0x7FFFFFFF
+    return f"{binary % 1_000_000:06d}"
+
+
+def _verify_admin_totp(request) -> bool:
+    provided = str(request.headers.get("X-Admin-OTP", "") or "").strip()
+    secret = _admin_totp_secret()
+    if not secret or not re.fullmatch(r"\d{6}", provided):
+        return False
+
+    current_counter = int(time.time() // 30)
+    try:
+        return any(
+            hmac.compare_digest(provided, _totp_code(secret, current_counter + drift))
+            for drift in (-1, 0, 1)
+        )
+    except Exception:
+        logger.exception("Could not verify admin TOTP")
+        return False
+
+
+@api_view(["POST"])
+def admin_complete_withdraw(request, withdraw_id):
+    """
+    Admin confirms that the manual payout was actually sent.
+
+    This endpoint is idempotent: a completed request never increments totals twice.
+    DB status stays SUCCESS for compatibility with the existing model/status choices;
+    frontend/history display it as COMPLETE.
+    """
+    if not _verify_admin_totp(request):
+        return Response({"error": "Invalid admin OTP."}, status=403)
+
+    tx_hash = str(request.data.get("tx_hash", "") or "").strip()
+
+    with transaction.atomic():
+        req = (
+            WithdrawRequest.objects
+            .select_for_update()
+            .select_related("user")
+            .filter(pk=withdraw_id)
+            .first()
+        )
+
+        if not req:
+            return Response({"error": "Withdrawal request not found."}, status=404)
+
+        current_status = str(req.status or "").upper()
+
+        # Safe retry: return the existing completed record without accounting again.
+        if current_status in {"SUCCESS", "COMPLETE", "COMPLETED"}:
+            return Response({
+                "success": True,
+                "already_completed": True,
+                "withdrawal": serialize_withdraw(req),
+            })
+
+        if current_status != "PENDING":
+            return Response(
+                {"error": f"Only PENDING withdrawals can be completed (current: {req.status})."},
+                status=409,
+            )
+
+        req.status = "SUCCESS"
+        if tx_hash:
+            req.tx_hash = tx_hash
+        req.completed_at = timezone.now()
+
+        update_fields = ["status", "completed_at"]
+        if tx_hash:
+            update_fields.append("tx_hash")
+        req.save(update_fields=update_fields)
+
+        locked_wallet = Wallet.objects.select_for_update().get(user=req.user)
+        locked_wallet.total_withdrawn = (
+            (locked_wallet.total_withdrawn or Decimal("0")) + req.amount
+        )
+        locked_wallet.last_withdraw_at = req.completed_at
+        locked_wallet.save(
+            update_fields=["total_withdrawn", "last_withdraw_at", "updated_at"]
+        )
+
+        ledger = (
+            Ledger.objects
+            .filter(user=req.user, typ="WITHDRAW", meta__withdraw_id=req.id)
+            .order_by("-id")
+            .first()
+        )
+        if ledger:
+            meta = dict(ledger.meta or {})
+            meta.update({
+                "status": "SUCCESS",
+                "display_status": "COMPLETE",
+                "admin_completed_at": req.completed_at.isoformat(),
+            })
+            if tx_hash:
+                meta["tx_hash"] = tx_hash
+            ledger.meta = meta
+            ledger.save(update_fields=["meta"])
+
+    return Response({
+        "success": True,
+        "message": "Withdrawal marked complete.",
+        "withdrawal": serialize_withdraw(req),
+    })
 
 
 @api_view(["GET"])

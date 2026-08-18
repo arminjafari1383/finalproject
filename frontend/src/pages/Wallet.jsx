@@ -215,6 +215,22 @@ export default function Wallet() {
   ] = useState(false);
 
 
+  const [
+    withdrawHistory,
+    setWithdrawHistory,
+  ] = useState([]);
+
+  const [
+    withdrawHistoryLoading,
+    setWithdrawHistoryLoading,
+  ] = useState(false);
+
+  const [
+    withdrawNotice,
+    setWithdrawNotice,
+  ] = useState("");
+
+
   // ====================================================
   // DEBUG STATE
   // ====================================================
@@ -1514,6 +1530,61 @@ export default function Wallet() {
 
 
   // ====================================================
+  // WITHDRAW HISTORY
+  // ====================================================
+
+  const loadWithdrawHistory =
+    useCallback(async () => {
+      if (!address) {
+        setWithdrawHistory([]);
+        return;
+      }
+
+      try {
+        setWithdrawHistoryLoading(true);
+
+        const response = await api.get(
+          "/withdraw/history/",
+          {
+            params: {
+              wallet_address: address,
+            },
+          }
+        );
+
+        setWithdrawHistory(
+          Array.isArray(response.data)
+            ? response.data
+            : []
+        );
+      } catch (error) {
+        console.error(
+          "[WITHDRAW HISTORY] load error",
+          error
+        );
+      } finally {
+        setWithdrawHistoryLoading(false);
+      }
+    }, [address]);
+
+
+  useEffect(() => {
+    if (!address) return undefined;
+
+    loadWithdrawHistory();
+
+    // Keep Pending -> Complete in sync while the user stays on this page.
+    const timer = window.setInterval(
+      loadWithdrawHistory,
+      10000
+    );
+
+    return () =>
+      window.clearInterval(timer);
+  }, [address, loadWithdrawHistory]);
+
+
+  // ====================================================
   // WITHDRAW
   // ====================================================
 
@@ -1726,7 +1797,7 @@ export default function Wallet() {
         n < 1
       ) {
         const message =
-          "Minimum automatic TON withdrawal is 1 TON.";
+          "Minimum TON withdrawal is 1 TON.";
 
         addWithdrawDebugLog(
           "VALIDATION ERROR",
@@ -1749,48 +1820,41 @@ export default function Wallet() {
 
       if (
         withdrawAsset ===
-        "ECG"
+        "ECG" &&
+        n < 60
       ) {
-        if (
-          n < 60
-        ) {
-          const message =
-            "Minimum withdrawal is 60 ECG.";
+        const message =
+          "Minimum withdrawal is 60 ECG.";
 
-          addWithdrawDebugLog(
-            "VALIDATION ERROR",
-            {
-              message,
+        addWithdrawDebugLog(
+          "VALIDATION ERROR",
+          {
+            message,
+            requested: n,
+            minimum: 60,
+          }
+        );
 
-              requested:
-                n,
-
-              minimum:
-                60,
-            }
-          );
-
-          return setWithdrawError(
-            message
-          );
-        }
+        return setWithdrawError(
+          message
+        );
+      }
 
 
-        if (
-          !destinationWallet.trim()
-        ) {
-          const message =
-            "Please enter the destination ECG wallet address.";
+      // ECG and TON use exactly the same manual request flow:
+      // user enters the destination address + amount for both assets.
+      if (!destinationWallet.trim()) {
+        const message =
+          `Please enter the destination ${withdrawAsset} wallet address.`;
 
-          addWithdrawDebugLog(
-            "VALIDATION ERROR",
-            message
-          );
+        addWithdrawDebugLog(
+          "VALIDATION ERROR",
+          message
+        );
 
-          return setWithdrawError(
-            message
-          );
-        }
+        return setWithdrawError(
+          message
+        );
       }
 
 
@@ -1833,10 +1897,7 @@ export default function Wallet() {
             address,
 
           destination_wallet:
-            withdrawAsset ===
-            "TON"
-              ? address
-              : destinationWallet.trim(),
+            destinationWallet.trim(),
 
           asset:
             withdrawAsset,
@@ -1982,6 +2043,16 @@ export default function Wallet() {
         setWallet(
           r.data
         );
+
+
+        const createdRequest =
+          withdrawResponse?.data || {};
+
+        setWithdrawNotice(
+          `Withdrawal request #${createdRequest.id || ""} submitted. Please wait for admin approval.`
+        );
+
+        await loadWithdrawHistory();
 
 
         // ===============================================
@@ -2803,6 +2874,133 @@ export default function Wallet() {
                 </button>
 
 
+                {withdrawNotice && (
+                  <div
+                    style={{
+                      marginTop: 12,
+                      padding: 12,
+                      border: "1px solid rgba(255,255,255,0.18)",
+                      borderRadius: 10,
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    ⏳ {withdrawNotice}
+                  </div>
+                )}
+
+
+                {/* WITHDRAW HISTORY */}
+
+                <div
+                  style={{
+                    marginTop: 18,
+                    padding: 14,
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    borderRadius: 12,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 10,
+                      marginBottom: 12,
+                    }}
+                  >
+                    <b>Withdrawal History</b>
+
+                    <button
+                      type="button"
+                      className="small-outline-btn"
+                      onClick={loadWithdrawHistory}
+                      disabled={withdrawHistoryLoading}
+                    >
+                      {withdrawHistoryLoading ? "Refreshing..." : "Refresh"}
+                    </button>
+                  </div>
+
+                  {!withdrawHistory.length ? (
+                    <div style={{ opacity: 0.65 }}>
+                      No withdrawal requests yet.
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        display: "grid",
+                        gap: 10,
+                      }}
+                    >
+                      {withdrawHistory.map((item) => {
+                        const rawStatus = String(
+                          item.display_status || item.status || ""
+                        ).toUpperCase();
+
+                        const statusText =
+                          ["SUCCESS", "COMPLETE", "COMPLETED"].includes(rawStatus)
+                            ? "Complete"
+                            : rawStatus === "PENDING"
+                            ? "Pending"
+                            : rawStatus === "FAILED"
+                            ? "Failed"
+                            : rawStatus || "—";
+
+                        const isTon =
+                          String(item.raw_asset || item.asset || "").toUpperCase() === "TON";
+
+                        const requestedValue = isTon
+                          ? `${Number(item.ton_amount || 0).toLocaleString(undefined, { maximumFractionDigits: 9 })} TON`
+                          : `${Number(item.amount || 0).toLocaleString(undefined, { maximumFractionDigits: 6 })} ECG`;
+
+                        return (
+                          <div
+                            key={item.id}
+                            style={{
+                              padding: 12,
+                              border: "1px solid rgba(255,255,255,0.10)",
+                              borderRadius: 10,
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                gap: 10,
+                                marginBottom: 8,
+                              }}
+                            >
+                              <b>#{item.id} · {requestedValue}</b>
+                              <b>{statusText}</b>
+                            </div>
+
+                            <div style={{ fontSize: 12, opacity: 0.8, wordBreak: "break-all" }}>
+                              Destination: {item.destination_wallet || "—"}
+                            </div>
+
+                            {isTon && (
+                              <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
+                                ECG reserved: {Number(item.ecg_debited || item.amount || 0).toLocaleString(undefined, { maximumFractionDigits: 6 })} ECG
+                              </div>
+                            )}
+
+                            <div style={{ fontSize: 12, opacity: 0.65, marginTop: 4 }}>
+                              Requested: {item.created_at ? new Date(item.created_at).toLocaleString() : "—"}
+                            </div>
+
+                            {statusText === "Complete" && (
+                              <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4, wordBreak: "break-all" }}>
+                                Completed: {item.completed_at ? new Date(item.completed_at).toLocaleString() : "—"}
+                                {item.tx_hash ? ` · TX: ${item.tx_hash}` : ""}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+
                 {/* REPLACE WALLET */}
 
                 <button
@@ -3046,71 +3244,37 @@ export default function Wallet() {
                     isWithdrawing
                   }
                 >
-                  Withdraw with TON (Auto)
+                  Withdraw with TON
                 </button>
 
               </div>
 
 
-              {/* DESTINATION */}
+              {/* DESTINATION - SAME FLOW FOR ECG AND TON */}
 
-              {withdrawAsset ===
-              "ECG" ? (
-
-                <>
-
-                  <label htmlFor="withdraw-destination">
-                    ECG Wallet Address
-                  </label>
+              <label htmlFor="withdraw-destination">
+                {withdrawAsset} Wallet Address
+              </label>
 
 
-                  <input
-                    id="withdraw-destination"
-                    type="text"
-                    value={
-                      destinationWallet
-                    }
-                    onChange={(e) =>
-                      setDestinationWallet(
-                        e.target
-                          .value
-                      )
-                    }
-                    placeholder="Enter destination ECG wallet address"
-                    disabled={
-                      isWithdrawing
-                    }
-                    autoComplete="off"
-                  />
-
-                </>
-
-              ) : (
-
-                <div className="ton-info">
-
-                  <div>
-
-                    Automatic destination:{" "}
-
-                    <b>
-                      {shortenMiddle(
-                        displayAddress || address,
-                        8,
-                        8
-                      )}
-                    </b>
-
-                  </div>
+              <input
+                id="withdraw-destination"
+                type="text"
+                value={destinationWallet}
+                onChange={(e) =>
+                  setDestinationWallet(
+                    e.target.value
+                  )
+                }
+                placeholder={`Enter destination ${withdrawAsset} wallet address`}
+                disabled={isWithdrawing}
+                autoComplete="off"
+              />
 
 
-                  <div>
-                    TON will be sent automatically to your connected wallet.
-                  </div>
-
-                </div>
-
-              )}
+              <div className="ton-info">
+                This {withdrawAsset} request will stay Pending until an admin pays the destination wallet and marks it Complete.
+              </div>
 
 
               {/* AMOUNT LABEL */}
@@ -3562,11 +3726,11 @@ export default function Wallet() {
               >
 
                 {isWithdrawing
-                  ? "Sending / Diagnosing..."
+                  ? "Submitting Request..."
                   : withdrawAsset ===
                     "TON"
-                  ? "Send TON Automatically"
-                  : "Confirm Withdrawal"}
+                  ? "Request TON Withdrawal"
+                  : "Request ECG Withdrawal"}
 
               </button>
 
