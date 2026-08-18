@@ -27,6 +27,7 @@ from .serializers import WalletSerializer, PurchaseSerializer, UserSerializer
 from django.conf import settings
 from django.db import transaction
 from django.db.utils import OperationalError
+from django.core import signing
 import os
 import requests
 import re
@@ -1071,6 +1072,11 @@ def withdraw_history(request):
 def _admin_totp_secret():
     """Use the same Google Authenticator secret for admin-only write actions."""
     candidates = [
+        # Main secret used by your Google Authenticator setup.
+        getattr(settings, "ADMIN_2FA_SECRET", None),
+        os.getenv("ADMIN_2FA_SECRET"),
+
+        # Backward-compatible names, if an older deployment still uses one.
         getattr(settings, "ADMIN_TOTP_SECRET", None),
         getattr(settings, "ADMIN_OTP_SECRET", None),
         getattr(settings, "GOOGLE_AUTH_SECRET", None),
@@ -1109,6 +1115,90 @@ def _verify_admin_totp(request) -> bool:
         return False
 
 
+
+
+# A Google Authenticator code is only used to CREATE an admin session.
+# Write actions use the signed session token, so the 30-second OTP expiring
+# will not break Pending -> Complete actions.
+ADMIN_SESSION_SALT = "core.admin-session.v1"
+
+
+def _admin_session_max_age() -> int:
+    try:
+        value = int(os.getenv("ADMIN_SESSION_MAX_AGE", "43200"))
+    except (TypeError, ValueError):
+        value = 43200
+    # Minimum 5 minutes; default 12 hours.
+    return max(300, value)
+
+
+def _create_admin_session_token() -> str:
+    return signing.dumps(
+        {
+            "role": "admin",
+            "v": 1,
+            "issued_at": int(time.time()),
+        },
+        salt=ADMIN_SESSION_SALT,
+        compress=True,
+    )
+
+
+def _verify_admin_session(request) -> bool:
+    token = str(
+        request.headers.get("X-Admin-Session", "") or ""
+    ).strip()
+
+    if not token:
+        return False
+
+    try:
+        payload = signing.loads(
+            token,
+            salt=ADMIN_SESSION_SALT,
+            max_age=_admin_session_max_age(),
+        )
+    except signing.SignatureExpired:
+        return False
+    except signing.BadSignature:
+        return False
+    except Exception:
+        logger.exception("Could not verify admin session")
+        return False
+
+    return (
+        isinstance(payload, dict)
+        and payload.get("role") == "admin"
+        and payload.get("v") == 1
+    )
+
+
+@api_view(["POST"])
+def admin_create_session(request):
+    """
+    Exchange one fresh Google Authenticator code for a signed admin session.
+    The frontend stores this session for the current browser tab/session and
+    uses it for withdrawal completion.
+    """
+    if not _verify_admin_totp(request):
+        return Response(
+            {
+                "error": (
+                    "Invalid Google Authenticator code. "
+                    "Enter the current 6-digit code and try again."
+                )
+            },
+            status=403,
+        )
+
+    max_age = _admin_session_max_age()
+    return Response({
+        "success": True,
+        "admin_session": _create_admin_session_token(),
+        "expires_in": max_age,
+    })
+
+
 @api_view(["POST"])
 def admin_complete_withdraw(request, withdraw_id):
     """
@@ -1118,8 +1208,16 @@ def admin_complete_withdraw(request, withdraw_id):
     DB status stays SUCCESS for compatibility with the existing model/status choices;
     frontend/history display it as COMPLETE.
     """
-    if not _verify_admin_totp(request):
-        return Response({"error": "Invalid admin OTP."}, status=403)
+    if not _verify_admin_session(request):
+        return Response(
+            {
+                "error": (
+                    "Admin session is missing or expired. "
+                    "Sign in to the admin dashboard again."
+                )
+            },
+            status=403,
+        )
 
     tx_hash = str(request.data.get("tx_hash", "") or "").strip()
 

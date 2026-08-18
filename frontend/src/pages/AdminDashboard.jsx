@@ -1,8 +1,5 @@
-// frontend/src/pages/AdminDashboard.jsx
-
 import {
   useCallback,
-  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -28,13 +25,13 @@ const short = (value = "") => {
 
 
 const number = (value) => {
-  const parsedValue = Number(value || 0);
+  const parsed = Number(value || 0);
 
-  if (!Number.isFinite(parsedValue)) {
+  if (!Number.isFinite(parsed)) {
     return "0";
   }
 
-  return parsedValue.toLocaleString(
+  return parsed.toLocaleString(
     undefined,
     {
       maximumFractionDigits: 6,
@@ -43,230 +40,678 @@ const number = (value) => {
 };
 
 
+const isCompletedStatus = (status) => {
+  return [
+    "SUCCESS",
+    "COMPLETE",
+    "COMPLETED",
+  ].includes(
+    String(status || "").toUpperCase()
+  );
+};
+
+
 export default function AdminDashboard() {
-  const [otp, setOtp] = useState(() => {
+  // Google Authenticator فقط برای ورود
+  const [otp, setOtp] =
+    useState("");
+
+  // سشن ادمین بعد از ورود موفق
+  const [
+    adminSession,
+    setAdminSession,
+  ] = useState(() => {
     return (
       sessionStorage.getItem(
-        "admin_dashboard_otp"
+        "admin_session_token"
       ) || ""
     );
   });
 
-  const [data, setData] = useState(null);
-  const [tab, setTab] = useState("users");
-  const [query, setQuery] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [completingWithdrawalId, setCompletingWithdrawalId] = useState(null);
+  const [data, setData] =
+    useState(null);
+
+  const [tab, setTab] =
+    useState("users");
+
+  const [query, setQuery] =
+    useState("");
+
+  const [error, setError] =
+    useState("");
+
+  const [loading, setLoading] =
+    useState(false);
+
+  const [
+    completingWithdrawalId,
+    setCompletingWithdrawalId,
+  ] = useState(null);
 
 
-  const loadDashboard = useCallback(async () => {
-    const cleanOtp = otp.trim();
+  // =========================================================
+  // LOGIN
+  // =========================================================
 
-    if (!cleanOtp) {
-      setError(
-        "Please enter Google Authenticator code."
-      );
+  const loadDashboard =
+    useCallback(async () => {
+      const cleanOtp =
+        otp.trim();
 
-      return;
-    }
+      if (
+        !/^\d{6}$/.test(
+          cleanOtp
+        )
+      ) {
+        setError(
+          "Please enter the current 6-digit Google Authenticator code."
+        );
 
-    setLoading(true);
-    setError("");
+        return;
+      }
 
-    try {
-      sessionStorage.setItem(
-        "admin_dashboard_otp",
-        cleanOtp
-      );
-
-      const response = await api.get(
-        "/admin/system-dashboard/",
-        {
-          headers: {
-            "X-Admin-OTP": cleanOtp,
-          },
-        }
-      );
-
-      setData(response.data);
-    } catch (err) {
-      setData(null);
-
-      setError(
-        err.response?.data?.error ||
-          "Unable to load admin dashboard."
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [otp]);
-
-
-  const completeWithdrawal = useCallback(
-    async (withdrawal) => {
-      if (!withdrawal?.id) return;
-
-      const txHash = window.prompt(
-        "Transaction hash / payment receipt (optional). Leave empty if unavailable:",
-        withdrawal.tx_hash || ""
-      );
-
-      if (txHash === null) return;
+      setLoading(true);
+      setError("");
 
       try {
-        setCompletingWithdrawalId(withdrawal.id);
-        setError("");
+        // -----------------------------------------
+        // 1. ساخت Admin Session
+        // -----------------------------------------
 
-        await api.post(
-          `/admin/withdrawals/${withdrawal.id}/complete/`,
-          {
-            tx_hash: txHash.trim(),
-          },
-          {
-            headers: {
-              "X-Admin-OTP": otp.trim(),
-            },
-          }
+        const sessionResponse =
+          await api.post(
+            "/admin/session/",
+            {},
+            {
+              headers: {
+                "X-Admin-OTP":
+                  cleanOtp,
+              },
+            }
+          );
+
+        const token =
+          sessionResponse
+            ?.data
+            ?.admin_session
+          || "";
+
+        if (!token) {
+          throw new Error(
+            "Server did not return an admin session."
+          );
+        }
+
+
+        // -----------------------------------------
+        // 2. دریافت اطلاعات Dashboard
+        // -----------------------------------------
+
+        const response =
+          await api.get(
+            "/admin/system-dashboard/",
+            {
+              headers: {
+                "X-Admin-OTP":
+                  cleanOtp,
+              },
+            }
+          );
+
+
+        // -----------------------------------------
+        // 3. ذخیره Admin Session
+        // -----------------------------------------
+
+        sessionStorage.setItem(
+          "admin_session_token",
+          token
         );
 
-        await loadDashboard();
+        setAdminSession(
+          token
+        );
+
+        setData(
+          response.data
+        );
+
+        // OTP را نگه نمی‌داریم
+        setOtp("");
+
       } catch (err) {
-        setError(
-          err.response?.data?.error ||
-            "Unable to complete withdrawal."
+        console.error(
+          "[ADMIN LOGIN ERROR]",
+          err
         );
+
+        sessionStorage.removeItem(
+          "admin_session_token"
+        );
+
+        setAdminSession("");
+
+        setData(null);
+
+        setError(
+          err.response
+            ?.data
+            ?.error
+          ||
+          err.response
+            ?.data
+            ?.detail
+          ||
+          err.message
+          ||
+          "Unable to load admin dashboard."
+        );
+
       } finally {
-        setCompletingWithdrawalId(null);
+        setLoading(false);
       }
-    },
-    [loadDashboard, otp]
-  );
+    }, [otp]);
 
 
-  useEffect(() => {
-    if (otp.trim()) {
-      loadDashboard();
-    }
-  }, [loadDashboard, otp]);
+  // =========================================================
+  // COMPLETE WITHDRAWAL
+  // =========================================================
+
+  const completeWithdrawal =
+    useCallback(
+      async (withdrawal) => {
+        if (
+          !withdrawal?.id
+        ) {
+          return;
+        }
 
 
-  const logoutAdmin = () => {
-    sessionStorage.removeItem(
-      "admin_dashboard_otp"
+        // Admin session باید وجود داشته باشد
+        if (!adminSession) {
+          setError(
+            "Admin session expired. Please sign in again."
+          );
+
+          setData(null);
+
+          return;
+        }
+
+
+        // -----------------------------------------
+        // TX HASH
+        // -----------------------------------------
+
+        const txHash =
+          window.prompt(
+            "Transaction hash / payment receipt:",
+            withdrawal.tx_hash || ""
+          );
+
+        // Cancel
+        if (
+          txHash === null
+        ) {
+          return;
+        }
+
+        const cleanTxHash =
+          txHash.trim();
+
+        if (!cleanTxHash) {
+          setError(
+            "Please enter TX Hash / payment receipt."
+          );
+
+          return;
+        }
+
+
+        try {
+          setCompletingWithdrawalId(
+            withdrawal.id
+          );
+
+          setError("");
+
+
+          // -----------------------------------------
+          // Pending -> Complete
+          // -----------------------------------------
+
+          const response =
+            await api.post(
+              `/admin/withdrawals/${withdrawal.id}/complete/`,
+
+              {
+                tx_hash:
+                  cleanTxHash,
+              },
+
+              {
+                headers: {
+                  "X-Admin-Session":
+                    adminSession,
+                },
+              }
+            );
+
+
+          const completed =
+            response
+              ?.data
+              ?.withdrawal
+            || {};
+
+
+          // -----------------------------------------
+          // بدون Reload همان لحظه جدول را Complete کن
+          // -----------------------------------------
+
+          setData(
+            (current) => {
+              if (!current) {
+                return current;
+              }
+
+              const withdrawals =
+                (
+                  current.withdrawals
+                  || []
+                ).map(
+                  (row) => {
+                    if (
+                      row.id !==
+                      withdrawal.id
+                    ) {
+                      return row;
+                    }
+
+                    return {
+                      ...row,
+                      ...completed,
+
+                      status:
+                        completed.status
+                        || "SUCCESS",
+
+                      display_status:
+                        "COMPLETE",
+
+                      tx_hash:
+                        completed.tx_hash
+                        || cleanTxHash,
+
+                      completed_at:
+                        completed.completed_at
+                        || new Date()
+                          .toISOString(),
+                    };
+                  }
+                );
+
+
+              // summary pending ها را هم به‌صورت محلی کم کن
+              const summary = {
+                ...(current.summary || {}),
+              };
+
+              const asset =
+                String(
+                  withdrawal.asset
+                  || ""
+                ).toUpperCase();
+
+              if (
+                asset === "TON" ||
+                asset === "GRAM"
+              ) {
+                const currentPending =
+                  Number(
+                    summary
+                      .pending_withdraw_ton
+                    || 0
+                  );
+
+                const tonAmount =
+                  Number(
+                    withdrawal
+                      .ton_amount
+                    || 0
+                  );
+
+                summary.pending_withdraw_ton =
+                  Math.max(
+                    0,
+                    currentPending -
+                      tonAmount
+                  );
+              } else {
+                const currentPending =
+                  Number(
+                    summary
+                      .pending_withdraw_ecg
+                    || 0
+                  );
+
+                const ecgAmount =
+                  Number(
+                    withdrawal
+                      .amount
+                    || 0
+                  );
+
+                summary.pending_withdraw_ecg =
+                  Math.max(
+                    0,
+                    currentPending -
+                      ecgAmount
+                  );
+              }
+
+
+              return {
+                ...current,
+                summary,
+                withdrawals,
+              };
+            }
+          );
+
+        } catch (err) {
+          console.error(
+            "[COMPLETE WITHDRAW ERROR]",
+            err
+          );
+
+
+          // Session تمام شده
+          if (
+            err.response
+              ?.status === 403
+          ) {
+            sessionStorage.removeItem(
+              "admin_session_token"
+            );
+
+            setAdminSession("");
+
+            setData(null);
+
+            setOtp("");
+
+            setError(
+              err.response
+                ?.data
+                ?.error
+              ||
+              "Admin session expired. Please sign in again."
+            );
+
+            return;
+          }
+
+
+          setError(
+            err.response
+              ?.data
+              ?.error
+            ||
+            err.response
+              ?.data
+              ?.detail
+            ||
+            "Unable to complete withdrawal."
+          );
+
+        } finally {
+          setCompletingWithdrawalId(
+            null
+          );
+        }
+      },
+
+      [adminSession]
     );
 
-    setOtp("");
+
+  // =========================================================
+  // REFRESH
+  // =========================================================
+
+  const refreshDashboard = () => {
+    // چون system-dashboard فعلاً با OTP محافظت شده،
+    // برای Refresh کامل دوباره Login می‌کنیم.
     setData(null);
+    setOtp("");
     setError("");
   };
 
 
-  const rows = useMemo(() => {
-    const list = data?.[tab] || [];
-    const needle = query
-      .trim()
-      .toLowerCase();
+  // =========================================================
+  // LOGOUT
+  // =========================================================
 
-    if (!needle) {
-      return list;
-    }
+  const logoutAdmin = () => {
+    sessionStorage.removeItem(
+      "admin_session_token"
+    );
 
-    return list.filter((item) => {
-      return JSON.stringify(item)
-        .toLowerCase()
-        .includes(needle);
-    });
-  }, [data, tab, query]);
+    setAdminSession("");
 
+    setOtp("");
+
+    setData(null);
+
+    setError("");
+  };
+
+
+  // =========================================================
+  // FILTER ROWS
+  // =========================================================
+
+  const rows =
+    useMemo(() => {
+      const list =
+        data?.[tab] || [];
+
+      const needle =
+        query
+          .trim()
+          .toLowerCase();
+
+      if (!needle) {
+        return list;
+      }
+
+      return list.filter(
+        (item) => {
+          return JSON.stringify(
+            item
+          )
+            .toLowerCase()
+            .includes(
+              needle
+            );
+        }
+      );
+    }, [
+      data,
+      tab,
+      query,
+    ]);
+
+
+  // =========================================================
+  // LOGIN PAGE
+  // =========================================================
 
   if (!data) {
     return (
       <main className="admin-page">
+
         <div className="admin-login">
-          <h1>System Admin</h1>
+
+          <h1>
+            System Admin
+          </h1>
+
+          <p>
+            Enter the current Google Authenticator code
+          </p>
 
           <input
             type="text"
             inputMode="numeric"
+            pattern="[0-9]*"
             maxLength={6}
             value={otp}
+
             onChange={(event) => {
-              setOtp(event.target.value);
+              setOtp(
+                event.target.value
+                  .replace(
+                    /\D/g,
+                    ""
+                  )
+                  .slice(
+                    0,
+                    6
+                  )
+              );
             }}
+
             onKeyDown={(event) => {
-              if (event.key === "Enter") {
+              if (
+                event.key ===
+                "Enter"
+              ) {
                 loadDashboard();
               }
             }}
+
             placeholder="Google Authenticator code"
             autoComplete="one-time-code"
           />
 
           <button
             type="button"
-            onClick={loadDashboard}
-            disabled={loading}
+            onClick={
+              loadDashboard
+            }
+            disabled={
+              loading
+            }
           >
             {loading
               ? "Loading…"
               : "Open dashboard"}
           </button>
 
+
           {error && (
             <p className="admin-error">
               {error}
             </p>
           )}
+
         </div>
+
       </main>
     );
   }
 
 
-  const summary = data.summary || {};
-  const treasury = summary.treasury || {};
+  // =========================================================
+  // DATA
+  // =========================================================
 
+  const summary =
+    data.summary || {};
+
+  const treasury =
+    summary.treasury || {};
+
+
+  // =========================================================
+  // DASHBOARD
+  // =========================================================
 
   return (
     <main className="admin-page">
+
+      {/* ================================================== */}
+      {/* HEADER */}
+      {/* ================================================== */}
+
       <header className="admin-head">
+
         <div>
-          <p>AI POLIFY</p>
-          <h1>System Dashboard</h1>
+          <p>
+            AI POLIFY
+          </p>
+
+          <h1>
+            System Dashboard
+          </h1>
         </div>
 
+
         <div className="admin-head-actions">
-          <button
-            type="button"
-            onClick={loadDashboard}
-            disabled={loading}
-          >
-            {loading
-              ? "Loading…"
-              : "Refresh"}
-          </button>
 
           <button
             type="button"
-            onClick={logoutAdmin}
+            onClick={
+              refreshDashboard
+            }
+          >
+            Refresh
+          </button>
+
+
+          <button
+            type="button"
+            onClick={
+              logoutAdmin
+            }
           >
             Logout
           </button>
+
         </div>
+
       </header>
 
 
-      {treasury.low_balance && (
-        <div className="treasury-alert">
-          Warning: treasury TON balance is
-          below 100 TON.
+      {/* ================================================== */}
+      {/* ERROR */}
+      {/* ================================================== */}
+
+      {error && (
+        <div className="admin-error">
+          {error}
         </div>
       )}
 
 
+      {/* ================================================== */}
+      {/* TREASURY WARNING */}
+      {/* ================================================== */}
+
+      {treasury.low_balance && (
+        <div className="treasury-alert">
+          Warning: treasury TON balance is below 100 TON.
+        </div>
+      )}
+
+
+      {/* ================================================== */}
+      {/* SUMMARY */}
+      {/* ================================================== */}
+
       <section className="summary-grid">
-        {/* کاربران */}
 
         <Stat
           label="Total users"
@@ -281,9 +726,6 @@ export default function AdminDashboard() {
             summary.active_users
           )}
         />
-
-
-        {/* خریدها */}
 
         <Stat
           label="Total purchases"
@@ -307,22 +749,21 @@ export default function AdminDashboard() {
         />
 
 
-        {/* خزانه */}
-
         <Stat
           label="Treasury TON"
           value={
-            treasury.balance_ton == null
+            treasury.balance_ton ==
+            null
               ? "—"
               : `${number(
                   treasury.balance_ton
                 )} TON`
           }
-          danger={treasury.low_balance}
+          danger={
+            treasury.low_balance
+          }
         />
 
-
-        {/* پاداش رفرال */}
 
         <Stat
           label="Referral rewards"
@@ -338,8 +779,6 @@ export default function AdminDashboard() {
           )}
         />
 
-
-        {/* پاداش روزانه */}
 
         <Stat
           label="Daily rewards total"
@@ -370,8 +809,6 @@ export default function AdminDashboard() {
         />
 
 
-        {/* سود زیرمجموعه */}
-
         <Stat
           label="Downline profit"
           value={`${number(
@@ -379,8 +816,6 @@ export default function AdminDashboard() {
           )} ECG`}
         />
 
-
-        {/* سود شخصی */}
 
         <Stat
           label="Self profit locked"
@@ -411,8 +846,6 @@ export default function AdminDashboard() {
         />
 
 
-        {/* اصل سرمایه */}
-
         <Stat
           label="Principal locked"
           value={`${number(
@@ -428,8 +861,6 @@ export default function AdminDashboard() {
         />
 
 
-        {/* واریز و برداشت */}
-
         <Stat
           label="Total deposited"
           value={number(
@@ -444,8 +875,6 @@ export default function AdminDashboard() {
           )}
         />
 
-
-        {/* موجودی USDT */}
 
         <Stat
           label="USDT principal locked"
@@ -476,8 +905,6 @@ export default function AdminDashboard() {
         />
 
 
-        {/* برداشت‌های در انتظار */}
-
         <Stat
           label="Pending ECG withdrawals"
           value={`${number(
@@ -491,54 +918,81 @@ export default function AdminDashboard() {
             summary.pending_withdraw_ton
           )} TON`}
         />
+
       </section>
 
 
+      {/* ================================================== */}
+      {/* TABLE */}
+      {/* ================================================== */}
+
       <section className="admin-panel">
+
         <div className="admin-tools">
+
           <div>
-            {tabs.map((item) => (
-              <button
-                type="button"
-                key={item}
-                className={
-                  tab === item
-                    ? "active"
-                    : ""
-                }
-                onClick={() => {
-                  setTab(item);
-                  setQuery("");
-                }}
-              >
-                {item}
-              </button>
-            ))}
+            {tabs.map(
+              (item) => (
+                <button
+                  type="button"
+                  key={item}
+
+                  className={
+                    tab === item
+                      ? "active"
+                      : ""
+                  }
+
+                  onClick={() => {
+                    setTab(item);
+                    setQuery("");
+                  }}
+                >
+                  {item}
+                </button>
+              )
+            )}
           </div>
+
 
           <input
             value={query}
+
             onChange={(event) => {
               setQuery(
                 event.target.value
               );
             }}
+
             placeholder="Search users, wallets or invoices…"
           />
+
         </div>
 
 
         <Table
           tab={tab}
           rows={rows}
-          onCompleteWithdrawal={completeWithdrawal}
-          completingWithdrawalId={completingWithdrawalId}
+
+          onCompleteWithdrawal={
+            completeWithdrawal
+          }
+
+          completingWithdrawalId={
+            completingWithdrawalId
+          }
         />
+
       </section>
+
     </main>
   );
 }
 
+
+// =========================================================
+// STAT
+// =========================================================
 
 function Stat({
   label,
@@ -548,10 +1002,14 @@ function Stat({
   return (
     <article
       className={`stat ${
-        danger ? "danger" : ""
+        danger
+          ? "danger"
+          : ""
       }`}
     >
-      <span>{label}</span>
+      <span>
+        {label}
+      </span>
 
       <strong>
         {value ?? "—"}
@@ -560,6 +1018,10 @@ function Stat({
   );
 }
 
+
+// =========================================================
+// TABLE
+// =========================================================
 
 function Table({
   tab,
@@ -570,27 +1032,18 @@ function Table({
   let columns = [];
 
 
-  if (tab === "users") {
+  // =======================================================
+  // USERS
+  // =======================================================
+
+  if (
+    tab === "users"
+  ) {
     columns = [
-      [
-        "username",
-        "User",
-      ],
-
-      [
-        "wallet_address",
-        "Wallet",
-      ],
-
-      [
-        "referral_count",
-        "Referrals",
-      ],
-
-      [
-        "referral_bonus",
-        "Referral Bonus",
-      ],
+      ["username", "User"],
+      ["wallet_address", "Wallet"],
+      ["referral_count", "Referrals"],
+      ["referral_bonus", "Referral Bonus"],
 
       [
         "daily_reward_total",
@@ -670,12 +1123,40 @@ function Table({
   }
 
 
-  if (tab === "purchases") {
+  // =======================================================
+  // PURCHASES
+  // =======================================================
+
+  if (
+    tab === "purchases"
+  ) {
     columns = [
-      [
-        "invoice_no",
-        "Invoice",
-      ],
+      ["invoice_no", "Invoice"],
+      ["username", "User"],
+      ["wallet_address", "Wallet"],
+      ["ton_amount", "TON"],
+      ["ton_usd_rate", "TON Rate"],
+      ["usd_value", "USD Value"],
+      ["ecg_value", "ECG Value"],
+      ["output_amount", "Output"],
+      ["output_asset", "Asset"],
+      ["self_profit_5", "5% Profit"],
+      ["profit_asset", "Profit Asset"],
+      ["tx_hash", "TX Hash"],
+      ["created_at", "Date"],
+    ];
+  }
+
+
+  // =======================================================
+  // WITHDRAWALS
+  // =======================================================
+
+  if (
+    tab === "withdrawals"
+  ) {
+    columns = [
+      ["id", "ID"],
 
       [
         "username",
@@ -684,83 +1165,62 @@ function Table({
 
       [
         "wallet_address",
-        "Wallet",
+        "Connected Wallet",
       ],
 
       [
-        "ton_amount",
-        "TON",
-      ],
-
-      [
-        "ton_usd_rate",
-        "TON Rate",
-      ],
-
-      [
-        "usd_value",
-        "USD Value",
-      ],
-
-      [
-        "ecg_value",
-        "ECG Value",
-      ],
-
-      [
-        "output_amount",
-        "Output",
-      ],
-
-      [
-        "output_asset",
+        "asset",
         "Asset",
       ],
 
       [
-        "self_profit_5",
-        "5% Profit",
+        "requested_amount",
+        "Requested",
       ],
 
       [
-        "profit_asset",
-        "Profit Asset",
+        "ecg_reserved",
+        "ECG Reserved",
+      ],
+
+      [
+        "destination_wallet",
+        "Destination Wallet",
+      ],
+
+      [
+        "status",
+        "Status",
       ],
 
       [
         "tx_hash",
-        "TX Hash",
+        "TX Hash / Receipt",
       ],
 
       [
         "created_at",
-        "Date",
+        "Created",
       ],
-    ];
-  }
 
+      [
+        "completed_at",
+        "Completed",
+      ],
 
-  if (tab === "withdrawals") {
-    columns = [
-      ["id", "ID"],
-      ["username", "User"],
-      ["wallet_address", "Connected Wallet"],
-      ["asset", "Asset"],
-      ["requested_amount", "Requested"],
-      ["ecg_reserved", "ECG Reserved"],
-      ["destination_wallet", "Destination Wallet"],
-      ["status", "Status"],
-      ["tx_hash", "TX Hash / Receipt"],
-      ["created_at", "Created"],
-      ["completed_at", "Completed"],
-      ["action", "Action"],
+      [
+        "action",
+        "Action",
+      ],
     ];
   }
 
 
   return (
     <div className="table-wrap">
+
       <table>
+
         <thead>
           <tr>
             {columns.map(
@@ -773,114 +1233,285 @@ function Table({
           </tr>
         </thead>
 
+
         <tbody>
-          {rows.map((row) => (
-            <tr
-              key={`${tab}-${row.id}`}
-            >
-              {columns.map(([key]) => {
-                if (
-                  tab === "withdrawals" &&
-                  key === "requested_amount"
-                ) {
-                  const isTon = ["TON", "GRAM"].includes(
-                    String(row.asset || "").toUpperCase()
-                  );
 
-                  return (
-                    <td key={key}>
-                      <strong>
-                        {isTon
-                          ? `${number(row.ton_amount)} TON`
-                          : `${number(row.amount)} ECG`}
-                      </strong>
-                    </td>
-                  );
-                }
+          {rows.map(
+            (row) => (
+              <tr
+                key={`${tab}-${row.id}`}
+              >
 
-                if (tab === "withdrawals" && key === "ecg_reserved") {
-                  return (
-                    <td key={key}>
-                      {`${number(row.amount)} ECG`}
-                    </td>
-                  );
-                }
+                {columns.map(
+                  ([key]) => {
 
-                if (tab === "withdrawals" && key === "status") {
-                  const rawStatus = String(row.status || "").toUpperCase();
-                  const text = ["SUCCESS", "COMPLETE", "COMPLETED"].includes(rawStatus)
-                    ? "Complete"
-                    : rawStatus === "PENDING"
-                    ? "Pending"
-                    : rawStatus === "FAILED"
-                    ? "Failed"
-                    : rawStatus || "—";
 
-                  return <td key={key}><strong>{text}</strong></td>;
-                }
+                    // ========================================
+                    // WITHDRAW REQUESTED AMOUNT
+                    // ========================================
 
-                if (tab === "withdrawals" && key === "action") {
-                  const pending = String(row.status || "").toUpperCase() === "PENDING";
-                  const completing = completingWithdrawalId === row.id;
+                    if (
+                      tab ===
+                        "withdrawals"
+                      &&
+                      key ===
+                        "requested_amount"
+                    ) {
+                      const asset =
+                        String(
+                          row.asset
+                          || ""
+                        ).toUpperCase();
 
-                  return (
-                    <td key={key}>
-                      {pending ? (
-                        <button
-                          type="button"
-                          onClick={() => onCompleteWithdrawal(row)}
-                          disabled={completing}
+                      const isTon =
+                        asset === "TON"
+                        ||
+                        asset === "GRAM";
+
+                      return (
+                        <td key={key}>
+                          <strong>
+
+                            {isTon
+                              ? `${number(
+                                  row.ton_amount
+                                )} TON`
+
+                              : `${number(
+                                  row.amount
+                                )} ECG`
+                            }
+
+                          </strong>
+                        </td>
+                      );
+                    }
+
+
+                    // ========================================
+                    // ECG RESERVED
+                    // ========================================
+
+                    if (
+                      tab ===
+                        "withdrawals"
+                      &&
+                      key ===
+                        "ecg_reserved"
+                    ) {
+                      return (
+                        <td key={key}>
+                          {`${number(
+                            row.amount
+                          )} ECG`}
+                        </td>
+                      );
+                    }
+
+
+                    // ========================================
+                    // STATUS
+                    // ========================================
+
+                    if (
+                      tab ===
+                        "withdrawals"
+                      &&
+                      key ===
+                        "status"
+                    ) {
+                      const rawStatus =
+                        String(
+                          row.status || ""
+                        ).toUpperCase();
+
+
+                      let text =
+                        rawStatus || "—";
+
+
+                      if (
+                        isCompletedStatus(
+                          rawStatus
+                        )
+                      ) {
+                        text =
+                          "Complete";
+                      }
+
+                      else if (
+                        rawStatus ===
+                        "PENDING"
+                      ) {
+                        text =
+                          "Pending";
+                      }
+
+                      else if (
+                        rawStatus ===
+                        "FAILED"
+                      ) {
+                        text =
+                          "Failed";
+                      }
+
+
+                      return (
+                        <td key={key}>
+                          <strong>
+                            {text}
+                          </strong>
+                        </td>
+                      );
+                    }
+
+
+                    // ========================================
+                    // ACTION
+                    // ========================================
+
+                    if (
+                      tab ===
+                        "withdrawals"
+                      &&
+                      key ===
+                        "action"
+                    ) {
+                      const status =
+                        String(
+                          row.status
+                          || ""
+                        ).toUpperCase();
+
+                      const pending =
+                        status ===
+                        "PENDING";
+
+                      const completing =
+                        completingWithdrawalId
+                        === row.id;
+
+
+                      return (
+                        <td key={key}>
+
+                          {pending ? (
+
+                            <button
+                              type="button"
+
+                              onClick={() => {
+                                onCompleteWithdrawal(
+                                  row
+                                );
+                              }}
+
+                              disabled={
+                                completing
+                              }
+                            >
+
+                              {completing
+                                ? "Completing…"
+                                : "Pending → Complete"
+                              }
+
+                            </button>
+
+                          ) : (
+
+                            <span>
+
+                              {isCompletedStatus(
+                                status
+                              )
+                                ? "Complete"
+                                : "—"
+                              }
+
+                            </span>
+
+                          )}
+
+                        </td>
+                      );
+                    }
+
+
+                    // ========================================
+                    // FULL WALLET / TX
+                    // ========================================
+
+                    if (
+                      tab ===
+                        "withdrawals"
+                      &&
+                      [
+                        "wallet_address",
+                        "destination_wallet",
+                        "tx_hash",
+                      ].includes(
+                        key
+                      )
+                    ) {
+                      const full =
+                        String(
+                          row[key]
+                          || ""
+                        );
+
+                      return (
+                        <td
+                          key={key}
+
+                          title={
+                            full
+                          }
+
+                          style={{
+                            minWidth:
+                              220,
+
+                            maxWidth:
+                              360,
+
+                            whiteSpace:
+                              "normal",
+
+                            wordBreak:
+                              "break-all",
+                          }}
                         >
-                          {completing ? "Completing…" : "Pending → Complete"}
-                        </button>
-                      ) : (
-                        <span>
-                          {["SUCCESS", "COMPLETE", "COMPLETED"].includes(
-                            String(row.status || "").toUpperCase()
-                          )
-                            ? "Complete"
-                            : "—"}
-                        </span>
-                      )}
-                    </td>
-                  );
-                }
+                          {full || "—"}
+                        </td>
+                      );
+                    }
 
-                if (
-                  tab === "withdrawals" &&
-                  ["wallet_address", "destination_wallet", "tx_hash"].includes(key)
-                ) {
-                  const full = String(row[key] || "");
-                  return (
-                    <td
-                      key={key}
-                      title={full}
-                      style={{
-                        minWidth: 220,
-                        maxWidth: 360,
-                        whiteSpace: "normal",
-                        wordBreak: "break-all",
-                      }}
-                    >
-                      {full || "—"}
-                    </td>
-                  );
-                }
 
-                const value = formatCell(
-                  key,
-                  row[key]
-                );
+                    // ========================================
+                    // NORMAL CELL
+                    // ========================================
 
-                return (
-                  <td key={key}>
-                    {value}
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
+                    const value =
+                      formatCell(
+                        key,
+                        row[key]
+                      );
+
+                    return (
+                      <td key={key}>
+                        {value}
+                      </td>
+                    );
+                  }
+                )}
+
+              </tr>
+            )
+          )}
+
         </tbody>
+
       </table>
 
 
@@ -889,28 +1520,42 @@ function Table({
           No records
         </p>
       )}
+
     </div>
   );
 }
 
+
+// =========================================================
+// FORMAT CELL
+// =========================================================
 
 function formatCell(
   key,
   value,
 ) {
   if (
-    key.includes("wallet") ||
-    key === "destination_wallet" ||
-    key === "tx_hash"
+    key.includes(
+      "wallet"
+    )
+    ||
+    key ===
+      "destination_wallet"
+    ||
+    key ===
+      "tx_hash"
   ) {
     return short(
-      String(value || "")
+      String(
+        value || ""
+      )
     );
   }
 
 
   if (
-    typeof value === "boolean"
+    typeof value ===
+    "boolean"
   ) {
     return value
       ? "Yes"
@@ -919,25 +1564,36 @@ function formatCell(
 
 
   if (
-    key === "created_at" ||
-    key === "completed_at" ||
-    key === "last_active"
+    key ===
+      "created_at"
+    ||
+    key ===
+      "completed_at"
+    ||
+    key ===
+      "last_active"
   ) {
     if (!value) {
       return "—";
     }
 
-    const date = new Date(value);
+    const date =
+      new Date(
+        value
+      );
 
     if (
       Number.isNaN(
         date.getTime()
       )
     ) {
-      return String(value);
+      return String(
+        value
+      );
     }
 
-    return date.toLocaleString();
+    return date
+      .toLocaleString();
   }
 
 

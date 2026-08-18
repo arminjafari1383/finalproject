@@ -1,21 +1,27 @@
 from django.urls import path
+
 from . import views
 from .admin_dashboard import admin_system_dashboard
 
 
 urlpatterns = [
-    # ========================
-    # اتصال والت
-    # ========================
+
+    # ========================================================
+    # CONNECT WALLET
+    # ========================================================
+
     path(
         "connect/",
         views.connect_wallet,
         name="connect_wallet",
     ),
 
-    # ========================
-    # کیف پول - مسیرهای ثابت باید اول باشند
-    # ========================
+
+    # ========================================================
+    # WALLET
+    # مسیرهای ثابت باید قبل از مسیر داینامیک باشند
+    # ========================================================
+
     path(
         "wallet/reward_status/",
         views.reward_status,
@@ -28,18 +34,22 @@ urlpatterns = [
         name="tick",
     ),
 
-    # ========================
-    # کیف پول - مسیر داینامیک باید بعد از مسیرهای ثابت باشد
-    # ========================
+
+    # ========================================================
+    # WALLET DYNAMIC
+    # ========================================================
+
     path(
         "wallet/<str:wallet_address>/",
         views.wallet_view,
         name="wallet_view",
     ),
 
-    # ========================
-    # خرید ECG با TON
-    # ========================
+
+    # ========================================================
+    # PURCHASE ECG WITH TON
+    # ========================================================
+
     path(
         "purchase/create/",
         views.create_purchase,
@@ -52,9 +62,11 @@ urlpatterns = [
         name="list_purchases",
     ),
 
-    # ========================
-    # خرید ECG با USDT
-    # ========================
+
+    # ========================================================
+    # PURCHASE ECG WITH USDT
+    # ========================================================
+
     path(
         "purchase/usdt/create/",
         views.create_purchase_usdt,
@@ -67,9 +79,11 @@ urlpatterns = [
         name="list_purchases_usdt",
     ),
 
-    # ========================
-    # خرید ECG با BNB
-    # ========================
+
+    # ========================================================
+    # PURCHASE ECG WITH BNB
+    # ========================================================
+
     path(
         "purchase/bnb/create/",
         views.create_purchase_bnb,
@@ -82,19 +96,24 @@ urlpatterns = [
         name="list_purchases_bnb",
     ),
 
-    # ========================
-    # ساخت تراکنش TON
-    # ========================
+
+    # ========================================================
+    # TON TRANSACTION
+    # ========================================================
+
     path(
         "purchase/create-transaction/",
         views.create_ton_transaction,
         name="create_ton_transaction",
     ),
 
-    # ========================
-    # برداشت کاربر
-    # ECG و TON هر دو Pending
-    # ========================
+
+    # ========================================================
+    # WITHDRAWAL
+    #
+    # ECG و TON هر دو ابتدا PENDING
+    # ========================================================
+
     path(
         "withdraw/request/",
         views.request_withdraw,
@@ -107,34 +126,70 @@ urlpatterns = [
         name="withdraw_history",
     ),
 
-    # ========================
-    # پنل ادمین
-    # ========================
+
+    # ========================================================
+    # ADMIN DASHBOARD
+    #
+    # GET /api/admin/system-dashboard/
+    # ========================================================
+
     path(
         "admin/system-dashboard/",
         admin_system_dashboard,
         name="admin-system-dashboard",
     ),
 
-    # ========================
-    # تایید برداشت توسط ادمین
+
+    # ========================================================
+    # ADMIN LOGIN SESSION
+    #
+    # POST /api/admin/session/
+    #
+    # Header:
+    # X-Admin-OTP: 123456
+    #
+    # Response:
+    # {
+    #     "admin_session": "..."
+    # }
+    # ========================================================
+
+    path(
+        "admin/session/",
+        views.admin_create_session,
+        name="admin-create-session",
+    ),
+
+
+    # ========================================================
+    # COMPLETE WITHDRAW
     #
     # POST:
-    # /admin/withdrawals/15/complete/
+    # /api/admin/withdrawals/1/complete/
     #
-    # بعد از پرداخت دستی ادمین:
+    # Header:
+    # X-Admin-Session: ...
+    #
+    # Body:
+    # {
+    #     "tx_hash": "..."
+    # }
+    #
     # PENDING -> SUCCESS
-    # در فرانت به صورت Complete نمایش داده می‌شود.
-    # ========================
+    # UI = Complete
+    # ========================================================
+
     path(
         "admin/withdrawals/<int:withdraw_id>/complete/",
         views.admin_complete_withdraw,
         name="admin-complete-withdraw",
     ),
 
-    # ========================
-    # Referral
-    # ========================
+
+    # ========================================================
+    # REFERRAL
+    # ========================================================
+
     path(
         "referrals/count/",
         views.referral_count,
@@ -147,9 +202,11 @@ urlpatterns = [
         name="referral_levels",
     ),
 
-    # ========================
-    # Test
-    # ========================
+
+    # ========================================================
+    # TEST
+    # ========================================================
+
     path(
         "test/",
         views.test_tick,
