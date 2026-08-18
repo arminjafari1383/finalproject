@@ -54,17 +54,7 @@ function TasksPage({ tasks, setTasks, setCoins, showSnackbar }) {
           <h3>Follow Instagram</h3>
         </a>
 
-        {/* Website */}
-        <a
-          href={links.website}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={() => claimReward("website")}
-          className="task-card"
-        >
-          <img src={WebsiteIcon} alt="Website" />
-          <h3>Visit Website</h3>
-        </a>
+      
       </div>
 
       {/* 🔹 لینک‌های پایینی */}
