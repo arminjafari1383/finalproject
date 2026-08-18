@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
-import { useTonWallet, TonConnectButton, useTonConnectUI } from "@tonconnect/ui-react";
+import { useTonWallet, TonConnectButton, useTonConnectUI, useTonAddress } from "@tonconnect/ui-react";
 import { api } from "../api";
 import "./Wallet.css";
 import {
@@ -129,6 +129,12 @@ export default function Wallet() {
           ?.address,
       [tonWallet]
     );
+
+  // TON Connect account.address is raw (0:...).
+  // useTonAddress() returns the user-friendly wallet address (UQ... / 0Q...)
+  // that matches what users normally see inside their TON wallet.
+  const displayAddress =
+    useTonAddress();
 
   const hasConnected =
     useRef(false);
@@ -2461,9 +2467,9 @@ export default function Wallet() {
 
                   <div className="wallet-address-main">
                     {shortenMiddle(
-                      address,
-                      4,
-                      4
+                      displayAddress || address,
+                      6,
+                      6
                     )}
                   </div>
 
@@ -2476,7 +2482,7 @@ export default function Wallet() {
                   onClick={() =>
                     copyText(
                       "Wallet address",
-                      address
+                      displayAddress || address
                     )
                   }
                   aria-label="Copy wallet address"
@@ -3089,7 +3095,7 @@ export default function Wallet() {
 
                     <b>
                       {shortenMiddle(
-                        address,
+                        displayAddress || address,
                         8,
                         8
                       )}
