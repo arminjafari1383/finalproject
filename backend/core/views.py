@@ -1,3 +1,4 @@
+views_wallet_values_fixed.py
 # backend/core/views.py
 from django.conf import settings
 import time
@@ -26,6 +27,7 @@ from .models import (
 from .serializers import WalletSerializer, PurchaseSerializer, UserSerializer
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Sum
 from django.db.utils import OperationalError
 from django.core import signing
 import os
@@ -578,7 +580,17 @@ def connect_wallet(request):
 
 @api_view(["GET"])
 def wallet_view(request, wallet_address):
-    """Read-only wallet endpoint. Registration belongs to /connect/."""
+    """
+    Return a LIVE wallet snapshot.
+
+    Important:
+    - withdrawable_total / available_balance are current spendable ECG.
+    - total_mined is lifetime DAILY mining only and does not decrease after
+      withdrawals.
+    - referral_bonus is the current referral-bonus balance.
+    - total_earned is calculated from earning ledgers, so it cannot become stale
+      just because AppUser.total_earned was not refreshed elsewhere.
+    """
     user = (
         AppUser.objects
         .select_related("wallet")
@@ -592,8 +604,117 @@ def wallet_view(request, wallet_address):
             status=status.HTTP_404_NOT_FOUND,
         )
 
+    wallet = user.wallet
+
+    # Existing serializer fields are kept for backward compatibility.
+    payload = dict(
+        WalletSerializer(wallet).data
+    )
+
+    # --------------------------------------------------------
+    # Current available balance
+    # --------------------------------------------------------
+    available_balance = (
+        wallet.withdrawable_total()
+    )
+
+    # --------------------------------------------------------
+    # Lifetime mining statistics
+    # --------------------------------------------------------
+    daily_qs = user.ledgers.filter(
+        typ="DAILY_UNLOCK"
+    )
+
+    total_mined = (
+        daily_qs.aggregate(
+            total=Sum("amount")
+        )["total"]
+        or Decimal("0")
+    )
+
+    mining_days = daily_qs.count()
+
+    # --------------------------------------------------------
+    # Lifetime earnings
+    # --------------------------------------------------------
+    total_earned = (
+        user.ledgers
+        .filter(
+            typ__in=[
+                "DAILY_UNLOCK",
+                "SELF_PROFIT_UNLOCK",
+                "DOWNLINE_PROFIT",
+                "REF_BONUS",
+                "LEVEL5_BONUS",
+            ]
+        )
+        .aggregate(
+            total=Sum("amount")
+        )["total"]
+        or Decimal("0")
+    )
+
+    referral_bonus_current = (
+        wallet.referral_bonus
+        or Decimal("0")
+    )
+
+    downline_profit_current = (
+        wallet.downline_profit_instant
+        or Decimal("0")
+    )
+
+    principal_locked = (
+        wallet.principal_locked
+        or Decimal("0")
+    )
+
+    self_profit_locked = (
+        wallet.self_profit_locked
+        or Decimal("0")
+    )
+
+    principal_unlocked = (
+        wallet.principal_unlocked
+        or Decimal("0")
+    )
+
+    self_profit_unlocked = (
+        wallet.self_profit_unlocked
+        or Decimal("0")
+    )
+
+    daily_reward_unlocked = (
+        wallet.daily_reward_unlocked
+        or Decimal("0")
+    )
+
+    # Override/add explicit values consumed by Wallet.jsx.
+    payload.update({
+        "withdrawable_total": str(available_balance),
+        "available_balance": str(available_balance),
+
+        "total_mined": str(total_mined),
+        "mining_days": mining_days,
+
+        "referral_bonus": str(referral_bonus_current),
+        "downline_profit_instant": str(downline_profit_current),
+
+        "principal_locked": str(principal_locked),
+        "principal_unlocked": str(principal_unlocked),
+        "self_profit_locked": str(self_profit_locked),
+        "self_profit_unlocked": str(self_profit_unlocked),
+        "daily_reward_unlocked": str(daily_reward_unlocked),
+
+        "total_earned": str(total_earned),
+        "total_withdrawn": str(
+            wallet.total_withdrawn
+            or Decimal("0")
+        ),
+    })
+
     return Response(
-        WalletSerializer(user.wallet).data,
+        payload,
         status=status.HTTP_200_OK,
     )
 
@@ -1320,9 +1441,35 @@ DAILY_REWARD = Decimal("1.0")
 COOLDOWN = timedelta(hours=24)
 
 
+def _daily_reward_stats(user):
+    """Return mining-only statistics used by Timer and Wallet."""
+    daily_qs = user.ledgers.filter(
+        typ="DAILY_UNLOCK"
+    )
+
+    total_rewards = (
+        daily_qs.aggregate(
+            total=Sum("amount")
+        )["total"]
+        or Decimal("0")
+    )
+
+    return {
+        "total_rewards": str(total_rewards),
+        "referral_points": str(
+            user.wallet.referral_bonus
+            or Decimal("0")
+        ),
+        "rewards_count": daily_qs.count(),
+    }
+
+
 @api_view(["GET"])
 def reward_status(request):
-    wallet_address = request.query_params.get("wallet_address")
+    wallet_address = request.query_params.get(
+        "wallet_address"
+    )
+
     if not wallet_address:
         return Response(
             {"error": "wallet_address required"},
@@ -1335,6 +1482,7 @@ def reward_status(request):
         .filter(wallet_address=wallet_address)
         .first()
     )
+
     if not user:
         return Response(
             {"error": "User not found"},
@@ -1343,103 +1491,183 @@ def reward_status(request):
 
     now = timezone.now()
     next_at = user.next_daily_claim_at
+
     seconds_remaining = (
         0
         if not next_at
-        else max(0, int((next_at - now).total_seconds()))
+        else max(
+            0,
+            int(
+                (next_at - now).total_seconds()
+            ),
+        )
     )
 
-    return Response({
-        "status": "ok",
-        "seconds_remaining": seconds_remaining,
-        "next_claim_at": next_at,
-    }, status=status.HTTP_200_OK)
+    stats = _daily_reward_stats(user)
+
+    return Response(
+        {
+            "status": "ok",
+            "seconds_remaining": seconds_remaining,
+            "next_claim_at": next_at,
+            "total_rewards": stats["total_rewards"],
+            "referral_points": stats["referral_points"],
+            "rewards_count": stats["rewards_count"],
+        },
+        status=status.HTTP_200_OK,
+    )
 
 
 @api_view(["POST"])
 def tick(request):
-    """
-    دریافت پاداش روزانه (1 ECG)
-    """
-    logger.info("=" * 60)
-    logger.info("🔔 TICK FUNCTION CALLED")
-    logger.info(f"📥 Request method: {request.method}")
-    logger.info(f"📥 Request data: {request.data}")
-    logger.info(f"📥 Request headers: {dict(request.headers)}")
-    
-    wallet_address = request.data.get("wallet_address")
+    """Claim the 1 ECG daily mining reward."""
+    wallet_address = request.data.get(
+        "wallet_address"
+    )
+
     if not wallet_address:
-        logger.error("❌ wallet_address required")
         return Response(
-            {"error": "wallet_address required"}, 
-            status=status.HTTP_400_BAD_REQUEST
+            {"error": "wallet_address required"},
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
-    telegram_id = request.headers.get("X-Telegram-Id") or request.data.get("telegram_id")
-    is_telegram = request.headers.get("X-Telegram") == "true" or request.data.get("is_telegram", False)
-    
-    logger.info(f"📊 wallet: {wallet_address}, telegram_id: {telegram_id}")
-    
+    telegram_id = (
+        request.headers.get("X-Telegram-Id")
+        or request.data.get("telegram_id")
+    )
+
+    is_telegram = (
+        request.headers.get("X-Telegram") == "true"
+        or request.data.get("is_telegram", False)
+    )
+
     try:
         if telegram_id:
-            user = get_or_create_user(wallet_address, int(telegram_id), is_telegram)
-        else:
-            user = get_or_create_user(wallet_address, telegram_id=None, is_telegram=False)
-        
-        if not user:
-            logger.error("❌ User not found")
-            return Response(
-                {"error": "User not found"}, 
-                status=status.HTTP_404_NOT_FOUND
+            user = get_or_create_user(
+                wallet_address,
+                int(telegram_id),
+                is_telegram,
             )
-        
-        w = user.wallet
-        now = timezone.now()
-        next_at = user.next_daily_claim_at
+        else:
+            user = get_or_create_user(
+                wallet_address,
+                telegram_id=None,
+                is_telegram=False,
+            )
 
-        if next_at and next_at > now:
-            seconds_remaining = int((next_at - now).total_seconds())
-            logger.info(f"⏳ Too early! {seconds_remaining}s remaining")
-            return Response({
-                "status": "too_early",
-                "message": f"Please wait {seconds_remaining} seconds",
-                "seconds_remaining": seconds_remaining,
-            }, status=status.HTTP_400_BAD_REQUEST)
+        if not user:
+            return Response(
+                {"error": "User not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
-        logger.info(f"💰 Adding reward: {DAILY_REWARD} ECG")
-        w.daily_reward_unlocked = w.daily_reward_unlocked + DAILY_REWARD
-        w.save(update_fields=["daily_reward_unlocked"])
+        with transaction.atomic():
+            locked_user = (
+                AppUser.objects
+                .select_for_update()
+                .select_related("wallet")
+                .get(pk=user.pk)
+            )
 
-        Ledger.objects.create(
-            user=user,
-            typ="DAILY_UNLOCK",
-            amount=DAILY_REWARD,
-            meta={"source": "timer"}
+            locked_wallet = (
+                Wallet.objects
+                .select_for_update()
+                .get(user=locked_user)
+            )
+
+            now = timezone.now()
+            next_at = (
+                locked_user.next_daily_claim_at
+            )
+
+            # Re-check under lock to block double claims.
+            if next_at and next_at > now:
+                seconds_remaining = int(
+                    (next_at - now).total_seconds()
+                )
+
+                stats = _daily_reward_stats(
+                    locked_user
+                )
+
+                return Response(
+                    {
+                        "status": "too_early",
+                        "message": (
+                            f"Please wait "
+                            f"{seconds_remaining} seconds"
+                        ),
+                        "seconds_remaining": seconds_remaining,
+                        "total_rewards": stats["total_rewards"],
+                        "referral_points": stats["referral_points"],
+                        "rewards_count": stats["rewards_count"],
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            locked_wallet.daily_reward_unlocked = (
+                locked_wallet.daily_reward_unlocked
+                + DAILY_REWARD
+            )
+
+            locked_wallet.save(
+                update_fields=[
+                    "daily_reward_unlocked",
+                    "updated_at",
+                ]
+            )
+
+            Ledger.objects.create(
+                user=locked_user,
+                typ="DAILY_UNLOCK",
+                amount=DAILY_REWARD,
+                meta={"source": "timer"},
+            )
+
+            locked_user.next_daily_claim_at = (
+                now + COOLDOWN
+            )
+
+            locked_user.save(
+                update_fields=[
+                    "next_daily_claim_at"
+                ]
+            )
+
+        user = (
+            AppUser.objects
+            .select_related("wallet")
+            .get(pk=user.pk)
         )
 
-        user.next_daily_claim_at = now + COOLDOWN
-        user.save(update_fields=["next_daily_claim_at"])
+        stats = _daily_reward_stats(user)
 
-        logger.info(f"✅ Reward claimed! Next claim at: {user.next_daily_claim_at}")
-        logger.info("=" * 60)
-
-        return Response({
-            "status": "rewarded",
-            "message": "1 ECG added to your wallet",
-            "balance_ecg": str(w.withdrawable_total()),
-            "total_rewards": str(w.withdrawable_total()),
-            "referral_points": str(w.referral_bonus),
-            "rewards_count": user.ledgers.filter(typ="DAILY_UNLOCK").count(),
-            "seconds_remaining": int(COOLDOWN.total_seconds()),
-        }, status=status.HTTP_200_OK)
-        
-    except Exception as e:
-        logger.error(f"❌ Error in tick: {e}")
-        import traceback
-        traceback.print_exc()
         return Response(
-            {"error": str(e)}, 
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            {
+                "status": "rewarded",
+                "message": "1 ECG added to your wallet",
+                "balance_ecg": str(
+                    user.wallet.withdrawable_total()
+                ),
+                "total_rewards": stats["total_rewards"],
+                "referral_points": stats["referral_points"],
+                "rewards_count": stats["rewards_count"],
+                "seconds_remaining": int(
+                    COOLDOWN.total_seconds()
+                ),
+                "next_claim_at": (
+                    user.next_daily_claim_at
+                ),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    except Exception as exc:
+        logger.exception("Error in tick")
+
+        return Response(
+            {"error": str(exc)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
 
