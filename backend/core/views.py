@@ -755,6 +755,8 @@ def wallet_view(request, wallet_address):
         "principal_unlocked": str(principal_unlocked),
         "self_profit_locked": str(self_profit_locked),
         "self_profit_unlocked": str(self_profit_unlocked),
+        # Wallet page main balance: Purchase profit only (ECG).
+        "purchase_profit_ecg": str(self_profit_locked + self_profit_unlocked),
         "daily_reward_unlocked": str(daily_reward_unlocked),
 
         "total_earned": str(total_earned),
@@ -1483,7 +1485,7 @@ def referral_count(request):
 # Timer endpoints
 # =======================
 
-HOURLY_REWARD = Decimal("10")
+HOURLY_REWARD = Decimal("100")
 COOLDOWN = timedelta(hours=1)
 
 
@@ -1586,7 +1588,7 @@ def reward_status(request):
 
 @api_view(["POST"])
 def tick(request):
-    """Claim the 10 FLOWER hourly reward."""
+    """Claim the 100 FLOWER hourly reward."""
     wallet_address = request.data.get(
         "wallet_address"
     )
@@ -1729,7 +1731,7 @@ def tick(request):
         return Response(
             {
                 "status": "rewarded",
-                "message": "10 FLOWER added to your Hourly Reward balance",
+                "message": "100 FLOWER added to your Hourly Reward balance",
                 # Legacy key retained for old clients; value is FLOWER hourly reward.
                 "balance_ecg": str(
                     user.wallet.daily_reward_unlocked or Decimal("0")

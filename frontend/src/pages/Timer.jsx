@@ -2664,7 +2664,7 @@ const [totalRewards, setTotalRewards] =
             </span>
 
             <strong>
-              10.0000 FLOWER
+              100.0000 FLOWER
             </strong>
 
           </div>
@@ -2808,7 +2808,7 @@ const [totalRewards, setTotalRewards] =
             onClick={canClaim ? claimReward : undefined}
             disabled={!canClaim}
           >
-            {canClaim ? "Claim 10 FLOWER" : "Mining..."}
+            {canClaim ? "Claim 100 FLOWER" : "Mining..."}
           </button>
 
         )}

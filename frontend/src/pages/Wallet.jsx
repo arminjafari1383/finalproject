@@ -1197,11 +1197,11 @@ export default function Wallet() {
 
   const withdrawableTon =
     useMemo(() => {
+      // Only unlocked Purchase profit is withdrawable from the Wallet page.
       const ecg =
         Number(
-          wallet
-            ?.withdrawable_total ||
-            0
+          wallet?.self_profit_unlocked ??
+          0
         );
 
       if (
@@ -1224,29 +1224,28 @@ export default function Wallet() {
     ]);
 
 
-  // Main Wallet balance: stake principal only.
-  // FLOWER rewards are displayed on the Timer page; this balance is stake principal only.
-  const stakeBalance =
+  // Wallet balance is Purchase profit only, denominated in ECG.
+  // Principal and FLOWER rewards are intentionally excluded from this card.
+  const purchaseProfitBalance =
     useMemo(
       () =>
         Number(
-          wallet?.stake_balance ??
+          wallet?.purchase_profit_ecg ??
           (
-            Number(wallet?.principal_locked || 0) +
-            Number(wallet?.principal_unlocked || 0)
+            Number(wallet?.self_profit_locked || 0) +
+            Number(wallet?.self_profit_unlocked || 0)
           )
         ),
       [wallet]
     );
 
 
-  // Existing spendable bucket used by the withdrawal flow.
+  // Only unlocked Purchase profit participates in ECG/TON withdrawal UI.
   const withdrawableBalance =
     useMemo(
       () =>
         Number(
-          wallet?.withdrawable_total ??
-          wallet?.available_balance ??
+          wallet?.self_profit_unlocked ??
           0
         ),
       [wallet]
@@ -1310,7 +1309,7 @@ export default function Wallet() {
           </h1>
 
           <p className="wallet-subtitle">
-            Connect your wallet and manage your ECG balance
+            Purchase profit balance in ECG
           </p>
 
         </div>
@@ -1647,7 +1646,7 @@ export default function Wallet() {
                 <div className="wallet-balance-card">
 
                   <div className="balance-label">
-                    STAKE BALANCE
+                    PURCHASE PROFIT BALANCE
                   </div>
 
 
@@ -1655,7 +1654,7 @@ export default function Wallet() {
 
                     <div className="balance-number">
                       {Number(
-                        stakeBalance
+                        purchaseProfitBalance
                       ).toFixed(4)}
                     </div>
 
@@ -2317,9 +2316,7 @@ export default function Wallet() {
                     onClick={() =>
                       setAmount(
                         Number(
-                          wallet
-                            ?.withdrawable_total ||
-                            0
+                          withdrawableBalance
                         )
                       )
                     }
@@ -2347,9 +2344,7 @@ export default function Wallet() {
                   <b>
 
                     {Number(
-                      wallet
-                        ?.withdrawable_total ||
-                        0
+                      withdrawableBalance
                     ).toFixed(4)}
 
                     {" ECG"}
@@ -2387,9 +2382,7 @@ export default function Wallet() {
                     <b>
 
                       {Number(
-                        wallet
-                          ?.withdrawable_total ||
-                          0
+                        withdrawableBalance
                       ).toFixed(2)}
 
                       {" ECG"}
