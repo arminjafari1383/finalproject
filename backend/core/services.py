@@ -811,6 +811,146 @@ def update_referral_join_bonus(
 
 
 # ============================================================
+# Reconcile legacy referral join rewards
+# ============================================================
+
+@transaction.atomic
+def reconcile_existing_referral_join_rewards(owner: AppUser):
+    """
+    Bring referrals created under the old 3 ECG rule up to the new join-reward
+    schedule without duplicating already-correct rewards.
+
+    Level 1 target: 1000 ECG per referral row.
+    Levels 2-5 target: 500 ECG per referral row.
+
+    The top-up is real accounting: Wallet.referral_bonus and Ledger are updated,
+    then ReferralLevel JSON is synchronized to the actual credited total.
+    """
+
+    level_obj = (
+        ReferralLevel.objects
+        .select_for_update()
+        .filter(user=owner)
+        .first()
+    )
+
+    if not level_obj:
+        return False
+
+    ensure_user_has_wallet(owner)
+    wallet = (
+        Wallet.objects
+        .select_for_update()
+        .get(user=owner)
+    )
+
+    wallet_changed = False
+    changed_fields = []
+
+    for level in range(1, 6):
+        target = (
+            DIRECT_REFERRAL_REWARD
+            if level == 1
+            else INDIRECT_REFERRAL_REWARD
+        )
+
+        level_field = f"level_{level}_users"
+        users = list(getattr(level_obj, level_field) or [])
+        level_changed = False
+
+        for index, item in enumerate(users):
+            if isinstance(item, str):
+                from_wallet = item
+                row = {
+                    "wallet": item,
+                    "investment": 0,
+                    "profit": 0,
+                    "referral_bonus": 0,
+                }
+            elif isinstance(item, dict):
+                from_wallet = str(item.get("wallet") or "").strip()
+                row = dict(item)
+            else:
+                continue
+
+            if not from_wallet:
+                continue
+
+            credited = (
+                Ledger.objects
+                .filter(
+                    user=owner,
+                    typ="REF_BONUS",
+                    meta__invitee=from_wallet,
+                )
+                .aggregate(total=Sum("amount"))["total"]
+                or Decimal("0")
+            )
+
+            if credited < target:
+                top_up = target - credited
+
+                wallet.referral_bonus = (
+                    (wallet.referral_bonus or Decimal("0"))
+                    + top_up
+                )
+                wallet_changed = True
+
+                Ledger.objects.create(
+                    user=owner,
+                    typ="REF_BONUS",
+                    amount=top_up,
+                    meta={
+                        "invitee": from_wallet,
+                        "referral_level": level,
+                        "reward_kind": "legacy_reconcile",
+                        "target_total": str(target),
+                    },
+                )
+
+                credited = target
+
+                logger.info(
+                    "[REF_RECONCILE] owner=%s invitee=%s level=%s top_up=%s target=%s",
+                    owner.id,
+                    from_wallet,
+                    level,
+                    top_up,
+                    target,
+                )
+
+            # Keep the tree row aligned with the actual join bonus credited for
+            # this owner/downline relationship. For a legacy direct referral
+            # that had 3 ECG, this becomes exactly 1000 after the 997 top-up.
+            shown_bonus = max(
+                Decimal(str(row.get("referral_bonus", 0) or 0)),
+                credited,
+            )
+
+            if Decimal(str(row.get("referral_bonus", 0) or 0)) != shown_bonus:
+                row["referral_bonus"] = float(shown_bonus)
+                users[index] = row
+                level_changed = True
+
+        if level_changed:
+            setattr(level_obj, level_field, users)
+            changed_fields.append(level_field)
+
+    if wallet_changed:
+        wallet.save(
+            update_fields=[
+                "referral_bonus",
+                "updated_at",
+            ]
+        )
+
+    if changed_fields:
+        level_obj.save(update_fields=changed_fields)
+
+    return wallet_changed or bool(changed_fields)
+
+
+# ============================================================
 # Update referral investment
 # ============================================================
 

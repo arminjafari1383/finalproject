@@ -1245,6 +1245,9 @@ export default function TimerPage() {
   const [remaining, setRemaining] =
     useState(null);
 
+  const [cooldownSeconds, setCooldownSeconds] =
+    useState(60 * 60);
+
   const [balance, setBalance] =
     useState("0");
 
@@ -1431,9 +1434,14 @@ export default function TimerPage() {
           data.status === "ok"
         ) {
 
-          const sec =
-            data.seconds_remaining ?? 0;
+          const sec = Math.min(
+            data.seconds_remaining ?? 0,
+            data.cooldown_seconds ?? 60 * 60
+          );
 
+          setCooldownSeconds(
+            data.cooldown_seconds ?? 60 * 60
+          );
 
           setRemaining(sec);
 
@@ -1479,11 +1487,17 @@ export default function TimerPage() {
           );
 
 
-          const sec =
+          const serverCooldown =
+            data.cooldown_seconds ?? 60 * 60;
+
+          const sec = Math.min(
             data.seconds_remaining ??
             data.seconds ??
-            0;
+            0,
+            serverCooldown
+          );
 
+          setCooldownSeconds(serverCooldown);
 
           setRemaining(sec);
 
@@ -1578,7 +1592,7 @@ export default function TimerPage() {
 
 
   const rewardCycleSeconds =
-    60 * 60;
+    cooldownSeconds || 60 * 60;
 
 
   const remainingRatio =
@@ -1724,11 +1738,15 @@ export default function TimerPage() {
           "too_early"
         ) {
 
-          const sec =
-            data.seconds_remaining ||
-            0;
+          const serverCooldown =
+            data.cooldown_seconds ?? 60 * 60;
 
+          const sec = Math.min(
+            data.seconds_remaining || 0,
+            serverCooldown
+          );
 
+          setCooldownSeconds(serverCooldown);
           setRemaining(sec);
 
 

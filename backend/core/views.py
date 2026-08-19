@@ -16,7 +16,8 @@ from .services import (
     fetch_ton_usd_rate,
     ECG_PER_USD,
     register_purchase_usdt,
-    register_purchase_bnb
+    register_purchase_bnb,
+    reconcile_existing_referral_join_rewards,
 )
 from .models import (
     AppUser, Wallet, Ledger, Purchase, 
@@ -602,7 +603,11 @@ def wallet_view(request, wallet_address):
             status=status.HTTP_404_NOT_FOUND,
         )
 
-    wallet = user.wallet
+    # Upgrade any referrals that were created under the old 3 ECG rule before
+    # returning balances, so Wallet and Referral Tree agree immediately.
+    reconcile_existing_referral_join_rewards(user)
+    user.refresh_from_db()
+    wallet = Wallet.objects.get(user=user)
 
     # Existing serializer fields are kept for backward compatibility.
     payload = dict(
@@ -1525,15 +1530,17 @@ def reward_status(request):
     now = timezone.now()
     next_at = user.next_daily_claim_at
 
-    seconds_remaining = (
-        0
-        if not next_at
-        else max(
-            0,
-            int(
-                (next_at - now).total_seconds()
-            ),
-        )
+    # Start every account on a real one-hour cycle. Existing accounts may still
+    # carry the old 24-hour timestamp, so cap it to exactly one hour from now.
+    max_next_at = now + COOLDOWN
+    if not next_at or next_at > max_next_at:
+        next_at = max_next_at
+        user.next_daily_claim_at = next_at
+        user.save(update_fields=["next_daily_claim_at"])
+
+    seconds_remaining = max(
+        0,
+        int((next_at - now).total_seconds()),
     )
 
     stats = _hourly_reward_stats(user)
@@ -1622,8 +1629,16 @@ def tick(request):
                 locked_user.next_daily_claim_at
             )
 
+            # Normalize legacy 24-hour schedules and also prevent a first-time
+            # immediate claim: every reward must follow a completed one-hour cycle.
+            max_next_at = now + COOLDOWN
+            if not next_at or next_at > max_next_at:
+                next_at = max_next_at
+                locked_user.next_daily_claim_at = next_at
+                locked_user.save(update_fields=["next_daily_claim_at"])
+
             # Re-check under lock to block double claims.
-            if next_at and next_at > now:
+            if next_at > now:
                 seconds_remaining = int(
                     (next_at - now).total_seconds()
                 )
@@ -1775,6 +1790,10 @@ def get_referral_levels(request):
             {"error": "User not found"},
             status=status.HTTP_404_NOT_FOUND
         )
+
+    # Lazy one-time reconciliation makes referrals already present in the tree
+    # immediately follow the new 1000/500 ECG join-bonus rules.
+    reconcile_existing_referral_join_rewards(user)
 
     level_obj = ReferralLevel.objects.filter(user=user).first()
 
@@ -2255,23 +2274,4 @@ def create_ton_transaction(request):
     logger.info(
         "✅ TON Connect network: %s",
         network,
-    )
-
-    logger.info("=" * 60)
-
-    return Response(
-        {
-            "transaction":
-                transaction_data,
-
-            "gram_address":
-                gram_address,
-
-            "gram_amount":
-                gram_amount,
-
-            "gram_amount_ton":
-                gram_amount_ton,
-        },
-        status=status.HTTP_200_OK,
     )
