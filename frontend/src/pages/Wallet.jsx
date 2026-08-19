@@ -2276,7 +2276,7 @@ export default function Wallet() {
                     </div>
 
                     <div className="stat-title">
-                      Total Mined
+                      Total withdraw
                     </div>
 
                     <div className="stat-value">
