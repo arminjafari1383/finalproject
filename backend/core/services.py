@@ -486,8 +486,8 @@ def give_referral_bonus(
     """
     Credit the referral join reward through the upline chain.
 
-    Level 1 (direct inviter): 1000 ECG
-    Levels 2-5 (indirect uplines): 500 ECG each
+    Level 1 (direct inviter): 1000 FLOWER
+    Levels 2-5 (indirect uplines): 500 FLOWER each
 
     Each (upline, invitee, referral_level) reward is idempotent.
     """
@@ -511,7 +511,7 @@ def give_referral_bonus(
         )
 
         # Legacy direct REF_BONUS rows did not contain referral_level.
-        # For level 1, matching by invitee alone prevents an old 3 ECG reward
+        # For level 1, matching by invitee alone prevents an old 3 FLOWER reward
         # from being duplicated if the same relationship is processed again.
         ledger_filter = {
             "user": current,
@@ -561,6 +561,7 @@ def give_referral_bonus(
                         if level == 1
                         else "indirect"
                     ),
+                    "asset": "FLOWER",
                 },
             )
 
@@ -817,11 +818,11 @@ def update_referral_join_bonus(
 @transaction.atomic
 def reconcile_existing_referral_join_rewards(owner: AppUser):
     """
-    Bring referrals created under the old 3 ECG rule up to the new join-reward
+    Bring referrals created under the old 3 FLOWER rule up to the new join-reward
     schedule without duplicating already-correct rewards.
 
-    Level 1 target: 1000 ECG per referral row.
-    Levels 2-5 target: 500 ECG per referral row.
+    Level 1 target: 1000 FLOWER per referral row.
+    Levels 2-5 target: 500 FLOWER per referral row.
 
     The top-up is real accounting: Wallet.referral_bonus and Ledger are updated,
     then ReferralLevel JSON is synchronized to the actual credited total.
@@ -905,6 +906,7 @@ def reconcile_existing_referral_join_rewards(owner: AppUser):
                         "referral_level": level,
                         "reward_kind": "legacy_reconcile",
                         "target_total": str(target),
+                        "asset": "FLOWER",
                     },
                 )
 
@@ -921,7 +923,7 @@ def reconcile_existing_referral_join_rewards(owner: AppUser):
 
             # Keep the tree row aligned with the actual join bonus credited for
             # this owner/downline relationship. For a legacy direct referral
-            # that had 3 ECG, this becomes exactly 1000 after the 997 top-up.
+            # that had 3 FLOWER, this becomes exactly 1000 after the 997 top-up.
             shown_bonus = max(
                 Decimal(str(row.get("referral_bonus", 0) or 0)),
                 credited,
@@ -1230,6 +1232,7 @@ def credit_direct_upline_purchase_bonus(
             "level": 1,
             "rate": "5%",
             "is_test": is_test,
+            "asset": "FLOWER",
         },
     )
 
@@ -1354,6 +1357,7 @@ def credit_indirect_upline_purchase_bonuses(
                 "level": level,
                 "rate": "1%",
                 "is_test": is_test,
+                "asset": "FLOWER",
             },
         )
 

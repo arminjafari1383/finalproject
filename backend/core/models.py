@@ -62,11 +62,10 @@ class Wallet(models.Model):
     last_withdraw_at = models.DateTimeField(null=True, blank=True)
 
     def withdrawable_total(self):
+        # Only ECG originating from stake can be withdrawn.
+        # FLOWER buckets (referral/hourly/uni-level rewards) stay separate.
         return (
-            self.referral_bonus
-            + self.daily_reward_unlocked
-            + self.downline_profit_instant
-            + self.self_profit_unlocked
+            self.self_profit_unlocked
             + self.principal_unlocked
         )
 

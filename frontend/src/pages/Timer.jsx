@@ -1251,9 +1251,6 @@ export default function TimerPage() {
   const [balance, setBalance] =
     useState("0");
 
-  const [totalRewards, setTotalRewards] =
-    useState("0");
-
   const [referralBonus, setReferralBonus] =
     useState("0");
 
@@ -1447,10 +1444,6 @@ export default function TimerPage() {
 
 
 
-          setTotalRewards(
-            data.total_rewards ?? "0"
-          );
-
           setReferralBonus(
             data.referral_points ?? "0"
           );
@@ -1501,13 +1494,6 @@ export default function TimerPage() {
 
           setRemaining(sec);
 
-
-          setTotalRewards(
-            data.total_rewards ??
-            data.totalRewards ??
-            data.withdrawable_total ??
-            "0"
-          );
 
 
           setReferralBonus(
@@ -2189,7 +2175,7 @@ export default function TimerPage() {
 
         <section
           className="miner-card"
-          aria-label="ECG Miner"
+          aria-label="FLOWER Miner"
         >
 
           <div className="miner-top-edge" />
@@ -2340,7 +2326,7 @@ export default function TimerPage() {
               fontSize="22"
               fontWeight="700"
             >
-              ECG
+              FLOWER
             </text>
 
 
@@ -2465,7 +2451,7 @@ export default function TimerPage() {
             </span>
 
             <strong>
-              10.0000 ECG
+              10.0000 FLOWER
             </strong>
 
           </div>
@@ -2538,7 +2524,7 @@ export default function TimerPage() {
 
                   {Number(
                     referralBonus
-                  ).toFixed(4)} ECG
+                  ).toFixed(4)} FLOWER
 
                 </strong>
 
@@ -2609,7 +2595,7 @@ export default function TimerPage() {
             onClick={canClaim ? claimReward : undefined}
             disabled={!canClaim}
           >
-            {canClaim ? "Claim 10 ECG" : "Mining..."}
+            {canClaim ? "Claim 10 FLOWER" : "Mining..."}
           </button>
 
         )}
@@ -2628,34 +2614,6 @@ export default function TimerPage() {
 
         )}
 
-
-
-        {/* =====================================================
-            BALANCE
-        ===================================================== */}
-
-        <div className="balance-strip">
-
-
-
-
-
-          <span>
-
-            Total Hourly Rewards{" "}
-
-            <strong>
-
-              {Number(
-                totalRewards
-              ).toFixed(4)} ECG
-
-            </strong>
-
-          </span>
-
-
-        </div>
 
 
       </main>

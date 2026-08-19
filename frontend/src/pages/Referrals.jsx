@@ -1783,8 +1783,8 @@ export default function Referrals() {
   ) {
     const levelProfitMessage =
       level === 1
-        ? "Direct referral: 1000 ECG join bonus + 5% purchase profit."
-        : "Indirect referral: 500 ECG join bonus + 1% purchase profit.";
+        ? "Direct referral: 1000 FLOWER join bonus + 5% purchase reward."
+        : "Indirect referral: 500 FLOWER join bonus + 1% purchase reward.";
 
     if (!data) {
       return (
@@ -1851,7 +1851,7 @@ export default function Referrals() {
               opacity: 0.8,
             }}
           >
-            ✅ Direct join bonus is 1000 ECG. Indirect Levels 2–5 receive 500 ECG per new downline. Purchase-profit rewards stay separate.
+            ✅ Direct join bonus is 1000 FLOWER. Indirect Levels 2–5 receive 500 FLOWER per new downline. Uni-level purchase rewards are also shown in FLOWER.
           </div>
         )}
 
@@ -1865,12 +1865,12 @@ export default function Referrals() {
                   Investment (TON)
                 </th>
                 <th>
-                  Referral Bonus (ECG)
+                  Referral Bonus (FLOWER)
                 </th>
                 <th>
                   {level === 1
-                    ? "5% Profit (ECG)"
-                    : "1% Profit (ECG)"}
+                    ? "5% Reward (FLOWER)"
+                    : "1% Reward (FLOWER)"}
                 </th>
               </tr>
             </thead>
@@ -2019,13 +2019,13 @@ export default function Referrals() {
                         <td className="profit-cell">
                           + {Number(
                             referralJoinBonus || 0
-                          ).toFixed(4)} ECG
+                          ).toFixed(4)} FLOWER
                         </td>
 
                         <td className="profit-cell">
                           + {Number(
                             profit || 0
-                          ).toFixed(4)} ECG
+                          ).toFixed(4)} FLOWER
                         </td>
                       </tr>
                     );

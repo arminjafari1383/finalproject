@@ -1320,16 +1320,31 @@ export default function Wallet() {
     ]);
 
 
-  // Main Wallet balance: stake principal only.
-  // Referral bonus, hourly rewards and profits are intentionally excluded.
-  const stakeBalance =
+  // ECG wallet: stake-origin ECG that is currently withdrawable.
+  const ecgBalance =
     useMemo(
       () =>
         Number(
-          wallet?.stake_balance ??
+          wallet?.ecg_balance ??
           (
-            Number(wallet?.principal_locked || 0) +
+            Number(wallet?.self_profit_unlocked || 0) +
             Number(wallet?.principal_unlocked || 0)
+          )
+        ),
+      [wallet]
+    );
+
+
+  // FLOWER wallet: referral + hourly + uni-level rewards.
+  const flowerBalance =
+    useMemo(
+      () =>
+        Number(
+          wallet?.flower_balance ??
+          (
+            Number(wallet?.referral_bonus || 0) +
+            Number(wallet?.daily_reward_unlocked || 0) +
+            Number(wallet?.downline_profit_instant || 0)
           )
         ),
       [wallet]
@@ -1358,18 +1373,6 @@ export default function Wallet() {
         Number(
           wallet
             ?.total_withdrawn ??
-          0
-        ),
-      [wallet]
-    );
-
-
-  const referralBonus =
-    useMemo(
-      () =>
-        Number(
-          wallet?.referral_bonus_balance ??
-          wallet?.referral_bonus ??
           0
         ),
       [wallet]
@@ -1514,7 +1517,7 @@ export default function Wallet() {
           </h1>
 
           <p className="wallet-subtitle">
-            Connect your wallet and manage your ECG balance
+            Manage your ECG and FLOWER balances
           </p>
 
         </div>
@@ -1851,7 +1854,7 @@ export default function Wallet() {
                 <div className="wallet-balance-card">
 
                   <div className="balance-label">
-                    STAKE BALANCE
+                    ECG BALANCE
                   </div>
 
 
@@ -1859,7 +1862,7 @@ export default function Wallet() {
 
                     <div className="balance-number">
                       {Number(
-                        stakeBalance
+                        ecgBalance
                       ).toFixed(4)}
                     </div>
 
@@ -1878,7 +1881,7 @@ export default function Wallet() {
                       fontSize: "11px",
                     }}
                   >
-                    Referral Bonus and Hourly Rewards are tracked separately below.
+                    Stake-origin ECG available for withdrawal.
                   </div>
 
 
@@ -2004,6 +2007,53 @@ export default function Wallet() {
                   </span>
 
                 </button>
+
+
+                {/* FLOWER BALANCE */}
+
+                <div
+                  className="wallet-balance-card"
+                  style={{ marginTop: 14 }}
+                >
+                  <div className="balance-label">
+                    FLOWER BALANCE
+                  </div>
+
+                  <div className="wallet-balance-row">
+                    <div className="balance-number">
+                      {Number(flowerBalance).toFixed(4)}
+                    </div>
+
+                    <div className="balance-token-pill">
+                      FLOWER
+                    </div>
+                  </div>
+
+                  <div
+                    className="balance-label"
+                    style={{
+                      marginTop: "10px",
+                      opacity: 0.65,
+                      fontSize: "11px",
+                    }}
+                  >
+                    Referral + hourly rewards.
+                  </div>
+
+                  <button
+                    type="button"
+                    className="wallet-main-action disabled"
+                    disabled
+                    style={{ marginTop: 12 }}
+                  >
+                    <span className="wallet-main-action-title">
+                      Coming soon to withdraw
+                    </span>
+                    <span className="wallet-main-action-subtitle">
+                      FLOWER withdrawal is not available yet
+                    </span>
+                  </button>
+                </div>
 
 
                 {withdrawNotice && (
@@ -2258,7 +2308,7 @@ export default function Wallet() {
                       </span>
 
                       <strong className="uni-level-referral-value">
-                        {uniLevelReferralSummary.fivePercent.toFixed(4)} ECG
+                        {uniLevelReferralSummary.fivePercent.toFixed(4)} FLOWER
                       </strong>
 
                       <span className="uni-level-referral-note">
@@ -2272,7 +2322,7 @@ export default function Wallet() {
                       </span>
 
                       <strong className="uni-level-referral-value">
-                        {uniLevelReferralSummary.onePercent.toFixed(4)} ECG
+                        {uniLevelReferralSummary.onePercent.toFixed(4)} FLOWER
                       </strong>
 
                       <span className="uni-level-referral-note">
@@ -2286,11 +2336,11 @@ export default function Wallet() {
                       </span>
 
                       <strong className="uni-level-referral-value">
-                        {uniLevelReferralSummary.total.toFixed(4)} ECG
+                        {uniLevelReferralSummary.total.toFixed(4)} FLOWER
                       </strong>
 
                       <span className="uni-level-referral-note">
-                        5% + 1% combined
+                        FLOWER referral rewards
                       </span>
                     </div>
                   </div>
@@ -2364,34 +2414,16 @@ export default function Wallet() {
                   <div className="wallet-stat-card">
 
                     <div className="stat-icon">
-                      🎁
-                    </div>
-
-                    <div className="stat-title">
-                      Referral Bonus Balance
-                    </div>
-
-                    <div className="stat-value">
-                      {referralBonus.toFixed(4)}
-                      {" ECG"}
-                    </div>
-
-                  </div>
-
-
-                  <div className="wallet-stat-card">
-
-                    <div className="stat-icon">
                       ⏱️
                     </div>
 
                     <div className="stat-title">
-                      Hourly Reward Balance
+                      Hourly Reward
                     </div>
 
                     <div className="stat-value">
                       {hourlyRewardBalance.toFixed(4)}
-                      {" ECG"}
+                      {" FLOWER"}
                     </div>
 
                   </div>
@@ -2426,7 +2458,7 @@ export default function Wallet() {
 
                     <div className="stat-value">
                       {referralBonusTotal.toFixed(4)}
-                      {" ECG"}
+                      {" FLOWER"}
                     </div>
 
                   </div>

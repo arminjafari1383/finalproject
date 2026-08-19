@@ -702,8 +702,21 @@ def wallet_view(request, wallet_address):
         or Decimal("0")
     )
 
-    # Main Wallet balance: stake principal only.
-    # Referral rewards, hourly rewards and profits are intentionally excluded.
+    # ECG wallet: only stake-origin ECG that is currently withdrawable.
+    ecg_balance = (
+        self_profit_unlocked
+        + principal_unlocked
+    )
+
+    # FLOWER wallet: referral + hourly + uni-level referral rewards.
+    # These buckets are intentionally NOT withdrawable yet.
+    flower_balance = (
+        referral_bonus_current
+        + daily_reward_unlocked
+        + downline_profit_current
+    )
+
+    # Legacy stake display kept for older clients.
     stake_balance = (
         principal_locked
         + principal_unlocked
@@ -711,14 +724,18 @@ def wallet_view(request, wallet_address):
 
     # Override/add explicit values consumed by Wallet.jsx.
     payload.update({
-        # Existing withdrawal bucket (kept for withdrawal compatibility).
+        # ECG withdrawal bucket only.
         "withdrawable_total": str(available_balance),
         "available_balance": str(available_balance),
+        "ecg_balance": str(ecg_balance),
 
-        # Main Wallet display balance: stake only.
+        # FLOWER is display-only / non-withdrawable for now.
+        "flower_balance": str(flower_balance),
+
+        # Legacy stake display for older clients.
         "stake_balance": str(stake_balance),
 
-        # Hourly reward bucket is separate from stake.
+        # Hourly reward bucket is FLOWER.
         "hourly_reward_balance": str(daily_reward_unlocked),
         "hourly_reward_total": str(total_mined),
         "hourly_claims": mining_days,
@@ -1097,11 +1114,13 @@ def request_withdraw(request):
     # Reserve ECG immediately. Admin completion must NOT deduct again.
     with transaction.atomic():
         locked_wallet = Wallet.objects.select_for_update().get(user=user)
-        available = (
-            locked_wallet.downline_profit_instant
-            if scope == "DOWNLINE_ONLY"
-            else locked_wallet.withdrawable_total()
-        )
+        if scope == "DOWNLINE_ONLY":
+            return Response(
+                {"error": "FLOWER withdrawal is coming soon."},
+                status=400,
+            )
+
+        available = locked_wallet.withdrawable_total()
 
         if ecg_amount > available:
             if is_ton:
@@ -1118,18 +1137,11 @@ def request_withdraw(request):
             return Response({"error": "Insufficient withdrawable balance."}, status=400)
 
         remaining = ecg_amount
-        fields = (
-            ["downline_profit_instant"]
-            if scope == "DOWNLINE_ONLY"
-            else [
-                "downline_profit_instant",
-                "referral_bonus",
-                "daily_reward_unlocked",
-                "self_profit_unlocked",
-                "principal_unlocked",
-                "self_profit_locked",
-            ]
-        )
+        # Reserve ECG only. FLOWER buckets must never be consumed here.
+        fields = [
+            "self_profit_unlocked",
+            "principal_unlocked",
+        ]
 
         breakdown = {}
         for field in fields:
@@ -1476,7 +1488,7 @@ COOLDOWN = timedelta(hours=1)
 
 
 def _hourly_reward_stats(user):
-    """Return hourly-reward statistics used by Timer and Wallet."""
+    """Return FLOWER hourly-reward statistics used by Timer and Wallet."""
     daily_qs = user.ledgers.filter(
         typ="DAILY_UNLOCK"
     )
@@ -1558,6 +1570,11 @@ def reward_status(request):
             "hourly_reward_balance": str(
                 user.wallet.daily_reward_unlocked or Decimal("0")
             ),
+            "flower_balance": str(
+                (user.wallet.referral_bonus or Decimal("0"))
+                + (user.wallet.daily_reward_unlocked or Decimal("0"))
+                + (user.wallet.downline_profit_instant or Decimal("0"))
+            ),
             "stake_balance": str(
                 (user.wallet.principal_locked or Decimal("0"))
                 + (user.wallet.principal_unlocked or Decimal("0"))
@@ -1569,7 +1586,7 @@ def reward_status(request):
 
 @api_view(["POST"])
 def tick(request):
-    """Claim the 10 ECG hourly reward."""
+    """Claim the 10 FLOWER hourly reward."""
     wallet_address = request.data.get(
         "wallet_address"
     )
@@ -1663,6 +1680,11 @@ def tick(request):
                         "hourly_reward_balance": str(
                             locked_wallet.daily_reward_unlocked or Decimal("0")
                         ),
+                        "flower_balance": str(
+                            (locked_wallet.referral_bonus or Decimal("0"))
+                            + (locked_wallet.daily_reward_unlocked or Decimal("0"))
+                            + (locked_wallet.downline_profit_instant or Decimal("0"))
+                        ),
                     },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
@@ -1683,7 +1705,7 @@ def tick(request):
                 user=locked_user,
                 typ="DAILY_UNLOCK",
                 amount=HOURLY_REWARD,
-                meta={"source": "timer"},
+                meta={"source": "timer", "asset": "FLOWER"},
             )
 
             locked_user.next_daily_claim_at = (
@@ -1707,14 +1729,18 @@ def tick(request):
         return Response(
             {
                 "status": "rewarded",
-                "message": "10 ECG added to your Hourly Reward balance",
-                # Legacy key now points to the separate hourly-reward bucket,
-                # not the combined withdrawable balance.
+                "message": "10 FLOWER added to your Hourly Reward balance",
+                # Legacy key retained for old clients; value is FLOWER hourly reward.
                 "balance_ecg": str(
                     user.wallet.daily_reward_unlocked or Decimal("0")
                 ),
                 "hourly_reward_balance": str(
                     user.wallet.daily_reward_unlocked or Decimal("0")
+                ),
+                "flower_balance": str(
+                    (user.wallet.referral_bonus or Decimal("0"))
+                    + (user.wallet.daily_reward_unlocked or Decimal("0"))
+                    + (user.wallet.downline_profit_instant or Decimal("0"))
                 ),
                 "stake_balance": str(
                     (user.wallet.principal_locked or Decimal("0"))
@@ -2274,4 +2300,23 @@ def create_ton_transaction(request):
     logger.info(
         "✅ TON Connect network: %s",
         network,
+    )
+
+    logger.info("=" * 60)
+
+    return Response(
+        {
+            "transaction":
+                transaction_data,
+
+            "gram_address":
+                gram_address,
+
+            "gram_amount":
+                gram_amount,
+
+            "gram_amount_ton":
+                gram_amount_ton,
+        },
+        status=status.HTTP_200_OK,
     )
