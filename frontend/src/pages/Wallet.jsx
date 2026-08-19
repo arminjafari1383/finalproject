@@ -1344,8 +1344,31 @@ export default function Wallet() {
 
                 <div className="wallet-address-left">
 
-                  <div className="wallet-avatar-badge">
-                    👛
+                  <div className="wallet-avatar-badge" aria-hidden="true">
+                    <svg
+                      className="wallet-avatar-icon"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        d="M5.25 6.75H16.5C18.1569 6.75 19.5 8.09315 19.5 9.75V17.25H6.75C5.50736 17.25 4.5 16.2426 4.5 15V7.5C4.5 7.08579 4.83579 6.75 5.25 6.75Z"
+                        fill="currentColor"
+                      />
+                      <path
+                        d="M6.25 6.75V5.75C6.25 5.19772 6.69772 4.75 7.25 4.75H15.5"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                        strokeLinecap="round"
+                      />
+                      <path
+                        d="M15.25 10.25H20V14.25H15.25C14.1454 14.25 13.25 13.3546 13.25 12.25C13.25 11.1454 14.1454 10.25 15.25 10.25Z"
+                        fill="#6C5CFF"
+                        stroke="white"
+                        strokeWidth="1.25"
+                      />
+                      <circle cx="16.2" cy="12.25" r="0.8" fill="white" />
+                    </svg>
                   </div>
 
                   <div className="wallet-address-main">
@@ -1384,8 +1407,62 @@ export default function Wallet() {
 
               <div className="contract-left">
 
-                <div className="contract-icon">
-                  📄
+                <div className="contract-icon" aria-hidden="true">
+                  <svg
+                    className="contract-icon-svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      d="M6.5 3.75H13.75L17.5 7.5V14.25"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M13.5 3.9V7.75H17.35"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M6.5 3.75V18.25H12.25"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M8.75 10H14"
+                      stroke="currentColor"
+                      strokeWidth="1.65"
+                      strokeLinecap="round"
+                    />
+                    <path
+                      d="M8.75 13H12.5"
+                      stroke="currentColor"
+                      strokeWidth="1.65"
+                      strokeLinecap="round"
+                    />
+                    <circle
+                      cx="17"
+                      cy="17"
+                      r="4.15"
+                      fill="#33E59B"
+                      stroke="#071B22"
+                      strokeWidth="1.35"
+                    />
+                    <path
+                      d="M15.25 17.1L16.45 18.25L18.85 15.75"
+                      stroke="#071B22"
+                      strokeWidth="1.65"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
                 </div>
 
                 <div>
