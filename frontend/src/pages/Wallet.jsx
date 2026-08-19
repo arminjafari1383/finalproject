@@ -230,6 +230,16 @@ export default function Wallet() {
     setWithdrawNotice,
   ] = useState("");
 
+  const [
+    referralLevels,
+    setReferralLevels,
+  ] = useState({});
+
+  const [
+    referralLevelsLoading,
+    setReferralLevelsLoading,
+  ] = useState(false);
+
   // ====================================================
   // TON PRICE
   // ====================================================
@@ -1068,6 +1078,92 @@ export default function Wallet() {
   }, [address, loadWithdrawHistory]);
 
   // ====================================================
+  // UNI-LEVEL REFERRAL SUMMARY
+  // ====================================================
+
+  const loadReferralLevels =
+    useCallback(async () => {
+      if (!address) {
+        setReferralLevels({});
+        return;
+      }
+
+      try {
+        setReferralLevelsLoading(true);
+
+        const response = await api.get(
+          "/referral/levels/",
+          {
+            params: {
+              wallet_address: address,
+            },
+          }
+        );
+
+        setReferralLevels(
+          response.data?.levels || {}
+        );
+      } catch (error) {
+        console.error(
+          "[UNI LEVEL REFERRAL] load error",
+          error
+        );
+      } finally {
+        setReferralLevelsLoading(false);
+      }
+    }, [address]);
+
+  useEffect(() => {
+    if (!address) {
+      return undefined;
+    }
+
+    loadReferralLevels();
+
+    const timer = window.setInterval(
+      loadReferralLevels,
+      15000
+    );
+
+    const onVisible = () => {
+      if (
+        document.visibilityState ===
+        "visible"
+      ) {
+        loadReferralLevels();
+      }
+    };
+
+    const onFocus = () => {
+      loadReferralLevels();
+    };
+
+    document.addEventListener(
+      "visibilitychange",
+      onVisible
+    );
+
+    window.addEventListener(
+      "focus",
+      onFocus
+    );
+
+    return () => {
+      window.clearInterval(timer);
+
+      document.removeEventListener(
+        "visibilitychange",
+        onVisible
+      );
+
+      window.removeEventListener(
+        "focus",
+        onFocus
+      );
+    };
+  }, [address, loadReferralLevels]);
+
+  // ====================================================
   // WITHDRAW
   // ====================================================
 
@@ -1244,6 +1340,68 @@ export default function Wallet() {
         ),
       [wallet]
     );
+
+
+  const uniLevelReferralSummary =
+    useMemo(() => {
+      const sumUserProfit = (
+        users = []
+      ) =>
+        users.reduce(
+          (sum, user) =>
+            sum +
+            Number(
+              user?.profit || 0
+            ),
+          0
+        );
+
+      const fivePercent =
+        sumUserProfit(
+          referralLevels?.level_1
+            ?.users || []
+        );
+
+      const onePercent =
+        [2, 3, 4, 5].reduce(
+          (sum, level) =>
+            sum +
+            sumUserProfit(
+              referralLevels?.[
+                `level_${level}`
+              ]?.users || []
+            ),
+          0
+        );
+
+      const directUsers = Number(
+        referralLevels?.level_1
+          ?.count || 0
+      );
+
+      const indirectUsers =
+        [2, 3, 4, 5].reduce(
+          (sum, level) =>
+            sum +
+            Number(
+              referralLevels?.[
+                `level_${level}`
+              ]?.count || 0
+            ),
+          0
+        );
+
+      return {
+        fivePercent,
+        onePercent,
+        total:
+          fivePercent + onePercent,
+        directUsers,
+        indirectUsers,
+        totalUsers:
+          directUsers + indirectUsers,
+      };
+    }, [referralLevels]);
 
 
   const progressPercent =
@@ -1987,6 +2145,72 @@ export default function Wallet() {
                   Disconnect Wallet
                 </button>
 
+
+                {/* UNI-LEVEL REFERRAL */}
+
+                <section className="uni-level-referral-card">
+                  <div className="uni-level-referral-header">
+                    <div>
+                      <div className="uni-level-referral-eyebrow">
+                        REFERRAL BONUS
+                      </div>
+
+                      <h3 className="uni-level-referral-title">
+                        Uni_Level Referral
+                      </h3>
+                    </div>
+
+                    <div className="uni-level-referral-badge">
+                      {referralLevelsLoading
+                        ? "Updating..."
+                        : `${uniLevelReferralSummary.totalUsers} Users`}
+                    </div>
+                  </div>
+
+                  <div className="uni-level-referral-grid">
+                    <div className="uni-level-referral-item">
+                      <span className="uni-level-referral-label">
+                        5% Referral
+                      </span>
+
+                      <strong className="uni-level-referral-value">
+                        {uniLevelReferralSummary.fivePercent.toFixed(4)} ECG
+                      </strong>
+
+                      <span className="uni-level-referral-note">
+                        Level 1 • {uniLevelReferralSummary.directUsers} users
+                      </span>
+                    </div>
+
+                    <div className="uni-level-referral-item">
+                      <span className="uni-level-referral-label">
+                        1% Referral
+                      </span>
+
+                      <strong className="uni-level-referral-value">
+                        {uniLevelReferralSummary.onePercent.toFixed(4)} ECG
+                      </strong>
+
+                      <span className="uni-level-referral-note">
+                        Levels 2-5 • {uniLevelReferralSummary.indirectUsers} users
+                      </span>
+                    </div>
+
+                    <div className="uni-level-referral-item uni-level-referral-item--accent">
+                      <span className="uni-level-referral-label">
+                        Total Bonus
+                      </span>
+
+                      <strong className="uni-level-referral-value">
+                        {uniLevelReferralSummary.total.toFixed(4)} ECG
+                      </strong>
+
+                      <span className="uni-level-referral-note">
+                        5% + 1% combined
+                      </span>
+                    </div>
+                  </div>
+                </section>
 
                 {/* STATS */}
 
