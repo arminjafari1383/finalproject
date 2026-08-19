@@ -87,7 +87,7 @@ function CountdownHourglass({
           : "hourglass-ready"
       }`}
       role="img"
-      aria-label="Hourly reward countdown"
+      aria-label="FLOWER hourly reward countdown"
     >
 
       {/* =====================================================
@@ -1247,8 +1247,7 @@ export default function TimerPage() {
 
   const [cooldownSeconds, setCooldownSeconds] =
     useState(60 * 60);
-
-  const [balance, setBalance] =
+const [totalRewards, setTotalRewards] =
     useState("0");
 
   const [referralBonus, setReferralBonus] =
@@ -1256,6 +1255,16 @@ export default function TimerPage() {
 
   const [rewardCount, setRewardCount] =
     useState(0);
+
+  // FLOWER information lives on Timer now (not Wallet).
+  const [flowerWallet, setFlowerWallet] =
+    useState(null);
+
+  const [flowerReferralLevels, setFlowerReferralLevels] =
+    useState({});
+
+  const [flowerLoading, setFlowerLoading] =
+    useState(false);
 
   const [message, setMessage] =
     useState("");
@@ -1444,6 +1453,10 @@ export default function TimerPage() {
 
 
 
+          setTotalRewards(
+            data.total_rewards ?? "0"
+          );
+
           setReferralBonus(
             data.referral_points ?? "0"
           );
@@ -1494,6 +1507,13 @@ export default function TimerPage() {
 
           setRemaining(sec);
 
+
+          setTotalRewards(
+            data.total_rewards ??
+            data.totalRewards ??
+            data.withdrawable_total ??
+            "0"
+          );
 
 
           setReferralBonus(
@@ -1567,6 +1587,72 @@ export default function TimerPage() {
     }, [walletAddress]);
 
 
+
+
+  /* =========================================================
+     FLOWER WALLET DATA
+     All FLOWER balances/bonuses were moved here from Wallet.
+  ========================================================= */
+
+  const fetchFlowerData =
+    useCallback(async () => {
+
+      if (!walletAddress) {
+        setFlowerWallet(null);
+        setFlowerReferralLevels({});
+        return;
+      }
+
+      setFlowerLoading(true);
+
+      const [walletResult, levelsResult] =
+        await Promise.allSettled([
+          axios.get(
+            `${API}/${walletAddress}/`
+          ),
+          axios.get(
+            "/api/referral/levels/",
+            {
+              params: {
+                wallet_address:
+                  walletAddress,
+              },
+            }
+          ),
+        ]);
+
+      if (
+        walletResult.status ===
+        "fulfilled"
+      ) {
+        setFlowerWallet(
+          walletResult.value?.data ||
+          null
+        );
+      } else {
+        console.error(
+          "[Timer] FLOWER wallet load error:",
+          walletResult.reason
+        );
+      }
+
+      if (
+        levelsResult.status ===
+        "fulfilled"
+      ) {
+        setFlowerReferralLevels(
+          levelsResult.value?.data
+            ?.levels || {}
+        );
+      } else {
+        console.error(
+          "[Timer] FLOWER referral levels load error:",
+          levelsResult.reason
+        );
+      }
+
+      setFlowerLoading(false);
+    }, [walletAddress]);
 
   /* =========================================================
      SAND PROGRESS
@@ -1717,6 +1803,7 @@ export default function TimerPage() {
 
 
           await fetchStatus();
+          await fetchFlowerData();
 
 
         } else if (
@@ -1835,39 +1922,59 @@ export default function TimerPage() {
 
     stopTimer();
 
-
     if (!walletAddress) {
 
       setRemaining(null);
-
       setMessage("");
-
+      setFlowerWallet(null);
+      setFlowerReferralLevels({});
 
       console.log(
         "[Timer] wallet not connected"
       );
 
-
-      return;
-
+      return undefined;
     }
-
 
     console.log(
       "[Timer] wallet connected:",
       walletAddress
     );
 
-
     fetchStatus();
+    fetchFlowerData();
 
+    // FLOWER balances and referral summary stay fresh while Timer is open.
+    const flowerRefresh =
+      window.setInterval(
+        fetchFlowerData,
+        15000
+      );
 
-    return () =>
+    const onFocus = () => {
+      fetchFlowerData();
+    };
+
+    window.addEventListener(
+      "focus",
+      onFocus
+    );
+
+    return () => {
       stopTimer();
+      window.clearInterval(
+        flowerRefresh
+      );
+      window.removeEventListener(
+        "focus",
+        onFocus
+      );
+    };
 
   }, [
     walletAddress,
     fetchStatus,
+    fetchFlowerData,
   ]);
 
 
@@ -1986,6 +2093,112 @@ export default function TimerPage() {
         );
 
 
+
+
+  /* =========================================================
+     FLOWER CALCULATIONS
+  ========================================================= */
+
+  const flowerReferralBalance =
+    Number(
+      flowerWallet
+        ?.referral_bonus_balance ??
+      flowerWallet?.referral_bonus ??
+      referralBonus ??
+      0
+    );
+
+  const flowerReferralEarned =
+    Number(
+      flowerWallet
+        ?.referral_bonus_total ??
+      flowerWallet?.referral_bonus ??
+      referralBonus ??
+      0
+    );
+
+  const flowerHourlyBalance =
+    Number(
+      flowerWallet
+        ?.hourly_reward_balance ??
+      flowerWallet
+        ?.daily_reward_unlocked ??
+      totalRewards ??
+      0
+    );
+
+  const flowerHourlyClaims =
+    Number(
+      flowerWallet?.hourly_claims ??
+      flowerWallet?.mining_days ??
+      rewardCount ??
+      0
+    );
+
+  const sumFlowerProfit = (
+    users = []
+  ) =>
+    users.reduce(
+      (sum, user) =>
+        sum + Number(user?.profit || 0),
+      0
+    );
+
+  const flowerFivePercent =
+    sumFlowerProfit(
+      flowerReferralLevels?.level_1
+        ?.users || []
+    );
+
+  const flowerOnePercent =
+    [2, 3, 4, 5].reduce(
+      (sum, level) =>
+        sum +
+        sumFlowerProfit(
+          flowerReferralLevels?.[
+            `level_${level}`
+          ]?.users || []
+        ),
+      0
+    );
+
+  const flowerDirectUsers =
+    Number(
+      flowerReferralLevels?.level_1
+        ?.count || 0
+    );
+
+  const flowerIndirectUsers =
+    [2, 3, 4, 5].reduce(
+      (sum, level) =>
+        sum +
+        Number(
+          flowerReferralLevels?.[
+            `level_${level}`
+          ]?.count || 0
+        ),
+      0
+    );
+
+  const flowerUniLevelTotal =
+    flowerFivePercent +
+    flowerOnePercent;
+
+  const calculatedFlowerBalance =
+    flowerReferralBalance +
+    flowerHourlyBalance +
+    flowerUniLevelTotal;
+
+  // Prefer an explicit backend FLOWER total when one exists.
+  // Otherwise compose it from the FLOWER buckets already used by the app.
+  const flowerBalance =
+    Number(
+      flowerWallet?.flower_balance ??
+      flowerWallet
+        ?.withdrawable_flower ??
+      flowerWallet?.flower_total ??
+      calculatedFlowerBalance
+    );
 
   /* =========================================================
      UI
@@ -2601,6 +2814,301 @@ export default function TimerPage() {
         )}
 
 
+        {/* =====================================================
+            FLOWER WALLET — moved from Wallet page
+        ===================================================== */}
+
+        {walletAddress && (
+          <section
+            className="glass-card"
+            style={{
+              marginTop: 18,
+              padding: 18,
+              borderRadius: 20,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 12,
+                marginBottom: 14,
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    opacity: 0.68,
+                    letterSpacing: "0.12em",
+                    fontWeight: 800,
+                  }}
+                >
+                  FLOWER WALLET
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 5,
+                    fontSize: 26,
+                    fontWeight: 900,
+                  }}
+                >
+                  {flowerBalance.toFixed(4)} FLOWER
+                </div>
+              </div>
+
+              <span
+                style={{
+                  padding: "7px 10px",
+                  borderRadius: 999,
+                  fontSize: 11,
+                  fontWeight: 800,
+                  background:
+                    "rgba(35, 211, 238, 0.12)",
+                  border:
+                    "1px solid rgba(35, 211, 238, 0.28)",
+                }}
+              >
+                {flowerLoading
+                  ? "Updating..."
+                  : "FLOWER"}
+              </span>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns:
+                  "repeat(auto-fit, minmax(135px, 1fr))",
+                gap: 10,
+              }}
+            >
+              {[
+                [
+                  "Hourly Reward Balance",
+                  `${flowerHourlyBalance.toFixed(4)} FLOWER`,
+                ],
+                [
+                  "Referral Bonus Balance",
+                  `${flowerReferralBalance.toFixed(4)} FLOWER`,
+                ],
+                [
+                  "Referral Bonus Earned",
+                  `${flowerReferralEarned.toFixed(4)} FLOWER`,
+                ],
+                [
+                  "Hourly Claims",
+                  String(flowerHourlyClaims),
+                ],
+              ].map(([label, value]) => (
+                <div
+                  key={label}
+                  style={{
+                    padding: 12,
+                    borderRadius: 14,
+                    background:
+                      "rgba(255,255,255,0.035)",
+                    border:
+                      "1px solid rgba(255,255,255,0.08)",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      opacity: 0.62,
+                      marginBottom: 7,
+                    }}
+                  >
+                    {label}
+                  </div>
+                  <strong
+                    style={{
+                      fontSize: 14,
+                      lineHeight: 1.35,
+                    }}
+                  >
+                    {value}
+                  </strong>
+                </div>
+              ))}
+            </div>
+
+            <div
+              style={{
+                marginTop: 14,
+                paddingTop: 14,
+                borderTop:
+                  "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 10,
+                  alignItems: "center",
+                  marginBottom: 10,
+                }}
+              >
+                <strong>
+                  Uni-Level Referral
+                </strong>
+                <span
+                  style={{
+                    fontSize: 11,
+                    opacity: 0.65,
+                  }}
+                >
+                  {flowerDirectUsers +
+                    flowerIndirectUsers}{" "}
+                  Users
+                </span>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns:
+                    "repeat(auto-fit, minmax(120px, 1fr))",
+                  gap: 10,
+                }}
+              >
+                <div
+                  style={{
+                    padding: 11,
+                    borderRadius: 12,
+                    background:
+                      "rgba(255,255,255,0.03)",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      opacity: 0.6,
+                    }}
+                  >
+                    5% Referral
+                  </div>
+                  <strong>
+                    {flowerFivePercent.toFixed(4)} FLOWER
+                  </strong>
+                  <div
+                    style={{
+                      fontSize: 10,
+                      opacity: 0.55,
+                      marginTop: 4,
+                    }}
+                  >
+                    Level 1 • {flowerDirectUsers} users
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    padding: 11,
+                    borderRadius: 12,
+                    background:
+                      "rgba(255,255,255,0.03)",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      opacity: 0.6,
+                    }}
+                  >
+                    1% Referral
+                  </div>
+                  <strong>
+                    {flowerOnePercent.toFixed(4)} FLOWER
+                  </strong>
+                  <div
+                    style={{
+                      fontSize: 10,
+                      opacity: 0.55,
+                      marginTop: 4,
+                    }}
+                  >
+                    Levels 2-5 • {flowerIndirectUsers} users
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    padding: 11,
+                    borderRadius: 12,
+                    background:
+                      "rgba(35, 211, 238, 0.08)",
+                    border:
+                      "1px solid rgba(35, 211, 238, 0.16)",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      opacity: 0.68,
+                    }}
+                  >
+                    Total Bonus
+                  </div>
+                  <strong>
+                    {flowerUniLevelTotal.toFixed(4)} FLOWER
+                  </strong>
+                  <div
+                    style={{
+                      fontSize: 10,
+                      opacity: 0.55,
+                      marginTop: 4,
+                    }}
+                  >
+                    5% + 1% combined
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              disabled
+              style={{
+                width: "100%",
+                marginTop: 15,
+                padding: "13px 14px",
+                borderRadius: 14,
+                border:
+                  "1px solid rgba(255,255,255,0.12)",
+                background:
+                  "rgba(255,255,255,0.05)",
+                color: "inherit",
+                cursor: "not-allowed",
+                opacity: 0.72,
+              }}
+            >
+              <span
+                style={{
+                  display: "block",
+                  fontWeight: 900,
+                  fontSize: 14,
+                }}
+              >
+                Withdraw FLOWER
+              </span>
+              <span
+                style={{
+                  display: "block",
+                  marginTop: 3,
+                  fontSize: 11,
+                  opacity: 0.7,
+                }}
+              >
+                Coming soon to withdraw
+              </span>
+            </button>
+          </section>
+        )}
+
 
         {/* =====================================================
             MESSAGE
@@ -2613,10 +3121,7 @@ export default function TimerPage() {
           </p>
 
         )}
-
-
-
-      </main>
+</main>
 
 
 

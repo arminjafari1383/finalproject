@@ -263,18 +263,7 @@ export default function Wallet() {
     withdrawNotice,
     setWithdrawNotice,
   ] = useState("");
-
-  const [
-    referralLevels,
-    setReferralLevels,
-  ] = useState({});
-
-  const [
-    referralLevelsLoading,
-    setReferralLevelsLoading,
-  ] = useState(false);
-
-  // ====================================================
+// ====================================================
   // TON PRICE
   // ====================================================
 
@@ -1111,91 +1100,6 @@ export default function Wallet() {
       window.clearInterval(timer);
   }, [address, loadWithdrawHistory]);
 
-  // ====================================================
-  // UNI-LEVEL REFERRAL SUMMARY
-  // ====================================================
-
-  const loadReferralLevels =
-    useCallback(async () => {
-      if (!address) {
-        setReferralLevels({});
-        return;
-      }
-
-      try {
-        setReferralLevelsLoading(true);
-
-        const response = await api.get(
-          "/referral/levels/",
-          {
-            params: {
-              wallet_address: address,
-            },
-          }
-        );
-
-        setReferralLevels(
-          response.data?.levels || {}
-        );
-      } catch (error) {
-        console.error(
-          "[UNI LEVEL REFERRAL] load error",
-          error
-        );
-      } finally {
-        setReferralLevelsLoading(false);
-      }
-    }, [address]);
-
-  useEffect(() => {
-    if (!address) {
-      return undefined;
-    }
-
-    loadReferralLevels();
-
-    const timer = window.setInterval(
-      loadReferralLevels,
-      15000
-    );
-
-    const onVisible = () => {
-      if (
-        document.visibilityState ===
-        "visible"
-      ) {
-        loadReferralLevels();
-      }
-    };
-
-    const onFocus = () => {
-      loadReferralLevels();
-    };
-
-    document.addEventListener(
-      "visibilitychange",
-      onVisible
-    );
-
-    window.addEventListener(
-      "focus",
-      onFocus
-    );
-
-    return () => {
-      window.clearInterval(timer);
-
-      document.removeEventListener(
-        "visibilitychange",
-        onVisible
-      );
-
-      window.removeEventListener(
-        "focus",
-        onFocus
-      );
-    };
-  }, [address, loadReferralLevels]);
 
   // ====================================================
   // WITHDRAW
@@ -1320,31 +1224,16 @@ export default function Wallet() {
     ]);
 
 
-  // ECG wallet: stake-origin ECG that is currently withdrawable.
-  const ecgBalance =
+  // Main Wallet balance: stake principal only.
+  // FLOWER rewards are displayed on the Timer page; this balance is stake principal only.
+  const stakeBalance =
     useMemo(
       () =>
         Number(
-          wallet?.ecg_balance ??
+          wallet?.stake_balance ??
           (
-            Number(wallet?.self_profit_unlocked || 0) +
+            Number(wallet?.principal_locked || 0) +
             Number(wallet?.principal_unlocked || 0)
-          )
-        ),
-      [wallet]
-    );
-
-
-  // FLOWER wallet: referral + hourly + uni-level rewards.
-  const flowerBalance =
-    useMemo(
-      () =>
-        Number(
-          wallet?.flower_balance ??
-          (
-            Number(wallet?.referral_bonus || 0) +
-            Number(wallet?.daily_reward_unlocked || 0) +
-            Number(wallet?.downline_profit_instant || 0)
           )
         ),
       [wallet]
@@ -1379,102 +1268,6 @@ export default function Wallet() {
     );
 
 
-  const referralBonusTotal =
-    useMemo(
-      () =>
-        Number(
-          wallet?.referral_bonus_total ??
-          wallet?.referral_bonus ??
-          0
-        ),
-      [wallet]
-    );
-
-
-  const hourlyRewardBalance =
-    useMemo(
-      () =>
-        Number(
-          wallet?.hourly_reward_balance ??
-          wallet?.daily_reward_unlocked ??
-          0
-        ),
-      [wallet]
-    );
-
-
-  const rewardClaims =
-    useMemo(
-      () =>
-        Number(
-          wallet?.hourly_claims ??
-          wallet?.mining_days ??
-          0
-        ),
-      [wallet]
-    );
-
-
-  const uniLevelReferralSummary =
-    useMemo(() => {
-      const sumUserProfit = (
-        users = []
-      ) =>
-        users.reduce(
-          (sum, user) =>
-            sum +
-            Number(
-              user?.profit || 0
-            ),
-          0
-        );
-
-      const fivePercent =
-        sumUserProfit(
-          referralLevels?.level_1
-            ?.users || []
-        );
-
-      const onePercent =
-        [2, 3, 4, 5].reduce(
-          (sum, level) =>
-            sum +
-            sumUserProfit(
-              referralLevels?.[
-                `level_${level}`
-              ]?.users || []
-            ),
-          0
-        );
-
-      const directUsers = Number(
-        referralLevels?.level_1
-          ?.count || 0
-      );
-
-      const indirectUsers =
-        [2, 3, 4, 5].reduce(
-          (sum, level) =>
-            sum +
-            Number(
-              referralLevels?.[
-                `level_${level}`
-              ]?.count || 0
-            ),
-          0
-        );
-
-      return {
-        fivePercent,
-        onePercent,
-        total:
-          fivePercent + onePercent,
-        directUsers,
-        indirectUsers,
-        totalUsers:
-          directUsers + indirectUsers,
-      };
-    }, [referralLevels]);
 
 
   const progressPercent =
@@ -1517,7 +1310,7 @@ export default function Wallet() {
           </h1>
 
           <p className="wallet-subtitle">
-            Manage your ECG and FLOWER balances
+            Connect your wallet and manage your ECG balance
           </p>
 
         </div>
@@ -1854,7 +1647,7 @@ export default function Wallet() {
                 <div className="wallet-balance-card">
 
                   <div className="balance-label">
-                    ECG BALANCE
+                    STAKE BALANCE
                   </div>
 
 
@@ -1862,7 +1655,7 @@ export default function Wallet() {
 
                     <div className="balance-number">
                       {Number(
-                        ecgBalance
+                        stakeBalance
                       ).toFixed(4)}
                     </div>
 
@@ -1871,21 +1664,7 @@ export default function Wallet() {
                     </div>
 
                   </div>
-
-
-                  <div
-                    className="balance-label"
-                    style={{
-                      marginTop: "10px",
-                      opacity: 0.65,
-                      fontSize: "11px",
-                    }}
-                  >
-                    Stake-origin ECG available for withdrawal.
-                  </div>
-
-
-                  {walletLocked && (
+{walletLocked && (
 
                     <div className="wallet-locked-pill">
                       🔒 Wallet Locked
@@ -2007,53 +1786,6 @@ export default function Wallet() {
                   </span>
 
                 </button>
-
-
-                {/* FLOWER BALANCE */}
-
-                <div
-                  className="wallet-balance-card"
-                  style={{ marginTop: 14 }}
-                >
-                  <div className="balance-label">
-                    FLOWER BALANCE
-                  </div>
-
-                  <div className="wallet-balance-row">
-                    <div className="balance-number">
-                      {Number(flowerBalance).toFixed(4)}
-                    </div>
-
-                    <div className="balance-token-pill">
-                      FLOWER
-                    </div>
-                  </div>
-
-                  <div
-                    className="balance-label"
-                    style={{
-                      marginTop: "10px",
-                      opacity: 0.65,
-                      fontSize: "11px",
-                    }}
-                  >
-                    Referral + hourly rewards.
-                  </div>
-
-                  <button
-                    type="button"
-                    className="wallet-main-action disabled"
-                    disabled
-                    style={{ marginTop: 12 }}
-                  >
-                    <span className="wallet-main-action-title">
-                      Coming soon to withdraw
-                    </span>
-                    <span className="wallet-main-action-subtitle">
-                      FLOWER withdrawal is not available yet
-                    </span>
-                  </button>
-                </div>
 
 
                 {withdrawNotice && (
@@ -2280,72 +2012,6 @@ export default function Wallet() {
                 </button>
 
 
-                {/* UNI-LEVEL REFERRAL */}
-
-                <section className="uni-level-referral-card">
-                  <div className="uni-level-referral-header">
-                    <div>
-                      <div className="uni-level-referral-eyebrow">
-                        REFERRAL BONUS
-                      </div>
-
-                      <h3 className="uni-level-referral-title">
-                        Uni_Level Referral
-                      </h3>
-                    </div>
-
-                    <div className="uni-level-referral-badge">
-                      {referralLevelsLoading
-                        ? "Updating..."
-                        : `${uniLevelReferralSummary.totalUsers} Users`}
-                    </div>
-                  </div>
-
-                  <div className="uni-level-referral-grid">
-                    <div className="uni-level-referral-item">
-                      <span className="uni-level-referral-label">
-                        5% Referral
-                      </span>
-
-                      <strong className="uni-level-referral-value">
-                        {uniLevelReferralSummary.fivePercent.toFixed(4)} FLOWER
-                      </strong>
-
-                      <span className="uni-level-referral-note">
-                        Level 1 • {uniLevelReferralSummary.directUsers} users
-                      </span>
-                    </div>
-
-                    <div className="uni-level-referral-item">
-                      <span className="uni-level-referral-label">
-                        1% Referral
-                      </span>
-
-                      <strong className="uni-level-referral-value">
-                        {uniLevelReferralSummary.onePercent.toFixed(4)} FLOWER
-                      </strong>
-
-                      <span className="uni-level-referral-note">
-                        Levels 2-5 • {uniLevelReferralSummary.indirectUsers} users
-                      </span>
-                    </div>
-
-                    <div className="uni-level-referral-item uni-level-referral-item--accent">
-                      <span className="uni-level-referral-label">
-                        Total Bonus
-                      </span>
-
-                      <strong className="uni-level-referral-value">
-                        {uniLevelReferralSummary.total.toFixed(4)} FLOWER
-                      </strong>
-
-                      <span className="uni-level-referral-note">
-                        FLOWER referral rewards
-                      </span>
-                    </div>
-                  </div>
-                </section>
-
                 {/* STATS */}
 
                 <div className="wallet-stats-grid">
@@ -2406,59 +2072,6 @@ export default function Wallet() {
 
                       {" ECG"}
 
-                    </div>
-
-                  </div>
-
-
-                  <div className="wallet-stat-card">
-
-                    <div className="stat-icon">
-                      ⏱️
-                    </div>
-
-                    <div className="stat-title">
-                      Hourly Reward
-                    </div>
-
-                    <div className="stat-value">
-                      {hourlyRewardBalance.toFixed(4)}
-                      {" FLOWER"}
-                    </div>
-
-                  </div>
-
-
-                  <div className="wallet-stat-card">
-
-                    <div className="stat-icon">
-                      🔁
-                    </div>
-
-                    <div className="stat-title">
-                      Hourly Claims
-                    </div>
-
-                    <div className="stat-value">
-                      {rewardClaims}
-                    </div>
-
-                  </div>
-
-
-                  <div className="wallet-stat-card">
-
-                    <div className="stat-icon">
-                      🎯
-                    </div>
-
-                    <div className="stat-title">
-                      Referral Bonus Earned
-                    </div>
-
-                    <div className="stat-value">
-                      {referralBonusTotal.toFixed(4)}
-                      {" FLOWER"}
                     </div>
 
                   </div>
