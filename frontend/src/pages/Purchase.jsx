@@ -1067,6 +1067,198 @@ export default function Purchase() {
     }
   }
 
+
+  function InvestmentCountdown({ unlockAt, createdAt }) {
+    const getTargetTime = () => {
+      const direct = new Date(unlockAt).getTime();
+      if (Number.isFinite(direct)) return direct;
+
+      const start = new Date(createdAt).getTime();
+      if (Number.isFinite(start)) {
+        return start + 365 * 24 * 60 * 60 * 1000;
+      }
+
+      return null;
+    };
+
+    const targetTime = getTargetTime();
+    const [remainingMs, setRemainingMs] = useState(() =>
+      targetTime ? Math.max(0, targetTime - Date.now()) : 0
+    );
+
+    useEffect(() => {
+      if (!targetTime) {
+        setRemainingMs(0);
+        return;
+      }
+
+      const updateCountdown = () => {
+        setRemainingMs(Math.max(0, targetTime - Date.now()));
+      };
+
+      updateCountdown();
+      const timer = setInterval(updateCountdown, 1000);
+
+      return () => clearInterval(timer);
+    }, [targetTime]);
+
+    if (!targetTime) {
+      return <span>Waiting...</span>;
+    }
+
+    const addMonthsClamped = (date, monthsToAdd) => {
+      const result = new Date(date.getTime());
+      const originalDay = result.getUTCDate();
+
+      result.setUTCDate(1);
+      result.setUTCMonth(result.getUTCMonth() + monthsToAdd);
+
+      const lastDayOfTargetMonth = new Date(
+        Date.UTC(
+          result.getUTCFullYear(),
+          result.getUTCMonth() + 1,
+          0
+        )
+      ).getUTCDate();
+
+      result.setUTCDate(
+        Math.min(originalDay, lastDayOfTargetMonth)
+      );
+
+      return result;
+    };
+
+    const getCalendarParts = () => {
+      if (remainingMs <= 0) {
+        return {
+          months: 0,
+          days: 0,
+          hours: 0,
+          minutes: 0,
+          seconds: 0,
+        };
+      }
+
+      const now = new Date();
+      const target = new Date(targetTime);
+
+      let months =
+        (target.getUTCFullYear() - now.getUTCFullYear()) * 12 +
+        (target.getUTCMonth() - now.getUTCMonth());
+
+      let monthCursor = addMonthsClamped(now, months);
+
+      if (monthCursor.getTime() > target.getTime()) {
+        months -= 1;
+        monthCursor = addMonthsClamped(now, months);
+      }
+
+      const restSeconds = Math.max(
+        0,
+        Math.floor((target.getTime() - monthCursor.getTime()) / 1000)
+      );
+
+      const days = Math.floor(restSeconds / 86400);
+      const hours = Math.floor((restSeconds % 86400) / 3600);
+      const minutes = Math.floor((restSeconds % 3600) / 60);
+      const seconds = restSeconds % 60;
+
+      return {
+        months: Math.max(0, months),
+        days,
+        hours,
+        minutes,
+        seconds,
+      };
+    };
+
+    const { months, days, hours, minutes, seconds } =
+      getCalendarParts();
+
+    const pad = (value) => String(value).padStart(2, "0");
+
+    const timeParts = [
+      { value: months, label: "MONTHS" },
+      { value: days, label: "DAYS" },
+      { value: hours, label: "HOURS" },
+      { value: minutes, label: "MINUTES" },
+      { value: seconds, label: "SECONDS" },
+    ];
+
+    return (
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "flex-end",
+          gap: 6,
+          flexWrap: "wrap",
+          fontVariantNumeric: "tabular-nums",
+          color: remainingMs > 0 ? "#00b7ff" : "#36d399",
+          fontWeight: 800,
+        }}
+        title={
+          remainingMs > 0
+            ? `Unlocks at ${new Date(targetTime).toLocaleString()}`
+            : "Mining Completed"
+        }
+      >
+        {timeParts.map((part, index) => (
+          <div
+            key={part.label}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                minWidth: part.label === "SECONDS" ? 48 : 42,
+                lineHeight: 1.05,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 18,
+                  letterSpacing: "0.5px",
+                }}
+              >
+                {pad(part.value)}
+              </span>
+
+              <span
+                style={{
+                  marginTop: 4,
+                  fontSize: 8,
+                  fontWeight: 600,
+                  letterSpacing: "0.6px",
+                  color: "#a9bdd3",
+                }}
+              >
+                {part.label}
+              </span>
+            </div>
+
+            {index < timeParts.length - 1 && (
+              <span
+                style={{
+                  fontSize: 16,
+                  marginTop: -8,
+                }}
+              >
+                :
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   function Row({
     label,
     value,
@@ -1590,7 +1782,12 @@ export default function Purchase() {
 
                         <Row
                           label="Investment Lock"
-                          value="1 Year"
+                          value={
+                            <InvestmentCountdown
+                              unlockAt={item.principal_unlock_at}
+                              createdAt={item.created_at}
+                            />
+                          }
                         />
 
                         <Row
