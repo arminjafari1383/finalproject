@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTonConnectUI, useTonWallet } from "@tonconnect/ui-react";
 import { api } from "../api";
 import "./Purchase.css";
+import ecgLogo from "../assets/ecg-logo.png";
+import usdtLogo from "../assets/usdt-logo.png";
 
 export default function Purchase() {
   const tonWallet = useTonWallet();
@@ -1245,7 +1247,13 @@ export default function Purchase() {
                     loading
                   }
                 >
-                  ⚡ ECG
+                  <img
+                    src={ecgLogo}
+                    alt=""
+                    aria-hidden="true"
+                    className="output-token-logo"
+                  />
+                  <span>ECG</span>
                 </button>
 
                 <button
@@ -1264,7 +1272,13 @@ export default function Purchase() {
                     loading
                   }
                 >
-                  💵 USDT
+                  <img
+                    src={usdtLogo}
+                    alt=""
+                    aria-hidden="true"
+                    className="output-token-logo"
+                  />
+                  <span>USDT</span>
                 </button>
               </div>
             </div>
@@ -1285,8 +1299,12 @@ export default function Purchase() {
                 }`}
               >
                 <div className="box-header">
-                  <span className="box-icon">
-                    ⚡
+                  <span className="box-icon box-icon--ecg">
+                    <img
+                      src={ecgLogo}
+                      alt="ECG"
+                      className="box-token-logo"
+                    />
                   </span>
 
                   <div>
@@ -1356,8 +1374,12 @@ export default function Purchase() {
                 }`}
               >
                 <div className="box-header">
-                  <span className="box-icon">
-                    💵
+                  <span className="box-icon box-icon--usdt">
+                    <img
+                      src={usdtLogo}
+                      alt="USDT"
+                      className="box-token-logo"
+                    />
                   </span>
 
                   <div>
