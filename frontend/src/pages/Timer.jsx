@@ -87,7 +87,7 @@ function CountdownHourglass({
           : "hourglass-ready"
       }`}
       role="img"
-      aria-label="FLOWER hourly reward countdown"
+      aria-label="EPL hourly reward countdown"
     >
 
       {/* =====================================================
@@ -1256,14 +1256,12 @@ const [totalRewards, setTotalRewards] =
   const [rewardCount, setRewardCount] =
     useState(0);
 
-  // FLOWER information lives on Timer now (not Wallet).
-  const [flowerWallet, setFlowerWallet] =
+  // EPL information lives on Timer now (not Wallet).
+  const [eplWallet, setEplWallet] =
     useState(null);
 
-  const [flowerReferralLevels, setFlowerReferralLevels] =
-    useState({});
 
-  const [flowerLoading, setFlowerLoading] =
+  const [eplLoading, setEplLoading] =
     useState(false);
 
   const [message, setMessage] =
@@ -1590,68 +1588,36 @@ const [totalRewards, setTotalRewards] =
 
 
   /* =========================================================
-     FLOWER WALLET DATA
-     All FLOWER balances/bonuses were moved here from Wallet.
+     EPL WALLET DATA
+     EPL hourly/referral balances live on Timer.
   ========================================================= */
 
-  const fetchFlowerData =
+  const fetchEplData =
     useCallback(async () => {
 
       if (!walletAddress) {
-        setFlowerWallet(null);
-        setFlowerReferralLevels({});
+        setEplWallet(null);
         return;
       }
 
-      setFlowerLoading(true);
+      setEplLoading(true);
 
-      const [walletResult, levelsResult] =
-        await Promise.allSettled([
-          axios.get(
-            `${API}/${walletAddress}/`
-          ),
-          axios.get(
-            "/api/referral/levels/",
-            {
-              params: {
-                wallet_address:
-                  walletAddress,
-              },
-            }
-          ),
-        ]);
-
-      if (
-        walletResult.status ===
-        "fulfilled"
-      ) {
-        setFlowerWallet(
-          walletResult.value?.data ||
-          null
+      try {
+        const walletResult = await axios.get(
+          `${API}/${walletAddress}/`
         );
-      } else {
+
+        setEplWallet(
+          walletResult?.data || null
+        );
+      } catch (error) {
         console.error(
-          "[Timer] FLOWER wallet load error:",
-          walletResult.reason
+          "[Timer] EPL wallet load error:",
+          error
         );
+      } finally {
+        setEplLoading(false);
       }
-
-      if (
-        levelsResult.status ===
-        "fulfilled"
-      ) {
-        setFlowerReferralLevels(
-          levelsResult.value?.data
-            ?.levels || {}
-        );
-      } else {
-        console.error(
-          "[Timer] FLOWER referral levels load error:",
-          levelsResult.reason
-        );
-      }
-
-      setFlowerLoading(false);
     }, [walletAddress]);
 
   /* =========================================================
@@ -1803,7 +1769,7 @@ const [totalRewards, setTotalRewards] =
 
 
           await fetchStatus();
-          await fetchFlowerData();
+          await fetchEplData();
 
 
         } else if (
@@ -1926,8 +1892,7 @@ const [totalRewards, setTotalRewards] =
 
       setRemaining(null);
       setMessage("");
-      setFlowerWallet(null);
-      setFlowerReferralLevels({});
+      setEplWallet(null);
 
       console.log(
         "[Timer] wallet not connected"
@@ -1942,17 +1907,17 @@ const [totalRewards, setTotalRewards] =
     );
 
     fetchStatus();
-    fetchFlowerData();
+    fetchEplData();
 
-    // FLOWER balances and referral summary stay fresh while Timer is open.
-    const flowerRefresh =
+    // EPL balances and referral summary stay fresh while Timer is open.
+    const eplRefresh =
       window.setInterval(
-        fetchFlowerData,
+        fetchEplData,
         15000
       );
 
     const onFocus = () => {
-      fetchFlowerData();
+      fetchEplData();
     };
 
     window.addEventListener(
@@ -1963,7 +1928,7 @@ const [totalRewards, setTotalRewards] =
     return () => {
       stopTimer();
       window.clearInterval(
-        flowerRefresh
+        eplRefresh
       );
       window.removeEventListener(
         "focus",
@@ -1974,7 +1939,7 @@ const [totalRewards, setTotalRewards] =
   }, [
     walletAddress,
     fetchStatus,
-    fetchFlowerData,
+    fetchEplData,
   ]);
 
 
@@ -2096,108 +2061,55 @@ const [totalRewards, setTotalRewards] =
 
 
   /* =========================================================
-     FLOWER CALCULATIONS
+     EPL CALCULATIONS
   ========================================================= */
 
-  const flowerReferralBalance =
+  const eplReferralBalance =
     Number(
-      flowerWallet
+      eplWallet
         ?.referral_bonus_balance ??
-      flowerWallet?.referral_bonus ??
+      eplWallet?.referral_bonus ??
       referralBonus ??
       0
     );
 
-  const flowerReferralEarned =
+  const eplReferralEarned =
     Number(
-      flowerWallet
+      eplWallet
         ?.referral_bonus_total ??
-      flowerWallet?.referral_bonus ??
+      eplWallet?.referral_bonus ??
       referralBonus ??
       0
     );
 
-  const flowerHourlyBalance =
+  const eplHourlyBalance =
     Number(
-      flowerWallet
+      eplWallet
         ?.hourly_reward_balance ??
-      flowerWallet
+      eplWallet
         ?.daily_reward_unlocked ??
       totalRewards ??
       0
     );
 
-  const flowerHourlyClaims =
+  const eplHourlyClaims =
     Number(
-      flowerWallet?.hourly_claims ??
-      flowerWallet?.mining_days ??
+      eplWallet?.hourly_claims ??
+      eplWallet?.mining_days ??
       rewardCount ??
       0
     );
 
-  const sumFlowerProfit = (
-    users = []
-  ) =>
-    users.reduce(
-      (sum, user) =>
-        sum + Number(user?.profit || 0),
-      0
-    );
+  const calculatedEplBalance =
+    eplReferralBalance +
+    eplHourlyBalance;
 
-  const flowerFivePercent =
-    sumFlowerProfit(
-      flowerReferralLevels?.level_1
-        ?.users || []
-    );
-
-  const flowerOnePercent =
-    [2, 3, 4, 5].reduce(
-      (sum, level) =>
-        sum +
-        sumFlowerProfit(
-          flowerReferralLevels?.[
-            `level_${level}`
-          ]?.users || []
-        ),
-      0
-    );
-
-  const flowerDirectUsers =
+  const eplBalance =
     Number(
-      flowerReferralLevels?.level_1
-        ?.count || 0
-    );
-
-  const flowerIndirectUsers =
-    [2, 3, 4, 5].reduce(
-      (sum, level) =>
-        sum +
-        Number(
-          flowerReferralLevels?.[
-            `level_${level}`
-          ]?.count || 0
-        ),
-      0
-    );
-
-  const flowerUniLevelTotal =
-    flowerFivePercent +
-    flowerOnePercent;
-
-  const calculatedFlowerBalance =
-    flowerReferralBalance +
-    flowerHourlyBalance +
-    flowerUniLevelTotal;
-
-  // Prefer an explicit backend FLOWER total when one exists.
-  // Otherwise compose it from the FLOWER buckets already used by the app.
-  const flowerBalance =
-    Number(
-      flowerWallet?.flower_balance ??
-      flowerWallet
-        ?.withdrawable_flower ??
-      flowerWallet?.flower_total ??
-      calculatedFlowerBalance
+      eplWallet?.epl_balance ??
+      eplWallet?.withdrawable_epl ??
+      eplWallet?.epl_total ??
+      calculatedEplBalance
     );
 
   /* =========================================================
@@ -2388,7 +2300,7 @@ const [totalRewards, setTotalRewards] =
 
         <section
           className="miner-card"
-          aria-label="FLOWER Miner"
+          aria-label="EPL Miner"
         >
 
           <div className="miner-top-edge" />
@@ -2539,7 +2451,7 @@ const [totalRewards, setTotalRewards] =
               fontSize="22"
               fontWeight="700"
             >
-              FLOWER
+              EPL
             </text>
 
 
@@ -2664,7 +2576,7 @@ const [totalRewards, setTotalRewards] =
             </span>
 
             <strong>
-              100.0000 FLOWER
+              100.0000 EPL
             </strong>
 
           </div>
@@ -2737,7 +2649,7 @@ const [totalRewards, setTotalRewards] =
 
                   {Number(
                     referralBonus
-                  ).toFixed(4)} FLOWER
+                  ).toFixed(4)} EPL
 
                 </strong>
 
@@ -2808,14 +2720,14 @@ const [totalRewards, setTotalRewards] =
             onClick={canClaim ? claimReward : undefined}
             disabled={!canClaim}
           >
-            {canClaim ? "Claim 100 FLOWER" : "Mining..."}
+            {canClaim ? "Claim 100 EPL" : "Mining..."}
           </button>
 
         )}
 
 
         {/* =====================================================
-            FLOWER WALLET — moved from Wallet page
+            EPL WALLET — moved from Wallet page
         ===================================================== */}
 
         {walletAddress && (
@@ -2845,7 +2757,7 @@ const [totalRewards, setTotalRewards] =
                     fontWeight: 800,
                   }}
                 >
-                  FLOWER WALLET
+                  EPL WALLET
                 </div>
 
                 <div
@@ -2855,7 +2767,7 @@ const [totalRewards, setTotalRewards] =
                     fontWeight: 900,
                   }}
                 >
-                  {flowerBalance.toFixed(4)} FLOWER
+                  {eplBalance.toFixed(4)} EPL
                 </div>
               </div>
 
@@ -2871,9 +2783,9 @@ const [totalRewards, setTotalRewards] =
                     "1px solid rgba(35, 211, 238, 0.28)",
                 }}
               >
-                {flowerLoading
+                {eplLoading
                   ? "Updating..."
-                  : "FLOWER"}
+                  : "EPL"}
               </span>
             </div>
 
@@ -2888,19 +2800,19 @@ const [totalRewards, setTotalRewards] =
               {[
                 [
                   "Hourly Reward Balance",
-                  `${flowerHourlyBalance.toFixed(4)} FLOWER`,
+                  `${eplHourlyBalance.toFixed(4)} EPL`,
                 ],
                 [
                   "Referral Bonus Balance",
-                  `${flowerReferralBalance.toFixed(4)} FLOWER`,
+                  `${eplReferralBalance.toFixed(4)} EPL`,
                 ],
                 [
                   "Referral Bonus Earned",
-                  `${flowerReferralEarned.toFixed(4)} FLOWER`,
+                  `${eplReferralEarned.toFixed(4)} EPL`,
                 ],
                 [
                   "Hourly Claims",
-                  String(flowerHourlyClaims),
+                  String(eplHourlyClaims),
                 ],
               ].map(([label, value]) => (
                 <div
@@ -2935,140 +2847,6 @@ const [totalRewards, setTotalRewards] =
               ))}
             </div>
 
-            <div
-              style={{
-                marginTop: 14,
-                paddingTop: 14,
-                borderTop:
-                  "1px solid rgba(255,255,255,0.08)",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 10,
-                  alignItems: "center",
-                  marginBottom: 10,
-                }}
-              >
-                <strong>
-                  Uni-Level Referral
-                </strong>
-                <span
-                  style={{
-                    fontSize: 11,
-                    opacity: 0.65,
-                  }}
-                >
-                  {flowerDirectUsers +
-                    flowerIndirectUsers}{" "}
-                  Users
-                </span>
-              </div>
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns:
-                    "repeat(auto-fit, minmax(120px, 1fr))",
-                  gap: 10,
-                }}
-              >
-                <div
-                  style={{
-                    padding: 11,
-                    borderRadius: 12,
-                    background:
-                      "rgba(255,255,255,0.03)",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 11,
-                      opacity: 0.6,
-                    }}
-                  >
-                    5% Referral
-                  </div>
-                  <strong>
-                    {flowerFivePercent.toFixed(4)} FLOWER
-                  </strong>
-                  <div
-                    style={{
-                      fontSize: 10,
-                      opacity: 0.55,
-                      marginTop: 4,
-                    }}
-                  >
-                    Level 1 • {flowerDirectUsers} users
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    padding: 11,
-                    borderRadius: 12,
-                    background:
-                      "rgba(255,255,255,0.03)",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 11,
-                      opacity: 0.6,
-                    }}
-                  >
-                    1% Referral
-                  </div>
-                  <strong>
-                    {flowerOnePercent.toFixed(4)} FLOWER
-                  </strong>
-                  <div
-                    style={{
-                      fontSize: 10,
-                      opacity: 0.55,
-                      marginTop: 4,
-                    }}
-                  >
-                    Levels 2-5 • {flowerIndirectUsers} users
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    padding: 11,
-                    borderRadius: 12,
-                    background:
-                      "rgba(35, 211, 238, 0.08)",
-                    border:
-                      "1px solid rgba(35, 211, 238, 0.16)",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 11,
-                      opacity: 0.68,
-                    }}
-                  >
-                    Total Bonus
-                  </div>
-                  <strong>
-                    {flowerUniLevelTotal.toFixed(4)} FLOWER
-                  </strong>
-                  <div
-                    style={{
-                      fontSize: 10,
-                      opacity: 0.55,
-                      marginTop: 4,
-                    }}
-                  >
-                    5% + 1% combined
-                  </div>
-                </div>
-              </div>
-            </div>
-
             <button
               type="button"
               disabled
@@ -3093,7 +2871,7 @@ const [totalRewards, setTotalRewards] =
                   fontSize: 14,
                 }}
               >
-                Withdraw FLOWER
+                Withdraw EPL
               </span>
               <span
                 style={{

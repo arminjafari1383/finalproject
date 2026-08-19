@@ -1783,8 +1783,8 @@ export default function Referrals() {
   ) {
     const levelProfitMessage =
       level === 1
-        ? "Direct referral: 1000 FLOWER join bonus + 5% stake profit (ECG)."
-        : "Indirect referral: 500 FLOWER join bonus + 1% stake profit (ECG).";
+        ? "Direct referral: 1000 EPL join bonus + 5% stake profit (ECG)."
+        : "Indirect referral: 500 EPL join bonus + 1% stake profit (ECG).";
 
     if (!data) {
       return (
@@ -1851,7 +1851,7 @@ export default function Referrals() {
               opacity: 0.8,
             }}
           >
-            ✅ Direct join bonus is 1000 FLOWER. Indirect Levels 2–5 receive 500 FLOWER per new downline. Stake profit remains separate and is shown in ECG.
+            ✅ Direct join bonus is 1000 EPL. Indirect Levels 2–5 receive 500 EPL per new downline. Stake profit remains separate and is shown in ECG.
           </div>
         )}
 
@@ -1865,7 +1865,7 @@ export default function Referrals() {
                   Investment (TON)
                 </th>
                 <th>
-                  Referral Bonus (FLOWER)
+                  Referral Bonus (EPL)
                 </th>
                 <th>
                   {level === 1
@@ -2019,7 +2019,7 @@ export default function Referrals() {
                         <td className="profit-cell">
                           + {Number(
                             referralJoinBonus || 0
-                          ).toFixed(4)} FLOWER
+                          ).toFixed(4)} EPL
                         </td>
 
                         <td className="profit-cell">

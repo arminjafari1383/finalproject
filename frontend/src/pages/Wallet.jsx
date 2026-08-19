@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { useTonWallet, TonConnectButton, useTonConnectUI, useTonAddress } from "@tonconnect/ui-react";
+import axios from "axios";
 import { api } from "../api";
 import "./Wallet.css";
 import {
@@ -263,6 +264,17 @@ export default function Wallet() {
     withdrawNotice,
     setWithdrawNotice,
   ] = useState("");
+
+
+  const [
+    referralLevels,
+    setReferralLevels,
+  ] = useState({});
+
+  const [
+    referralLevelsLoading,
+    setReferralLevelsLoading,
+  ] = useState(false);
 // ====================================================
   // TON PRICE
   // ====================================================
@@ -1192,17 +1204,87 @@ export default function Wallet() {
 
 
   // ====================================================
+  // UNI-LEVEL REFERRAL VALUES (ECG)
+  // ====================================================
+
+  const loadReferralLevels =
+    useCallback(async () => {
+      if (!address) {
+        setReferralLevels({});
+        return;
+      }
+
+      setReferralLevelsLoading(true);
+
+      try {
+        const response = await axios.get(
+          "/api/referral/levels/",
+          {
+            params: {
+              wallet_address: address,
+            },
+          }
+        );
+
+        setReferralLevels(
+          response?.data?.levels || {}
+        );
+      } catch (error) {
+        console.error(
+          "[Wallet] referral levels load error:",
+          error
+        );
+      } finally {
+        setReferralLevelsLoading(false);
+      }
+    }, [address]);
+
+  useEffect(() => {
+    if (!address) {
+      setReferralLevels({});
+      return undefined;
+    }
+
+    loadReferralLevels();
+
+    const timer = window.setInterval(
+      loadReferralLevels,
+      15000
+    );
+
+    return () =>
+      window.clearInterval(timer);
+  }, [address, loadReferralLevels]);
+
+
+  // ====================================================
   // CALCULATIONS
   // ====================================================
 
+  // Wallet main balance is Purchase profit only, denominated in ECG.
+  const purchaseProfitBalance =
+    useMemo(
+      () =>
+        Number(
+          wallet?.purchase_profit_ecg ??
+          (
+            Number(wallet?.self_profit_locked || 0) +
+            Number(wallet?.self_profit_unlocked || 0)
+          )
+        ),
+      [wallet]
+    );
+
+
+  // The withdrawal amount is intentionally tied to the exact same
+  // Purchase Profit balance shown as Total Balance.
+  const withdrawableBalance =
+    purchaseProfitBalance;
+
+
   const withdrawableTon =
     useMemo(() => {
-      // Only unlocked Purchase profit is withdrawable from the Wallet page.
-      const ecg =
-        Number(
-          wallet?.self_profit_unlocked ??
-          0
-        );
+      const ecg = purchaseProfitBalance;
 
       if (
         !tonPrice ||
@@ -1219,37 +1301,51 @@ export default function Wallet() {
         )
       ).toFixed(4);
     }, [
-      wallet,
+      purchaseProfitBalance,
       tonPrice,
     ]);
 
 
-  // Wallet balance is Purchase profit only, denominated in ECG.
-  // Principal and FLOWER rewards are intentionally excluded from this card.
-  const purchaseProfitBalance =
-    useMemo(
-      () =>
-        Number(
-          wallet?.purchase_profit_ecg ??
-          (
-            Number(wallet?.self_profit_locked || 0) +
-            Number(wallet?.self_profit_unlocked || 0)
-          )
-        ),
-      [wallet]
+  const sumReferralProfit = (users = []) =>
+    users.reduce(
+      (sum, user) =>
+        sum + Number(user?.profit || 0),
+      0
     );
 
-
-  // Only unlocked Purchase profit participates in ECG/TON withdrawal UI.
-  const withdrawableBalance =
-    useMemo(
-      () =>
-        Number(
-          wallet?.self_profit_unlocked ??
-          0
-        ),
-      [wallet]
+  const uniLevelFivePercent =
+    sumReferralProfit(
+      referralLevels?.level_1?.users || []
     );
+
+  const uniLevelOnePercent =
+    [2, 3, 4, 5].reduce(
+      (sum, level) =>
+        sum +
+        sumReferralProfit(
+          referralLevels?.[`level_${level}`]?.users || []
+        ),
+      0
+    );
+
+  const uniLevelDirectUsers =
+    Number(
+      referralLevels?.level_1?.count || 0
+    );
+
+  const uniLevelIndirectUsers =
+    [2, 3, 4, 5].reduce(
+      (sum, level) =>
+        sum +
+        Number(
+          referralLevels?.[`level_${level}`]?.count || 0
+        ),
+      0
+    );
+
+  const uniLevelTotal =
+    uniLevelFivePercent +
+    uniLevelOnePercent;
 
 
   // Total completed withdrawals.
@@ -1646,7 +1742,7 @@ export default function Wallet() {
                 <div className="wallet-balance-card">
 
                   <div className="balance-label">
-                    PURCHASE PROFIT BALANCE
+                    TOTAL BALANCE
                   </div>
 
 
@@ -1672,6 +1768,130 @@ export default function Wallet() {
                   )}
 
                 </div>
+
+
+                {/* UNI-LEVEL REFERRAL — ECG */}
+
+                <section
+                  className="uni-level-referral-card"
+                  style={{
+                    marginTop: 14,
+                    padding: 16,
+                    borderRadius: 18,
+                    border: "1px solid rgba(255,255,255,0.10)",
+                    background: "rgba(255,255,255,0.035)",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 12,
+                      marginBottom: 12,
+                    }}
+                  >
+                    <div>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          opacity: 0.65,
+                          letterSpacing: "0.10em",
+                          fontWeight: 800,
+                        }}
+                      >
+                        REFERRAL BONUS
+                      </div>
+                      <strong
+                        style={{
+                          display: "block",
+                          marginTop: 4,
+                          fontSize: 18,
+                        }}
+                      >
+                        Uni-Level Referral
+                      </strong>
+                    </div>
+
+                    <span
+                      style={{
+                        fontSize: 11,
+                        opacity: 0.72,
+                      }}
+                    >
+                      {referralLevelsLoading
+                        ? "Updating..."
+                        : `${
+                            uniLevelDirectUsers +
+                            uniLevelIndirectUsers
+                          } Users`}
+                    </span>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns:
+                        "repeat(auto-fit, minmax(125px, 1fr))",
+                      gap: 10,
+                    }}
+                  >
+                    <div
+                      style={{
+                        padding: 11,
+                        borderRadius: 12,
+                        background: "rgba(255,255,255,0.03)",
+                      }}
+                    >
+                      <div style={{ fontSize: 11, opacity: 0.62 }}>
+                        5% Referral
+                      </div>
+                      <strong>
+                        {uniLevelFivePercent.toFixed(4)} ECG
+                      </strong>
+                      <div style={{ fontSize: 10, opacity: 0.55, marginTop: 4 }}>
+                        Level 1 • {uniLevelDirectUsers} users
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        padding: 11,
+                        borderRadius: 12,
+                        background: "rgba(255,255,255,0.03)",
+                      }}
+                    >
+                      <div style={{ fontSize: 11, opacity: 0.62 }}>
+                        1% Referral
+                      </div>
+                      <strong>
+                        {uniLevelOnePercent.toFixed(4)} ECG
+                      </strong>
+                      <div style={{ fontSize: 10, opacity: 0.55, marginTop: 4 }}>
+                        Levels 2-5 • {uniLevelIndirectUsers} users
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        padding: 11,
+                        borderRadius: 12,
+                        background: "rgba(35,211,238,0.08)",
+                        border: "1px solid rgba(35,211,238,0.16)",
+                      }}
+                    >
+                      <div style={{ fontSize: 11, opacity: 0.68 }}>
+                        Total Bonus
+                      </div>
+                      <strong>
+                        {uniLevelTotal.toFixed(4)} ECG
+                      </strong>
+                      <div style={{ fontSize: 10, opacity: 0.55, marginTop: 4 }}>
+                        5% + 1% combined
+                      </div>
+                    </div>
+                  </div>
+                </section>
 
 
                 {/* WITHDRAW GOAL */}
@@ -1770,8 +1990,8 @@ export default function Wallet() {
                   <span className="wallet-main-action-title">
 
                     {canWithdraw
-                      ? "Withdraw"
-                      : "Withdraw 🔒"}
+                      ? `Withdraw ${withdrawableBalance.toFixed(4)} ECG`
+                      : `Withdraw ${withdrawableBalance.toFixed(4)} ECG 🔒`}
 
                   </span>
 
