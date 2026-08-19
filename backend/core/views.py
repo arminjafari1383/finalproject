@@ -583,12 +583,11 @@ def wallet_view(request, wallet_address):
     Return a LIVE wallet snapshot.
 
     Important:
-    - withdrawable_total / available_balance are current spendable ECG.
-    - total_mined is lifetime DAILY mining only and does not decrease after
-      withdrawals.
-    - referral_bonus is the current referral-bonus balance.
-    - total_earned is calculated from earning ledgers, so it cannot become stale
-      just because AppUser.total_earned was not refreshed elsewhere.
+    - stake_balance is principal only (locked + unlocked stake).
+    - referral/hourly rewards are returned as separate balances.
+    - withdrawable_total / available_balance remain the current spendable ECG
+      for the existing withdrawal flow and are not used as the main Wallet balance.
+    - total_earned is calculated from earning ledgers.
     """
     user = (
         AppUser.objects
@@ -659,9 +658,8 @@ def wallet_view(request, wallet_address):
         or Decimal("0")
     )
 
-    # Lifetime DIRECT referral bonus earned by the user.
-    # Every successful direct referral reward is recorded as REF_BONUS,
-    # so this value stays correct even after the user spends/withdraws it.
+    # Lifetime referral join bonus earned by the user (direct + indirect).
+    # Every successful referral reward is recorded as REF_BONUS.
     referral_bonus_total = (
         user.ledgers
         .filter(typ="REF_BONUS")
@@ -699,18 +697,34 @@ def wallet_view(request, wallet_address):
         or Decimal("0")
     )
 
+    # Main Wallet balance: stake principal only.
+    # Referral rewards, hourly rewards and profits are intentionally excluded.
+    stake_balance = (
+        principal_locked
+        + principal_unlocked
+    )
+
     # Override/add explicit values consumed by Wallet.jsx.
     payload.update({
+        # Existing withdrawal bucket (kept for withdrawal compatibility).
         "withdrawable_total": str(available_balance),
         "available_balance": str(available_balance),
 
+        # Main Wallet display balance: stake only.
+        "stake_balance": str(stake_balance),
+
+        # Hourly reward bucket is separate from stake.
+        "hourly_reward_balance": str(daily_reward_unlocked),
+        "hourly_reward_total": str(total_mined),
+        "hourly_claims": mining_days,
+
+        # Legacy aliases kept for existing clients.
         "total_mined": str(total_mined),
         "mining_days": mining_days,
 
-        # Keep current balance for accounting/backward compatibility.
+        # Referral join bonus bucket is separate from stake.
         "referral_bonus": str(referral_bonus_current),
-
-        # Use this field for the Referral Bonus statistic shown to the user.
+        "referral_bonus_balance": str(referral_bonus_current),
         "referral_bonus_total": str(referral_bonus_total),
 
         "downline_profit_instant": str(downline_profit_current),
@@ -1452,12 +1466,12 @@ def referral_count(request):
 # Timer endpoints
 # =======================
 
-DAILY_REWARD = Decimal("1.0")
-COOLDOWN = timedelta(hours=24)
+HOURLY_REWARD = Decimal("10")
+COOLDOWN = timedelta(hours=1)
 
 
-def _daily_reward_stats(user):
-    """Return mining-only statistics used by Timer and Wallet."""
+def _hourly_reward_stats(user):
+    """Return hourly-reward statistics used by Timer and Wallet."""
     daily_qs = user.ledgers.filter(
         typ="DAILY_UNLOCK"
     )
@@ -1522,7 +1536,7 @@ def reward_status(request):
         )
     )
 
-    stats = _daily_reward_stats(user)
+    stats = _hourly_reward_stats(user)
 
     return Response(
         {
@@ -1532,6 +1546,15 @@ def reward_status(request):
             "total_rewards": stats["total_rewards"],
             "referral_points": stats["referral_points"],
             "rewards_count": stats["rewards_count"],
+            "reward_amount": str(HOURLY_REWARD),
+            "cooldown_seconds": int(COOLDOWN.total_seconds()),
+            "hourly_reward_balance": str(
+                user.wallet.daily_reward_unlocked or Decimal("0")
+            ),
+            "stake_balance": str(
+                (user.wallet.principal_locked or Decimal("0"))
+                + (user.wallet.principal_unlocked or Decimal("0"))
+            ),
         },
         status=status.HTTP_200_OK,
     )
@@ -1539,7 +1562,7 @@ def reward_status(request):
 
 @api_view(["POST"])
 def tick(request):
-    """Claim the 1 ECG daily mining reward."""
+    """Claim the 10 ECG hourly reward."""
     wallet_address = request.data.get(
         "wallet_address"
     )
@@ -1605,7 +1628,7 @@ def tick(request):
                     (next_at - now).total_seconds()
                 )
 
-                stats = _daily_reward_stats(
+                stats = _hourly_reward_stats(
                     locked_user
                 )
 
@@ -1620,13 +1643,18 @@ def tick(request):
                         "total_rewards": stats["total_rewards"],
                         "referral_points": stats["referral_points"],
                         "rewards_count": stats["rewards_count"],
+                        "reward_amount": str(HOURLY_REWARD),
+                        "cooldown_seconds": int(COOLDOWN.total_seconds()),
+                        "hourly_reward_balance": str(
+                            locked_wallet.daily_reward_unlocked or Decimal("0")
+                        ),
                     },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
             locked_wallet.daily_reward_unlocked = (
                 locked_wallet.daily_reward_unlocked
-                + DAILY_REWARD
+                + HOURLY_REWARD
             )
 
             locked_wallet.save(
@@ -1639,7 +1667,7 @@ def tick(request):
             Ledger.objects.create(
                 user=locked_user,
                 typ="DAILY_UNLOCK",
-                amount=DAILY_REWARD,
+                amount=HOURLY_REWARD,
                 meta={"source": "timer"},
             )
 
@@ -1659,15 +1687,26 @@ def tick(request):
             .get(pk=user.pk)
         )
 
-        stats = _daily_reward_stats(user)
+        stats = _hourly_reward_stats(user)
 
         return Response(
             {
                 "status": "rewarded",
-                "message": "1 ECG added to your wallet",
+                "message": "10 ECG added to your Hourly Reward balance",
+                # Legacy key now points to the separate hourly-reward bucket,
+                # not the combined withdrawable balance.
                 "balance_ecg": str(
-                    user.wallet.withdrawable_total()
+                    user.wallet.daily_reward_unlocked or Decimal("0")
                 ),
+                "hourly_reward_balance": str(
+                    user.wallet.daily_reward_unlocked or Decimal("0")
+                ),
+                "stake_balance": str(
+                    (user.wallet.principal_locked or Decimal("0"))
+                    + (user.wallet.principal_unlocked or Decimal("0"))
+                ),
+                "reward_amount": str(HOURLY_REWARD),
+                "cooldown_seconds": int(COOLDOWN.total_seconds()),
                 "total_rewards": stats["total_rewards"],
                 "referral_points": stats["referral_points"],
                 "rewards_count": stats["rewards_count"],
@@ -1790,7 +1829,8 @@ def get_referral_levels(request):
                 item = {
                     "wallet": item,
                     "investment": 0,
-                    "profit": 0
+                    "profit": 0,
+                    "referral_bonus": 0,
                 }
 
             if not isinstance(item, dict):
@@ -1830,6 +1870,7 @@ def get_referral_levels(request):
                 "wallet": wallet,
                 "investment": item.get("investment", 0),
                 "profit": item.get("profit", 0),
+                "referral_bonus": item.get("referral_bonus", 0),
             })
 
         return result
@@ -1883,7 +1924,8 @@ def generate_test_data_with_columns():
             "telegram_username": telegram_username,
             "wallet": wallet,
             "investment": investment,
-            "profit": profit
+            "profit": profit,
+            "referral_bonus": 1000 if level == 1 else 500,
         }
     
     level_counts = {

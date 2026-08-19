@@ -87,7 +87,7 @@ function CountdownHourglass({
           : "hourglass-ready"
       }`}
       role="img"
-      aria-label="Daily reward countdown"
+      aria-label="Hourly reward countdown"
     >
 
       {/* =====================================================
@@ -1463,7 +1463,7 @@ export default function TimerPage() {
           } else {
 
             setMessage(
-              "✅ Ready to claim daily reward!"
+              "✅ Ready to claim hourly reward!"
             );
 
             stopTimer();
@@ -1522,7 +1522,7 @@ export default function TimerPage() {
           } else {
 
             setMessage(
-              "✅ Ready to claim daily reward!"
+              "✅ Ready to claim hourly reward!"
             );
 
             stopTimer();
@@ -1577,8 +1577,8 @@ export default function TimerPage() {
     remaining === null;
 
 
-  const daySeconds =
-    24 * 60 * 60;
+  const rewardCycleSeconds =
+    60 * 60;
 
 
   const remainingRatio =
@@ -1590,7 +1590,7 @@ export default function TimerPage() {
           1,
           Math.max(
             0,
-            remaining / daySeconds
+            remaining / rewardCycleSeconds
           )
         );
 
@@ -2443,11 +2443,11 @@ export default function TimerPage() {
           <div className="reward-heading">
 
             <span>
-              Estimated Reward
+              Estimated Hourly Reward
             </span>
 
             <strong>
-              1.0000 ECG
+              10.0000 ECG
             </strong>
 
           </div>
@@ -2490,7 +2490,7 @@ export default function TimerPage() {
 
               <span>
 
-                Total Days Mined:{" "}
+                Hourly Claims:{" "}
 
                 <strong>
                   {rewardCount}
@@ -2567,7 +2567,7 @@ export default function TimerPage() {
             <p>
 
               {remaining === 0
-                ? "Claim your daily reward now."
+                ? "Claim your hourly reward now."
                 : "Stay online to claim your reward."
               }
 
@@ -2591,7 +2591,7 @@ export default function TimerPage() {
             onClick={canClaim ? claimReward : undefined}
             disabled={!canClaim}
           >
-            {canClaim ? "Claim 1 ECG" : "Mining..."}
+            {canClaim ? "Claim 10 ECG" : "Mining..."}
           </button>
 
         )}
@@ -2624,7 +2624,7 @@ export default function TimerPage() {
 
           <span>
 
-            Total Rewards{" "}
+            Total Hourly Rewards{" "}
 
             <strong>
 

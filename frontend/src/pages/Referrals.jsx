@@ -1783,8 +1783,8 @@ export default function Referrals() {
   ) {
     const levelProfitMessage =
       level === 1
-        ? "Earn 5% from each direct referral purchase."
-        : "Earn 1% from each purchase made by referrals in this level.";
+        ? "Direct referral: 1000 ECG join bonus + 5% purchase profit."
+        : "Indirect referral: 500 ECG join bonus + 1% purchase profit.";
 
     if (!data) {
       return (
@@ -1851,7 +1851,7 @@ export default function Referrals() {
               opacity: 0.8,
             }}
           >
-            ✅ Direct-upline 5% is credited to the inviter wallet and this table refreshes every 5 seconds.
+            ✅ Direct join bonus is 1000 ECG. Indirect Levels 2–5 receive 500 ECG per new downline. Purchase-profit rewards stay separate.
           </div>
         )}
 
@@ -1863,6 +1863,9 @@ export default function Referrals() {
                 <th>User</th>
                 <th>
                   Investment (TON)
+                </th>
+                <th>
+                  Referral Bonus (ECG)
                 </th>
                 <th>
                   {level === 1
@@ -1877,7 +1880,7 @@ export default function Referrals() {
               0 ? (
                 <tr>
                   <td
-                    colSpan="4"
+                    colSpan="5"
                     className="empty-message"
                   >
                     No users in this
@@ -1920,6 +1923,12 @@ export default function Referrals() {
                       isString
                         ? 0
                         : user?.profit ||
+                          0;
+
+                    const referralJoinBonus =
+                      isString
+                        ? 0
+                        : user?.referral_bonus ||
                           0;
 
                     const cleanUsername =
@@ -2005,6 +2014,12 @@ export default function Referrals() {
                           {
                             investment
                           }
+                        </td>
+
+                        <td className="profit-cell">
+                          + {Number(
+                            referralJoinBonus || 0
+                          ).toFixed(4)} ECG
                         </td>
 
                         <td className="profit-cell">

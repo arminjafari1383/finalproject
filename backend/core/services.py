@@ -33,7 +33,8 @@ SELF_BONUS_RATE = Decimal("0.05")
 UPLINE_RATE = Decimal("0.05")
 INDIRECT_UPLINE_RATE = Decimal("0.01")
 
-REFERRAL_TOKEN_REWARD = Decimal("3")
+DIRECT_REFERRAL_REWARD = Decimal("1000")
+INDIRECT_REFERRAL_REWARD = Decimal("500")
 
 COINGECKO_URL = (
     "https://api.coingecko.com/api/v3/simple/price"
@@ -483,82 +484,103 @@ def give_referral_bonus(
     new_user: AppUser,
 ):
     """
-    پرداخت 3 ECG به inviter.
+    Credit the referral join reward through the upline chain.
 
-    هر invitee فقط یک بار می‌تواند
-    REF_BONUS ایجاد کند.
+    Level 1 (direct inviter): 1000 ECG
+    Levels 2-5 (indirect uplines): 500 ECG each
+
+    Each (upline, invitee, referral_level) reward is idempotent.
     """
 
-    ensure_user_has_wallet(inviter)
+    current = inviter
+    level = 1
 
-    # Lock wallet
-    wallet = (
-        Wallet.objects
-        .select_for_update()
-        .get(user=inviter)
-    )
-
-    # --------------------------------------------------------
-    # Idempotency check
-    # --------------------------------------------------------
-
-    already_rewarded = (
-        Ledger.objects
-        .filter(
-            user=inviter,
-            typ="REF_BONUS",
-            meta__invitee=new_user.wallet_address,
-        )
-        .exists()
-    )
-
-    if already_rewarded:
-
-        logger.warning(
-            "[REF] duplicate bonus blocked "
-            "inviter=%s invitee=%s wallet=%s",
-            inviter.id,
-            new_user.id,
-            new_user.wallet_address,
+    while current and level <= 5:
+        reward = (
+            DIRECT_REFERRAL_REWARD
+            if level == 1
+            else INDIRECT_REFERRAL_REWARD
         )
 
-        return
+        ensure_user_has_wallet(current)
 
-    # --------------------------------------------------------
-    # Add reward
-    # --------------------------------------------------------
+        wallet = (
+            Wallet.objects
+            .select_for_update()
+            .get(user=current)
+        )
 
-    wallet.referral_bonus = (
-        (wallet.referral_bonus or Decimal("0"))
-        + REFERRAL_TOKEN_REWARD
-    )
+        # Legacy direct REF_BONUS rows did not contain referral_level.
+        # For level 1, matching by invitee alone prevents an old 3 ECG reward
+        # from being duplicated if the same relationship is processed again.
+        ledger_filter = {
+            "user": current,
+            "typ": "REF_BONUS",
+            "meta__invitee": new_user.wallet_address,
+        }
 
-    wallet.save(
-        update_fields=[
-            "referral_bonus",
-            "updated_at",
-        ]
-    )
+        if level > 1:
+            ledger_filter["meta__referral_level"] = level
 
-    # --------------------------------------------------------
-    # Ledger
-    # --------------------------------------------------------
+        already_rewarded = (
+            Ledger.objects
+            .filter(**ledger_filter)
+            .exists()
+        )
 
-    Ledger.objects.create(
-        user=inviter,
-        typ="REF_BONUS",
-        amount=REFERRAL_TOKEN_REWARD,
-        meta={
-            "invitee": new_user.wallet_address,
-        },
-    )
+        if already_rewarded:
+            logger.warning(
+                "[REF] duplicate bonus blocked "
+                "upline=%s invitee=%s level=%s",
+                current.id,
+                new_user.id,
+                level,
+            )
+        else:
+            wallet.referral_bonus = (
+                (wallet.referral_bonus or Decimal("0"))
+                + reward
+            )
 
-    logger.info(
-        "[REF] inviter rewarded %s ECG "
-        "for invitee=%s",
-        REFERRAL_TOKEN_REWARD,
-        new_user.wallet_address,
-    )
+            wallet.save(
+                update_fields=[
+                    "referral_bonus",
+                    "updated_at",
+                ]
+            )
+
+            Ledger.objects.create(
+                user=current,
+                typ="REF_BONUS",
+                amount=reward,
+                meta={
+                    "invitee": new_user.wallet_address,
+                    "referral_level": level,
+                    "reward_kind": (
+                        "direct"
+                        if level == 1
+                        else "indirect"
+                    ),
+                },
+            )
+
+            update_referral_join_bonus(
+                user=current,
+                level=level,
+                from_wallet=new_user.wallet_address,
+                bonus=reward,
+            )
+
+            logger.info(
+                "[REF] upline rewarded %s ECG "
+                "for invitee=%s level=%s",
+                reward,
+                new_user.wallet_address,
+                level,
+            )
+
+        current = current.inviter
+        level += 1
 
 
 # ============================================================
@@ -603,6 +625,7 @@ def update_referral_levels(
             "wallet": new_user.wallet_address,
             "investment": 0,
             "profit": 0,
+            "referral_bonus": 0,
         }
 
         level_field = (
@@ -710,6 +733,81 @@ def update_referral_levels(
 
         current = current.inviter
         level += 1
+
+
+# ============================================================
+# Update referral join bonus in Referral Tree
+# ============================================================
+
+def update_referral_join_bonus(
+    user: AppUser,
+    level: int,
+    from_wallet: str,
+    bonus: Decimal,
+):
+    """
+    Store the join/referral bonus on the exact Referral Tree row.
+    This is separate from purchase profit.
+    """
+
+    level_obj = (
+        ReferralLevel.objects
+        .filter(user=user)
+        .first()
+    )
+
+    if not level_obj:
+        return
+
+    level_field = f"level_{level}_users"
+    users = list(
+        getattr(level_obj, level_field)
+        or []
+    )
+
+    changed = False
+
+    for index, item in enumerate(users):
+        if isinstance(item, str):
+            if item != from_wallet:
+                continue
+
+            users[index] = {
+                "wallet": item,
+                "investment": 0,
+                "profit": 0,
+                "referral_bonus": float(bonus),
+            }
+            changed = True
+            break
+
+        if not isinstance(item, dict):
+            continue
+
+        if item.get("wallet") != from_wallet:
+            continue
+
+        current_bonus = Decimal(
+            str(item.get("referral_bonus", 0) or 0)
+        )
+
+        updated_item = dict(item)
+        updated_item["referral_bonus"] = float(
+            current_bonus + Decimal(str(bonus))
+        )
+        users[index] = updated_item
+        changed = True
+        break
+
+    if changed:
+        setattr(
+            level_obj,
+            level_field,
+            users,
+        )
+        level_obj.save(
+            update_fields=[level_field]
+        )
 
 
 # ============================================================

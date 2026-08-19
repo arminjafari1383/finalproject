@@ -1320,15 +1320,29 @@ export default function Wallet() {
     ]);
 
 
-  // Current amount that can actually be withdrawn.
-  const totalBalance =
+  // Main Wallet balance: stake principal only.
+  // Referral bonus, hourly rewards and profits are intentionally excluded.
+  const stakeBalance =
     useMemo(
       () =>
         Number(
-          wallet
-            ?.available_balance ??
-          wallet
-            ?.withdrawable_total ??
+          wallet?.stake_balance ??
+          (
+            Number(wallet?.principal_locked || 0) +
+            Number(wallet?.principal_unlocked || 0)
+          )
+        ),
+      [wallet]
+    );
+
+
+  // Existing spendable bucket used by the withdrawal flow.
+  const withdrawableBalance =
+    useMemo(
+      () =>
+        Number(
+          wallet?.withdrawable_total ??
+          wallet?.available_balance ??
           0
         ),
       [wallet]
@@ -1354,22 +1368,44 @@ export default function Wallet() {
     useMemo(
       () =>
         Number(
-          wallet
-            ?.referral_bonus_total ??
-          wallet
-            ?.referral_bonus ??
+          wallet?.referral_bonus_balance ??
+          wallet?.referral_bonus ??
           0
         ),
       [wallet]
     );
 
 
-  const miningDays =
+  const referralBonusTotal =
     useMemo(
       () =>
         Number(
-          wallet
-            ?.mining_days ??
+          wallet?.referral_bonus_total ??
+          wallet?.referral_bonus ??
+          0
+        ),
+      [wallet]
+    );
+
+
+  const hourlyRewardBalance =
+    useMemo(
+      () =>
+        Number(
+          wallet?.hourly_reward_balance ??
+          wallet?.daily_reward_unlocked ??
+          0
+        ),
+      [wallet]
+    );
+
+
+  const rewardClaims =
+    useMemo(
+      () =>
+        Number(
+          wallet?.hourly_claims ??
+          wallet?.mining_days ??
           0
         ),
       [wallet]
@@ -1441,7 +1477,7 @@ export default function Wallet() {
   const progressPercent =
     Math.min(
       (
-        totalBalance /
+        withdrawableBalance /
         WITHDRAW_TARGET
       ) * 100,
       100
@@ -1451,13 +1487,13 @@ export default function Wallet() {
   const remainingToUnlock =
     Math.max(
       WITHDRAW_TARGET -
-        totalBalance,
+        withdrawableBalance,
       0
     );
 
 
   const canWithdraw =
-    totalBalance >=
+    withdrawableBalance >=
     WITHDRAW_TARGET;
 
   // ====================================================
@@ -1815,7 +1851,7 @@ export default function Wallet() {
                 <div className="wallet-balance-card">
 
                   <div className="balance-label">
-                    AVAILABLE BALANCE
+                    STAKE BALANCE
                   </div>
 
 
@@ -1823,7 +1859,7 @@ export default function Wallet() {
 
                     <div className="balance-number">
                       {Number(
-                        totalBalance
+                        stakeBalance
                       ).toFixed(4)}
                     </div>
 
@@ -1831,6 +1867,18 @@ export default function Wallet() {
                       ECG
                     </div>
 
+                  </div>
+
+
+                  <div
+                    className="balance-label"
+                    style={{
+                      marginTop: "10px",
+                      opacity: 0.65,
+                      fontSize: "11px",
+                    }}
+                  >
+                    Referral Bonus and Hourly Rewards are tracked separately below.
                   </div>
 
 
@@ -1894,7 +1942,7 @@ export default function Wallet() {
                     <span>
 
                       {Number(
-                        totalBalance
+                        withdrawableBalance
                       ).toFixed(2)}
 
                       {" / "}
@@ -2320,7 +2368,7 @@ export default function Wallet() {
                     </div>
 
                     <div className="stat-title">
-                      Referral Bonus
+                      Referral Bonus Balance
                     </div>
 
                     <div className="stat-value">
@@ -2334,15 +2382,51 @@ export default function Wallet() {
                   <div className="wallet-stat-card">
 
                     <div className="stat-icon">
-                      📅
+                      ⏱️
                     </div>
 
                     <div className="stat-title">
-                      Days Mined
+                      Hourly Reward Balance
                     </div>
 
                     <div className="stat-value">
-                      {miningDays}
+                      {hourlyRewardBalance.toFixed(4)}
+                      {" ECG"}
+                    </div>
+
+                  </div>
+
+
+                  <div className="wallet-stat-card">
+
+                    <div className="stat-icon">
+                      🔁
+                    </div>
+
+                    <div className="stat-title">
+                      Hourly Claims
+                    </div>
+
+                    <div className="stat-value">
+                      {rewardClaims}
+                    </div>
+
+                  </div>
+
+
+                  <div className="wallet-stat-card">
+
+                    <div className="stat-icon">
+                      🎯
+                    </div>
+
+                    <div className="stat-title">
+                      Referral Bonus Earned
+                    </div>
+
+                    <div className="stat-value">
+                      {referralBonusTotal.toFixed(4)}
+                      {" ECG"}
                     </div>
 
                   </div>
