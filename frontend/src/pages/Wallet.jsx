@@ -110,6 +110,40 @@ const shortenMiddle = (
 };
 
 
+const CopyIcon = ({
+  size = 22,
+  className = "",
+}) => (
+  <svg
+    className={`copy-icon-svg ${className}`.trim()}
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <rect
+      x="8.25"
+      y="8.25"
+      width="11"
+      height="11"
+      rx="2.15"
+      stroke="currentColor"
+      strokeWidth="1.75"
+    />
+    <path
+      d="M15.75 8.25V6.75C15.75 5.64543 14.8546 4.75 13.75 4.75H6.75C5.64543 4.75 4.75 5.64543 4.75 6.75V13.75C4.75 14.8546 5.64543 15.75 6.75 15.75H8.25"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+
 // ======================================================
 // COMPONENT
 // ======================================================
@@ -1550,8 +1584,9 @@ export default function Wallet() {
                     )
                   }
                   aria-label="Copy wallet address"
+                  title="Copy wallet address"
                 >
-                  ⧉
+                  <CopyIcon size={22} />
                 </button>
 
               </div>
@@ -1658,7 +1693,8 @@ export default function Wallet() {
                     )
                   }
                 >
-                  Copy
+                  <CopyIcon size={18} />
+                  <span>Copy</span>
                 </button>
 
 
@@ -2096,8 +2132,8 @@ export default function Wallet() {
                                         className="withdraw-history-copy-btn"
                                         onClick={() => copyText("TX Hash", item.tx_hash)}
                                       >
-                                        <span>⧉</span>
-                                        Copy
+                                        <CopyIcon size={16} />
+                                        <span>Copy</span>
                                       </button>
                                     </div>
                                   )}
