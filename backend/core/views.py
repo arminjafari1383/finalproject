@@ -1,4 +1,3 @@
-# backend/core/views.py
 from django.conf import settings
 import time
 import logging
@@ -583,16 +582,7 @@ def connect_wallet(request):
 
 @api_view(["GET"])
 def wallet_view(request, wallet_address):
-    """
-    Return a LIVE wallet snapshot.
-
-    Important:
-    - stake_balance is principal only (locked + unlocked stake).
-    - referral/hourly rewards are returned as separate balances.
-    - withdrawable_total / available_balance remain the current spendable ECG
-      for the existing withdrawal flow and are not used as the main Wallet balance.
-    - total_earned is calculated from earning ledgers.
-    """
+    """Return a live wallet snapshot using only fields that exist on the current models."""
     user = (
         AppUser.objects
         .select_related("wallet")
@@ -606,57 +596,52 @@ def wallet_view(request, wallet_address):
             status=status.HTTP_404_NOT_FOUND,
         )
 
-    # Upgrade any referrals that were created under the old 3 ECG rule before
-    # returning balances, so Wallet and Referral Tree agree immediately.
     reconcile_existing_referral_join_rewards(user)
-
-    # Unlock matured 5% self-profit lazily whenever the Wallet is opened.
-    # This is idempotent and works for both ECG and USDT.
     release_matured_purchase_profits(user)
 
     user.refresh_from_db()
-    wallet = Wallet.objects.get(user=user)
+    wallet, _ = Wallet.objects.get_or_create(user=user)
     usdt_balance, _ = AssetBalance.objects.get_or_create(
         user=user,
         asset="USDT",
     )
 
-    # Existing serializer fields are kept for backward compatibility.
-    payload = dict(
-        WalletSerializer(wallet).data
+    zero = Decimal("0")
+
+    # ECG profit buckets from the current Wallet model.
+    self_profit_locked = Decimal(str(wallet.ecg_self_locked or 0))
+    self_profit_unlocked = Decimal(str(wallet.ecg_self_unlocked or 0))
+    downline_profit_current = Decimal(str(wallet.ecg_referral_profit or 0))
+
+    available_balance = self_profit_unlocked + downline_profit_current
+    withdrawable_ecg_profit = available_balance
+    total_ecg_profit = (
+        self_profit_locked
+        + self_profit_unlocked
+        + downline_profit_current
     )
 
-    # --------------------------------------------------------
-    # Current available ECG profit balance
-    # --------------------------------------------------------
-    # Self 5% profit is withdrawable only after its 30-day unlock.
-    # Referral purchase profit (5% / 1%) is credited to
-    # downline_profit_instant and is withdrawable immediately.
-    # Do NOT include locked self profit or principal here.
-    available_balance = (
-        Decimal(str(wallet.ecg_self_unlocked or 0))
-        + Decimal(str(wallet.ecg_referral_profit or 0))
-    )
-
-    # --------------------------------------------------------
-    # Lifetime mining statistics
-    # --------------------------------------------------------
-    daily_qs = user.ledgers.filter(
-        typ="DAILY_UNLOCK"
-    )
-
+    # Timer / EPL statistics are ledger-backed. EPL itself is stored on Wallet.
+    daily_qs = user.ledgers.filter(typ="DAILY_UNLOCK")
     total_mined = (
-        daily_qs.aggregate(
-            total=Sum("amount")
-        )["total"]
-        or Decimal("0")
+        daily_qs.aggregate(total=Sum("amount"))["total"]
+        or zero
     )
-
     mining_days = daily_qs.count()
 
-    # --------------------------------------------------------
-    # Lifetime earnings
-    # --------------------------------------------------------
+    referral_bonus_total = (
+        user.ledgers
+        .filter(typ="REF_BONUS")
+        .aggregate(total=Sum("amount"))["total"]
+        or zero
+    )
+
+    # EPL is not withdrawable, so the ledger totals are also useful as the
+    # current display breakdown. Wallet.epl_balance remains authoritative total.
+    referral_bonus_current = referral_bonus_total
+    daily_reward_unlocked = total_mined
+    epl_balance = Decimal(str(wallet.epl_balance or 0))
+
     total_earned = (
         user.ledgers
         .filter(
@@ -668,166 +653,79 @@ def wallet_view(request, wallet_address):
                 "LEVEL5_BONUS",
             ]
         )
-        .aggregate(
-            total=Sum("amount")
-        )["total"]
-        or Decimal("0")
-    )
-
-    # Current referral balance can decrease after a withdrawal.
-    referral_bonus_current = (
-    wallet.ecg_referral_profit
-    or Decimal("0")
-        )
-
-    # Lifetime referral join bonus earned by the user (direct + indirect).
-    # Every successful referral reward is recorded as REF_BONUS.
-    referral_bonus_total = (
-        user.ledgers
-        .filter(typ="REF_BONUS")
         .aggregate(total=Sum("amount"))["total"]
-        or Decimal("0")
+        or zero
     )
 
-    downline_profit_current = (
-        wallet.ecg_referral_profit
-        or Decimal("0")
-    )
+    # Legacy principal fields no longer exist in Wallet. Keep API keys for old
+    # clients without incorrectly mapping purchase profit into principal.
+    principal_locked = zero
+    principal_unlocked = zero
+    stake_balance = zero
 
-    principal_locked = (
-    wallet.ecg_self_locked
-    or Decimal("0")
-)
+    usdt_profit_locked = Decimal(str(usdt_balance.profit_locked or 0))
+    usdt_profit_unlocked = Decimal(str(usdt_balance.profit_unlocked or 0))
+    usdt_profit_total = usdt_profit_locked + usdt_profit_unlocked
 
-    self_profit_locked = (
-        wallet.ecg_self_locked
-        or Decimal("0")
-    )
+    # Current model has no total_withdrawn field. Rebuild the legacy ECG total
+    # from withdrawal ledger rows instead of reading a non-existent column.
+    total_withdrawn = zero
+    for ledger in user.ledgers.filter(typ="WITHDRAW"):
+        meta = dict(ledger.meta or {})
+        source_asset = str(meta.get("source_asset") or "ECG").upper()
+        if source_asset == "ECG":
+            total_withdrawn += abs(Decimal(str(ledger.amount or 0)))
 
-    principal_unlocked = (
-        wallet.principal_unlocked
-        or Decimal("0")
-    )
+    payload = {
+        # Current native Wallet fields.
+        "ecg_self_locked": str(self_profit_locked),
+        "ecg_self_unlocked": str(self_profit_unlocked),
+        "ecg_referral_profit": str(downline_profit_current),
+        "usdt_self_locked": str(wallet.usdt_self_locked or zero),
+        "usdt_self_unlocked": str(wallet.usdt_self_unlocked or zero),
+        "usdt_referral_profit": str(wallet.usdt_referral_profit or zero),
+        "epl_balance": str(epl_balance),
+        "epl_total_earned": str(wallet.epl_total_earned or zero),
 
-    self_profit_unlocked = (
-        wallet.ecg_self_unlocked
-        or Decimal("0")
-    )
-
-    daily_reward_unlocked = (
-        wallet.daily_reward_unlocked
-        or Decimal("0")
-    )
-
-    # USDT / Tether profit buckets. Self-profit stays locked for 30 days;
-    # referral 5%/1% USDT profit is credited directly to profit_unlocked.
-    usdt_profit_locked = (
-        usdt_balance.profit_locked
-        or Decimal("0")
-    )
-    usdt_profit_unlocked = (
-        usdt_balance.profit_unlocked
-        or Decimal("0")
-    )
-    usdt_profit_total = (
-        usdt_profit_locked
-        + usdt_profit_unlocked
-    )
-
-    # ECG profit wallet:
-    # - matured self 5% profit is unlocked after 30 days
-    # - referral 5% / 1% profit is instantly withdrawable
-    # Principal remains a separate bucket and is intentionally excluded here.
-    withdrawable_ecg_profit = (
-        self_profit_unlocked
-        + downline_profit_current
-    )
-
-    total_ecg_profit = (
-        self_profit_locked
-        + self_profit_unlocked
-        + downline_profit_current
-    )
-
-    ecg_balance = withdrawable_ecg_profit
-
-    # EPL wallet: direct referral + hourly reward only.
-    # These buckets are intentionally NOT withdrawable yet.
-    epl_balance = (
-        referral_bonus_current
-        + daily_reward_unlocked
-    )
-
-    # Legacy stake display kept for older clients.
-    stake_balance = (
-        principal_locked
-        + principal_unlocked
-    )
-
-    # Override/add explicit values consumed by Wallet.jsx.
-    payload.update({
-        # ECG withdrawal bucket only.
+        # ECG withdrawal / profit API.
         "withdrawable_total": str(available_balance),
         "available_balance": str(available_balance),
-        "ecg_balance": str(ecg_balance),
-
-        # EPL is display-only / non-withdrawable for now.
-        "epl_balance": str(epl_balance),
-
-        # Legacy stake display for older clients.
-        "stake_balance": str(stake_balance),
-
-        # Hourly reward bucket is EPL.
-        "hourly_reward_balance": str(daily_reward_unlocked),
-        "hourly_reward_total": str(total_mined),
-        "hourly_claims": mining_days,
-
-        # Legacy aliases kept for existing clients.
-        "total_mined": str(total_mined),
-        "mining_days": mining_days,
-
-        # Referral join bonus bucket is separate from stake.
-        "referral_bonus": str(referral_bonus_current),
-        "referral_bonus_balance": str(referral_bonus_current),
-        "referral_bonus_total": str(referral_bonus_total),
-
-        "ecg_referral_profit": str(downline_profit_current),
-
-        "principal_locked": str(principal_locked),
-        "principal_unlocked": str(principal_unlocked),
-        "self_profit_locked": str(self_profit_locked),
-        "ecg_self_unlocked": str(self_profit_unlocked),
-        # ECG self-profit fields kept for backward compatibility.
+        "ecg_balance": str(withdrawable_ecg_profit),
+        "withdrawable_ecg_profit": str(withdrawable_ecg_profit),
+        "total_ecg_profit": str(total_ecg_profit),
         "purchase_profit_ecg": str(self_profit_locked + self_profit_unlocked),
         "purchase_profit_ecg_locked": str(self_profit_locked),
         "purchase_profit_ecg_unlocked": str(self_profit_unlocked),
-
-        # New explicit ECG profit totals used by Wallet.jsx. Referral purchase
-        # profit is instant; self purchase profit joins the withdrawable bucket
-        # only after its 30-day unlock.
         "referral_profit_ecg_unlocked": str(downline_profit_current),
-        "withdrawable_ecg_profit": str(withdrawable_ecg_profit),
-        "total_ecg_profit": str(total_ecg_profit),
 
-        # Tether profit wallet. Only unlocked USDT can be converted to TON.
+        # USDT profit API.
         "purchase_profit_usdt": str(usdt_profit_total),
         "purchase_profit_usdt_locked": str(usdt_profit_locked),
         "purchase_profit_usdt_unlocked": str(usdt_profit_unlocked),
         "withdrawable_usdt_profit": str(usdt_profit_unlocked),
 
+        # Timer / referral EPL API.
+        "hourly_reward_balance": str(daily_reward_unlocked),
+        "hourly_reward_total": str(total_mined),
+        "hourly_claims": mining_days,
         "daily_reward_unlocked": str(daily_reward_unlocked),
+        "referral_bonus": str(referral_bonus_current),
+        "referral_bonus_balance": str(referral_bonus_current),
+        "referral_bonus_total": str(referral_bonus_total),
 
+        # Legacy aliases retained for frontend compatibility.
+        "stake_balance": str(stake_balance),
+        "principal_locked": str(principal_locked),
+        "principal_unlocked": str(principal_unlocked),
+        "self_profit_locked": str(self_profit_locked),
+        "self_profit_unlocked": str(self_profit_unlocked),
+        "total_mined": str(total_mined),
+        "mining_days": mining_days,
         "total_earned": str(total_earned),
-        "total_withdrawn": str(
-            wallet.total_withdrawn
-            or Decimal("0")
-        ),
-    })
+        "total_withdrawn": str(total_withdrawn),
+    }
 
-    return Response(
-        payload,
-        status=status.HTTP_200_OK,
-    )
+    return Response(payload, status=status.HTTP_200_OK)
 
 
 @api_view(["POST"])
@@ -1088,23 +986,10 @@ def list_purchases(request):
 
 @api_view(["POST"])
 def request_withdraw(request):
-    """
-    Manual profit withdrawal/conversion flow.
-
-    ECG source:
-      - matured self_profit_unlocked is spendable after 30 days
-      - downline_profit_instant (referral 5% / 1%) is spendable immediately
-      - output may be ECG or TON, preserving the existing two-option UI
-
-    USDT source:
-      - only AssetBalance(USDT).profit_unlocked is spendable
-      - output is TON only
-      - the request amount is the SOURCE USDT amount
-    """
+    """Create a manual withdrawal using the fields present on WithdrawRequest."""
     wallet_address = str(request.data.get("wallet_address", "") or "").strip()
     requested_asset = str(request.data.get("asset", "") or "").strip().upper()
     source_asset = str(request.data.get("source_asset", "ECG") or "ECG").strip().upper()
-    scope = str(request.data.get("scope", "ALL_WITHDRAWABLE") or "ALL_WITHDRAWABLE")
 
     if source_asset not in {"ECG", "USDT"}:
         return Response({"error": "Invalid source_asset."}, status=400)
@@ -1126,17 +1011,11 @@ def request_withdraw(request):
     if requested_amount <= 0:
         return Response({"error": "Amount must be greater than zero."}, status=400)
 
-    # USDT has a single allowed path: convert Tether profit -> TON.
     if source_asset == "USDT" and asset != "TON":
         return Response(
             {"error": "USDT profit can only be converted to TON."},
             status=400,
         )
-
-    if source_asset == "USDT":
-        scope = "USDT_PROFIT_ONLY"
-    elif scope not in {"ALL_WITHDRAWABLE"}:
-        return Response({"error": "Invalid scope."}, status=400)
 
     destination = str(
         request.data.get("destination_wallet", "") or ""
@@ -1148,7 +1027,6 @@ def request_withdraw(request):
         )
 
     ton_rate = None
-
     if asset == "TON":
         try:
             _ton_address_to_raw(destination)
@@ -1173,18 +1051,19 @@ def request_withdraw(request):
         is_telegram if telegram_id else False,
     )
 
-    # Make any exactly-due 30-day profit spendable before checking balance.
     release_matured_purchase_profits(user)
 
     if source_asset == "USDT":
-        # User enters the SOURCE Tether amount. 1 USDT ~= 1 USD.
         source_usdt = requested_amount.quantize(Decimal("0.000001"))
         ton_amount = (
             source_usdt / ton_rate
         ).quantize(Decimal("0.000000001"))
 
         if ton_amount < Decimal("1"):
-            minimum_usdt = ton_rate.quantize(Decimal("0.000001"), rounding=ROUND_UP)
+            minimum_usdt = ton_rate.quantize(
+                Decimal("0.000001"),
+                rounding=ROUND_UP,
+            )
             return Response(
                 {
                     "error": "Minimum conversion output is 1 TON.",
@@ -1198,17 +1077,16 @@ def request_withdraw(request):
             balance, _ = (
                 AssetBalance.objects
                 .select_for_update()
-                .get_or_create(
-                    user=user,
-                    asset="USDT",
-                )
+                .get_or_create(user=user, asset="USDT")
             )
             available = Decimal(str(balance.profit_unlocked or 0))
 
             if source_usdt > available:
                 max_ton = (
-                    available / ton_rate
-                ).quantize(Decimal("0.000000001")) if available > 0 else Decimal("0")
+                    (available / ton_rate).quantize(Decimal("0.000000001"))
+                    if available > 0
+                    else Decimal("0")
+                )
                 return Response(
                     {
                         "error": "Insufficient unlocked USDT profit.",
@@ -1219,29 +1097,14 @@ def request_withdraw(request):
                 )
 
             balance.profit_unlocked = available - source_usdt
-            balance.save(
-                update_fields=[
-                    "profit_unlocked",
-                    "updated_at",
-                ]
-            )
-
-            breakdown = {
-                "source_asset": "USDT",
-                "profit_unlocked": str(source_usdt),
-                "usdt_debited": str(source_usdt),
-            }
+            balance.save(update_fields=["profit_unlocked", "updated_at"])
 
             req = WithdrawRequest.objects.create(
                 user=user,
-                scope=scope,
                 asset="TON",
-                # For a USDT-source conversion amount stores USDT debited.
                 amount=source_usdt,
-                ton_amount=ton_amount,
-                destination_wallet=destination,
+                wallet_address=destination,
                 status="PENDING",
-                balance_breakdown=breakdown,
             )
 
             Ledger.objects.create(
@@ -1261,12 +1124,12 @@ def request_withdraw(request):
             )
 
     else:
-        # ECG source keeps the old ECG / TON output choices.
-        # Locked self-profit is not spendable before the 30-day unlock, while
-        # referral purchase profit is immediately spendable.
         if is_ton:
             if requested_amount < Decimal("1"):
-                return Response({"error": "Minimum TON withdrawal is 1 TON."}, status=400)
+                return Response(
+                    {"error": "Minimum TON withdrawal is 1 TON."},
+                    status=400,
+                )
 
             ecg_amount = (
                 requested_amount * ton_rate * ECG_PER_USD
@@ -1274,7 +1137,10 @@ def request_withdraw(request):
             ton_amount = requested_amount.quantize(Decimal("0.000000001"))
         else:
             if requested_amount < Decimal("60"):
-                return Response({"error": "Minimum withdrawal is 60 ECG."}, status=400)
+                return Response(
+                    {"error": "Minimum withdrawal is 60 ECG."},
+                    status=400,
+                )
 
             ecg_amount = requested_amount.quantize(Decimal("0.000001"))
             ton_amount = Decimal("0")
@@ -1282,12 +1148,8 @@ def request_withdraw(request):
         with transaction.atomic():
             locked_wallet = Wallet.objects.select_for_update().get(user=user)
 
-            self_unlocked = Decimal(
-                str(locked_wallet.ecg_self_unlocked or 0)
-            )
-            referral_unlocked = Decimal(
-                str(locked_wallet.ecg_referral_profit or 0)
-            )
+            self_unlocked = Decimal(str(locked_wallet.ecg_self_unlocked or 0))
+            referral_unlocked = Decimal(str(locked_wallet.ecg_referral_profit or 0))
             available = self_unlocked + referral_unlocked
 
             if ecg_amount > available:
@@ -1304,6 +1166,7 @@ def request_withdraw(request):
                         },
                         status=400,
                     )
+
                 return Response(
                     {
                         "error": "Insufficient unlocked ECG profit.",
@@ -1314,19 +1177,12 @@ def request_withdraw(request):
                     status=400,
                 )
 
-            # Spend instant referral profit first, then matured self profit.
-            # This keeps the 30-day self-profit accounting clear and records
-            # exactly how much was consumed from each bucket.
             referral_debit = min(referral_unlocked, ecg_amount)
             remaining = ecg_amount - referral_debit
             self_debit = min(self_unlocked, remaining)
 
-            locked_wallet.ecg_referral_profit = (
-                referral_unlocked - referral_debit
-            )
-            locked_wallet.ecg_self_unlocked = (
-                self_unlocked - self_debit
-            )
+            locked_wallet.ecg_referral_profit = referral_unlocked - referral_debit
+            locked_wallet.ecg_self_unlocked = self_unlocked - self_debit
             locked_wallet.save(
                 update_fields=[
                     "ecg_referral_profit",
@@ -1335,22 +1191,12 @@ def request_withdraw(request):
                 ]
             )
 
-            breakdown = {
-                "source_asset": "ECG",
-                "ecg_self_unlocked": str(self_debit),
-                "ecg_referral_profit": str(referral_debit),
-                "ecg_debited": str(ecg_amount),
-            }
-
             req = WithdrawRequest.objects.create(
                 user=user,
-                scope="ALL_WITHDRAWABLE",
                 asset=asset,
                 amount=ecg_amount,
-                ton_amount=ton_amount,
-                destination_wallet=destination,
+                wallet_address=destination,
                 status="PENDING",
-                balance_breakdown=breakdown,
             )
 
             Ledger.objects.create(
@@ -1380,17 +1226,42 @@ def request_withdraw(request):
     return Response(payload, status=201)
 
 
+def _withdraw_ledger(item):
+    return (
+        Ledger.objects
+        .filter(user=item.user, typ="WITHDRAW", meta__withdraw_id=item.id)
+        .order_by("-id")
+        .first()
+    )
+
+
 def serialize_withdraw(item):
-    is_ton = item.asset == "TON"
+    ledger = _withdraw_ledger(item)
+    meta = dict(ledger.meta or {}) if ledger else {}
+
     raw_status = str(item.status or "").upper()
     display_status = (
-        "COMPLETE" if raw_status in {"SUCCESS", "COMPLETE", "COMPLETED"}
+        "COMPLETE"
+        if raw_status in {"PAID", "SUCCESS", "COMPLETE", "COMPLETED"}
         else raw_status
     )
 
-    breakdown = item.balance_breakdown or {}
-    source_asset = str(breakdown.get("source_asset") or "ECG").upper()
+    source_asset = str(meta.get("source_asset") or "ECG").upper()
     is_usdt_source = source_asset == "USDT"
+    is_ton = str(item.asset or "").upper() == "TON"
+
+    requested_ton = str(meta.get("requested_ton") or "0")
+    requested_amount = (
+        requested_ton
+        if is_ton
+        else str(meta.get("requested_amount") or item.amount)
+    )
+
+    completed_at = (
+        item.updated_at
+        if raw_status in {"PAID", "SUCCESS", "COMPLETE", "COMPLETED"}
+        else None
+    )
 
     return {
         "id": item.id,
@@ -1398,17 +1269,18 @@ def serialize_withdraw(item):
         "raw_asset": item.asset,
         "source_asset": source_asset,
         "amount": str(item.amount),
-        "ecg_debited": "0" if is_usdt_source else str(item.amount),
-        "usdt_debited": str(item.amount) if is_usdt_source else "0",
-        "ton_amount": str(item.ton_amount),
-        "requested_amount": str(item.ton_amount if is_ton else item.amount),
+        "ecg_debited": str(meta.get("ecg_debited") or ("0" if is_usdt_source else item.amount)),
+        "usdt_debited": str(meta.get("usdt_debited") or (item.amount if is_usdt_source else "0")),
+        "ton_amount": requested_ton,
+        "requested_amount": requested_amount,
         "requested_asset": "TON" if is_ton else "ECG",
-        "destination_wallet": item.destination_wallet,
+        "destination_wallet": item.wallet_address,
+        "wallet_address": item.wallet_address,
         "status": item.status,
         "display_status": display_status,
         "tx_hash": item.tx_hash,
         "created_at": item.created_at,
-        "completed_at": item.completed_at,
+        "completed_at": completed_at,
     }
 
 
@@ -1417,18 +1289,19 @@ def withdraw_history(request):
     wallet_address = request.query_params.get("wallet_address")
     if not wallet_address:
         return Response({"error": "wallet_address required"}, status=400)
+
     user = AppUser.objects.filter(wallet_address=wallet_address).first()
     if not user:
         return Response([], status=200)
+
     rows = user.withdraw_requests.order_by("-created_at")[:50]
     return Response([serialize_withdraw(row) for row in rows])
-
-
 
 
 # ============================================================
 # MANUAL WITHDRAWAL ADMIN APPROVAL
 # ============================================================
+
 
 def _admin_totp_secret():
     """Use the same Google Authenticator secret for admin-only write actions."""
@@ -1562,13 +1435,7 @@ def admin_create_session(request):
 
 @api_view(["POST"])
 def admin_complete_withdraw(request, withdraw_id):
-    """
-    Admin confirms that the manual payout was actually sent.
-
-    This endpoint is idempotent: a completed request never increments totals twice.
-    DB status stays SUCCESS for compatibility with the existing model/status choices;
-    frontend/history display it as COMPLETE.
-    """
+    """Mark a pending withdrawal as paid using the current WithdrawRequest model."""
     if not _verify_admin_session(request):
         return Response(
             {
@@ -1596,8 +1463,7 @@ def admin_complete_withdraw(request, withdraw_id):
 
         current_status = str(req.status or "").upper()
 
-        # Safe retry: return the existing completed record without accounting again.
-        if current_status in {"SUCCESS", "COMPLETE", "COMPLETED"}:
+        if current_status in {"PAID", "SUCCESS", "COMPLETE", "COMPLETED"}:
             return Response({
                 "success": True,
                 "already_completed": True,
@@ -1610,51 +1476,30 @@ def admin_complete_withdraw(request, withdraw_id):
                 status=409,
             )
 
-        req.status = "SUCCESS"
+        completed_at = timezone.now()
+        req.status = "PAID"
         if tx_hash:
             req.tx_hash = tx_hash
-        req.completed_at = timezone.now()
 
-        update_fields = ["status", "completed_at"]
+        update_fields = ["status", "updated_at"]
         if tx_hash:
             update_fields.append("tx_hash")
         req.save(update_fields=update_fields)
 
-        locked_wallet = Wallet.objects.select_for_update().get(user=req.user)
-        breakdown = req.balance_breakdown or {}
-        source_asset = str(breakdown.get("source_asset") or "ECG").upper()
-
-        # Wallet.total_withdrawn is historically ECG-denominated. Do not mix
-        # USDT amounts into that field. USDT completion is still tracked by
-        # WithdrawRequest + Ledger.
-        update_fields = ["last_withdraw_at", "updated_at"]
-        if source_asset != "USDT":
-            locked_wallet.total_withdrawn = (
-                (locked_wallet.total_withdrawn or Decimal("0")) + req.amount
-            )
-            update_fields.insert(0, "total_withdrawn")
-
-        locked_wallet.last_withdraw_at = req.completed_at
-        locked_wallet.save(update_fields=update_fields)
-
-        ledger = (
-            Ledger.objects
-            .filter(user=req.user, typ="WITHDRAW", meta__withdraw_id=req.id)
-            .order_by("-id")
-            .first()
-        )
+        ledger = _withdraw_ledger(req)
         if ledger:
             meta = dict(ledger.meta or {})
             meta.update({
-                "status": "SUCCESS",
+                "status": "PAID",
                 "display_status": "COMPLETE",
-                "admin_completed_at": req.completed_at.isoformat(),
+                "admin_completed_at": completed_at.isoformat(),
             })
             if tx_hash:
                 meta["tx_hash"] = tx_hash
             ledger.meta = meta
             ledger.save(update_fields=["meta"])
 
+    req.refresh_from_db()
     return Response({
         "success": True,
         "message": "Withdrawal marked complete.",
@@ -1718,9 +1563,7 @@ def _hourly_reward_stats(user):
 
 @api_view(["GET"])
 def reward_status(request):
-    wallet_address = request.query_params.get(
-        "wallet_address"
-    )
+    wallet_address = request.query_params.get("wallet_address")
 
     if not wallet_address:
         return Response(
@@ -1741,22 +1584,17 @@ def reward_status(request):
             status=status.HTTP_404_NOT_FOUND,
         )
 
+    wallet, _ = Wallet.objects.get_or_create(user=user)
     now = timezone.now()
     next_at = user.next_daily_claim_at
 
-    # Start every account on a real one-hour cycle. Existing accounts may still
-    # carry the old 24-hour timestamp, so cap it to exactly one hour from now.
     max_next_at = now + COOLDOWN
     if not next_at or next_at > max_next_at:
         next_at = max_next_at
         user.next_daily_claim_at = next_at
         user.save(update_fields=["next_daily_claim_at"])
 
-    seconds_remaining = max(
-        0,
-        int((next_at - now).total_seconds()),
-    )
-
+    seconds_remaining = max(0, int((next_at - now).total_seconds()))
     stats = _hourly_reward_stats(user)
 
     return Response(
@@ -1769,17 +1607,10 @@ def reward_status(request):
             "rewards_count": stats["rewards_count"],
             "reward_amount": str(HOURLY_REWARD),
             "cooldown_seconds": int(COOLDOWN.total_seconds()),
-            "hourly_reward_balance": str(
-                user.wallet.daily_reward_unlocked or Decimal("0")
-            ),
-            "epl_balance": str(
-                (user.wallet.ecg_referral_profit or Decimal('0'))
-                + (user.wallet.daily_reward_unlocked or Decimal("0"))
-            ),
-            "stake_balance": str(
-                (user.wallet.principal_locked or Decimal("0"))
-                + (user.wallet.ecg_self_unlocked or Decimal("0"))
-            ),
+            "hourly_reward_balance": stats["total_rewards"],
+            "epl_balance": str(wallet.epl_balance or Decimal("0")),
+            "epl_total_earned": str(wallet.epl_total_earned or Decimal("0")),
+            "stake_balance": "0",
         },
         status=status.HTTP_200_OK,
     )
@@ -1787,10 +1618,8 @@ def reward_status(request):
 
 @api_view(["POST"])
 def tick(request):
-    """Claim the 100 EPL hourly reward."""
-    wallet_address = request.data.get(
-        "wallet_address"
-    )
+    """Claim the 100 EPL hourly reward into Wallet.epl_balance."""
+    wallet_address = request.data.get("wallet_address")
 
     if not wallet_address:
         return Response(
@@ -1832,71 +1661,56 @@ def tick(request):
             locked_user = (
                 AppUser.objects
                 .select_for_update()
-                .select_related("wallet")
                 .get(pk=user.pk)
             )
 
-            locked_wallet = (
-                Wallet.objects
-                .select_for_update()
-                .get(user=locked_user)
+            locked_wallet, _ = Wallet.objects.select_for_update().get_or_create(
+                user=locked_user
             )
 
             now = timezone.now()
-            next_at = (
-                locked_user.next_daily_claim_at
-            )
+            next_at = locked_user.next_daily_claim_at
 
-            # Normalize legacy 24-hour schedules and also prevent a first-time
-            # immediate claim: every reward must follow a completed one-hour cycle.
             max_next_at = now + COOLDOWN
             if not next_at or next_at > max_next_at:
                 next_at = max_next_at
                 locked_user.next_daily_claim_at = next_at
                 locked_user.save(update_fields=["next_daily_claim_at"])
 
-            # Re-check under lock to block double claims.
             if next_at > now:
-                seconds_remaining = int(
-                    (next_at - now).total_seconds()
-                )
-
-                stats = _hourly_reward_stats(
-                    locked_user
-                )
+                seconds_remaining = int((next_at - now).total_seconds())
+                stats = _hourly_reward_stats(locked_user)
 
                 return Response(
                     {
                         "status": "too_early",
-                        "message": (
-                            f"Please wait "
-                            f"{seconds_remaining} seconds"
-                        ),
+                        "message": f"Please wait {seconds_remaining} seconds",
                         "seconds_remaining": seconds_remaining,
                         "total_rewards": stats["total_rewards"],
                         "referral_points": stats["referral_points"],
                         "rewards_count": stats["rewards_count"],
                         "reward_amount": str(HOURLY_REWARD),
                         "cooldown_seconds": int(COOLDOWN.total_seconds()),
-                        "hourly_reward_balance": str(
-                            locked_wallet.daily_reward_unlocked or Decimal("0")
-                        ),
-                        "epl_balance": str(
-                            (locked_wallet.referral_bonus or Decimal("0"))
-                            + (locked_wallet.daily_reward_unlocked or Decimal("0"))
-                        ),
+                        "hourly_reward_balance": stats["total_rewards"],
+                        "epl_balance": str(locked_wallet.epl_balance or Decimal("0")),
+                        "epl_total_earned": str(locked_wallet.epl_total_earned or Decimal("0")),
+                        "stake_balance": "0",
                     },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            locked_wallet.daily_reward_unlocked = (
-                locked_wallet.daily_reward_unlocked
+            locked_wallet.epl_balance = (
+                Decimal(str(locked_wallet.epl_balance or 0))
                 + HOURLY_REWARD
             )
-
+            locked_wallet.epl_total_earned = (
+                Decimal(str(locked_wallet.epl_total_earned or 0))
+                + HOURLY_REWARD
+            )
             locked_wallet.save(
                 update_fields=[
-                    "daily_reward_unlocked",
+                    "epl_balance",
+                    "epl_total_earned",
                     "updated_at",
                 ]
             )
@@ -1908,65 +1722,43 @@ def tick(request):
                 meta={"source": "timer", "asset": "EPL"},
             )
 
-            locked_user.next_daily_claim_at = (
-                now + COOLDOWN
-            )
+            locked_user.next_daily_claim_at = now + COOLDOWN
+            locked_user.save(update_fields=["next_daily_claim_at"])
 
-            locked_user.save(
-                update_fields=[
-                    "next_daily_claim_at"
-                ]
-            )
-
-        user = (
-            AppUser.objects
-            .select_related("wallet")
-            .get(pk=user.pk)
-        )
-
+        user = AppUser.objects.select_related("wallet").get(pk=user.pk)
         stats = _hourly_reward_stats(user)
 
         return Response(
             {
                 "status": "rewarded",
                 "message": "100 EPL added to your Hourly Reward balance",
-                # Legacy key retained for old clients; value is EPL hourly reward.
-                "balance_ecg": str(
-                    user.wallet.daily_reward_unlocked or Decimal("0")
-                ),
-                "hourly_reward_balance": str(
-                    user.wallet.daily_reward_unlocked or Decimal("0")
-                ),
-                "epl_balance": str(
-                    (user.wallet.referral_bonus or Decimal("0"))
-                    + (user.wallet.daily_reward_unlocked or Decimal("0"))
-                ),
-                "stake_balance": str(
-                    (user.wallet.principal_locked or Decimal("0"))
-                    + (user.wallet.principal_unlocked or Decimal("0"))
-                ),
+                "balance_ecg": stats["total_rewards"],
+                "hourly_reward_balance": stats["total_rewards"],
+                "epl_balance": str(user.wallet.epl_balance or Decimal("0")),
+                "epl_total_earned": str(user.wallet.epl_total_earned or Decimal("0")),
+                "stake_balance": "0",
                 "reward_amount": str(HOURLY_REWARD),
                 "cooldown_seconds": int(COOLDOWN.total_seconds()),
                 "total_rewards": stats["total_rewards"],
                 "referral_points": stats["referral_points"],
                 "rewards_count": stats["rewards_count"],
-                "seconds_remaining": int(
-                    COOLDOWN.total_seconds()
-                ),
-                "next_claim_at": (
-                    user.next_daily_claim_at
-                ),
+                "seconds_remaining": int(COOLDOWN.total_seconds()),
+                "next_claim_at": user.next_daily_claim_at,
             },
             status=status.HTTP_200_OK,
         )
 
     except Exception as exc:
         logger.exception("Error in tick")
-
         return Response(
             {"error": str(exc)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
+
+# =======================
+# Test Endpoint
+# =======================
 
 
 # =======================
