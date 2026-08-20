@@ -8,6 +8,8 @@ from rest_framework import status
 from decimal import Decimal, ROUND_UP
 from datetime import timedelta
 from django.utils import timezone
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
 from .services import (
     get_or_create_user, 
     apply_referral, 
@@ -2319,4 +2321,112 @@ def create_purchase_bnb(request):
 
     user = get_or_create_user(wallet_address, None, False)
 
-    
+
+def list_purchases_bnb(request):
+
+    purchases = PurchaseBNB.objects.all().order_by("-created_at")
+
+    data = []
+
+    for item in purchases:
+        data.append({
+            "invoice_no": item.invoice_no,
+            "wallet": item.user.wallet_address,
+            "bnb_amount": str(item.bnb_amount),
+            "usd_value": str(item.usd_value),
+            "ecg_value": str(item.ecg_value),
+            "tx_hash": item.bnb_tx_hash,
+            "created_at": item.created_at,
+        })
+
+    return JsonResponse({
+        "status": "ok",
+        "purchases": data
+    })
+
+
+@csrf_exempt
+def create_ton_transaction(request):
+
+    if request.method != "POST":
+        return JsonResponse(
+            {
+                "status": "error",
+                "message": "POST required"
+            },
+            status=405
+        )
+
+
+    try:
+        body = json.loads(request.body)
+
+        wallet_address = body.get(
+            "wallet_address"
+        )
+
+        ton_amount = body.get(
+            "ton_amount"
+        )
+
+
+        if not wallet_address or not ton_amount:
+            return JsonResponse(
+                {
+                    "status": "error",
+                    "message": "missing data"
+                },
+                status=400
+            )
+
+
+        user, _ = AppUser.objects.get_or_create(
+            wallet_address=wallet_address
+        )
+
+
+        invoice = uuid.uuid4().hex[:12].upper()
+
+
+        purchase = Purchase.objects.create(
+
+            user=user,
+
+            invoice_no=invoice,
+
+            ton_amount=ton_amount,
+
+            ton_tx_hash=invoice,
+
+            ton_usd_rate=0,
+
+            usd_value=0,
+
+            ecg_value=0,
+
+            self_profit_5=0,
+
+            principal_unlock_at=timezone.now(),
+
+            self_profit_unlock_at=timezone.now(),
+
+        )
+
+
+        return JsonResponse(
+            {
+                "status": "ok",
+                "invoice_no": purchase.invoice_no
+            }
+        )
+
+
+    except Exception as e:
+
+        return JsonResponse(
+            {
+                "status": "error",
+                "message": str(e)
+            },
+            status=500
+        )

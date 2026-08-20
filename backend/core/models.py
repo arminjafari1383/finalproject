@@ -291,3 +291,156 @@ class PurchaseUSDT(models.Model):
 
     principal_unlock_at = models.DateTimeField()
     self_profit_unlock_at = models.DateTimeField()
+
+class PurchaseBNB(models.Model):
+    """
+    خرید با BNB (BEP-20)
+    """
+
+    user = models.ForeignKey(
+        AppUser,
+        on_delete=models.CASCADE,
+        related_name="purchases_bnb"
+    )
+
+    invoice_no = models.CharField(
+        max_length=32,
+        unique=True
+    )
+
+    bnb_amount = models.DecimalField(
+        max_digits=24,
+        decimal_places=8
+    )
+
+    bnb_tx_hash = models.CharField(
+        max_length=256,
+        unique=True
+    )
+
+    bnb_usd_rate = models.DecimalField(
+        max_digits=24,
+        decimal_places=6,
+        default=0
+    )
+
+    usd_value = models.DecimalField(
+        max_digits=24,
+        decimal_places=6
+    )
+
+    ecg_value = models.DecimalField(
+        max_digits=24,
+        decimal_places=6,
+        default=0
+    )
+
+    self_profit_5 = models.DecimalField(
+        max_digits=24,
+        decimal_places=6,
+        default=0
+    )
+
+    principal_unlock_at = models.DateTimeField()
+
+    self_profit_unlock_at = models.DateTimeField()
+
+    created_at = models.DateTimeField(
+        auto_now_add=True
+    )
+
+    def __str__(self):
+        return f"BNB: {self.invoice_no} - {self.bnb_amount} BNB"
+
+
+class WithdrawRequest(models.Model):
+    """
+    درخواست برداشت کاربر
+    """
+
+    STATUS_CHOICES = [
+        ("PENDING", "Pending"),
+        ("APPROVED", "Approved"),
+        ("REJECTED", "Rejected"),
+        ("PAID", "Paid"),
+    ]
+
+    user = models.ForeignKey(
+        AppUser,
+        on_delete=models.CASCADE,
+        related_name="withdraw_requests"
+    )
+
+    asset = models.CharField(
+        max_length=10,
+        default="USDT"
+    )
+
+    amount = models.DecimalField(
+        max_digits=24,
+        decimal_places=8
+    )
+
+    wallet_address = models.CharField(
+        max_length=128
+    )
+
+    tx_hash = models.CharField(
+        max_length=256,
+        null=True,
+        blank=True
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default="PENDING"
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True
+    )
+
+
+    def __str__(self):
+        return f"{self.user.wallet_address[:8]} - {self.amount} {self.asset}"
+
+class ReferralLevel(models.Model):
+    """
+    سطح بندی سیستم رفرال
+    """
+
+    level = models.PositiveIntegerField(
+        unique=True
+    )
+
+    percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0
+    )
+
+    title = models.CharField(
+        max_length=100,
+        default=""
+    )
+
+    is_active = models.BooleanField(
+        default=True
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True
+    )
+
+
+    class Meta:
+        ordering = ["level"]
+
+
+    def __str__(self):
+        return f"Level {self.level} - {self.percentage}%"

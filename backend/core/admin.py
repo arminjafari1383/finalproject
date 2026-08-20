@@ -49,49 +49,92 @@ class AppUserAdmin(admin.ModelAdmin):
 # ==========================================
 # Wallet Admin
 # ==========================================
+# ==========================================
+# Wallet Admin
+# ==========================================
+
 @admin.register(Wallet)
 class WalletAdmin(admin.ModelAdmin):
+
     list_display = (
-        "id", 
+        "id",
         "user",
-        "referral_bonus",
-        "daily_reward_locked", 
-        "daily_reward_unlocked",
-        "downline_profit_instant",
-        "self_profit_locked", 
-        "self_profit_unlocked",
-        "principal_locked", 
-        "principal_unlocked",
-        "updated_at"
-    )
-    list_filter = ("updated_at",)
-    search_fields = ("user__wallet_address", "user__telegram_id")
-    readonly_fields = ("updated_at",)
-    
-    fieldsets = (
-        ("کاربر", {
-            "fields": ("user",)
-        }),
-        ("پاداش رفرال", {
-            "fields": ("referral_bonus",)
-        }),
-        ("سود روزانه", {
-            "fields": ("daily_reward_locked", "daily_reward_unlocked")
-        }),
-        ("سود داونلاین", {
-            "fields": ("downline_profit_instant",)
-        }),
-        ("سود شخصی", {
-            "fields": ("self_profit_locked", "self_profit_unlocked")
-        }),
-        ("اصل سرمایه", {
-            "fields": ("principal_locked", "principal_unlocked")
-        }),
-        ("سایر", {
-            "fields": ("level_profits", "updated_at")
-        }),
+
+        "ecg_self_locked",
+        "ecg_self_unlocked",
+        "ecg_referral_profit",
+
+        "usdt_self_locked",
+        "usdt_self_unlocked",
+        "usdt_referral_profit",
+
+        "epl_balance",
+        "epl_total_earned",
+
+        "updated_at",
     )
 
+
+    list_filter = (
+        "updated_at",
+    )
+
+
+    search_fields = (
+        "user__wallet_address",
+        "user__telegram_id",
+    )
+
+
+    readonly_fields = (
+        "created_at",
+        "updated_at",
+    )
+
+
+    fieldsets = (
+
+        ("User", {
+            "fields": (
+                "user",
+            )
+        }),
+
+
+        ("ECG Balance", {
+            "fields": (
+                "ecg_self_locked",
+                "ecg_self_unlocked",
+                "ecg_referral_profit",
+            )
+        }),
+
+
+        ("USDT Balance", {
+            "fields": (
+                "usdt_self_locked",
+                "usdt_self_unlocked",
+                "usdt_referral_profit",
+            )
+        }),
+
+
+        ("EPL Timer", {
+            "fields": (
+                "epl_balance",
+                "epl_total_earned",
+            )
+        }),
+
+
+        ("Dates", {
+            "fields": (
+                "created_at",
+                "updated_at",
+            )
+        }),
+
+    )
 # ==========================================
 # Ledger Admin
 # ==========================================
@@ -171,41 +214,56 @@ class PurchaseAdmin(admin.ModelAdmin):
 # ==========================================
 @admin.register(PurchaseUSDT)
 class PurchaseUSDTAdmin(admin.ModelAdmin):
+
     list_display = (
-        "id", 
-        "invoice_no", 
-        "user", 
-        "usdt_amount", 
-        "usd_value", 
-        "ecg_value", 
-        "created_at"
+        "id",
+        "invoice_no",
+        "user",
+        "usdt_amount",
+        "usd_value",
+        "ecg_value",
     )
-    list_filter = ("created_at",)
+
     search_fields = (
-        "invoice_no", 
-        "usdt_tx_hash", 
-        "user__wallet_address"
+        "invoice_no",
+        "usdt_tx_hash",
+        "user__wallet_address",
     )
-    readonly_fields = ("created_at",)
-    
+
     fieldsets = (
         ("کاربر و فاکتور", {
-            "fields": ("user", "invoice_no")
+            "fields": (
+                "user",
+                "invoice_no",
+            )
         }),
+
         ("مبالغ USDT", {
-            "fields": ("usdt_amount", "usdt_tx_hash", "usdt_usd_rate")
+            "fields": (
+                "usdt_amount",
+                "usdt_tx_hash",
+                "usdt_usd_rate",
+            )
         }),
+
         ("مبالغ USD", {
-            "fields": ("usd_value",)
+            "fields": (
+                "usd_value",
+            )
         }),
+
         ("مبالغ ECG", {
-            "fields": ("ecg_value", "self_profit_5")
+            "fields": (
+                "ecg_value",
+                "self_profit_5",
+            )
         }),
+
         ("زمان قفل", {
-            "fields": ("principal_unlock_at", "self_profit_unlock_at")
-        }),
-        ("زمان ثبت", {
-            "fields": ("created_at",)
+            "fields": (
+                "principal_unlock_at",
+                "self_profit_unlock_at",
+            )
         }),
     )
 
@@ -255,104 +313,63 @@ class PurchaseBNBAdmin(admin.ModelAdmin):
 # ==========================================
 # WithdrawRequest Admin
 # ==========================================
+
 @admin.register(WithdrawRequest)
 class WithdrawRequestAdmin(admin.ModelAdmin):
-    list_display = (
-        "id", 
-        "user", 
-        "scope", 
-        "amount", 
-        "ton_amount",
-        "destination_wallet", 
-        "status", 
-        "created_at"
-    )
-    list_filter = (
-        "status", 
-        "scope", 
-        "created_at"
-    )
-    search_fields = (
-        "user__wallet_address", 
-        "destination_wallet",
-        "tx_hash"
-    )
-    readonly_fields = ("created_at",)
-    
-    fieldsets = (
-        ("کاربر", {
-            "fields": ("user", "destination_wallet")
-        }),
-        ("مبالغ", {
-            "fields": ("amount", "ton_amount")
-        }),
-        ("وضعیت", {
-            "fields": ("status", "scope", "tx_hash", "fail_reason")
-        }),
-        ("زمان", {
-            "fields": ("created_at",)
-        }),
-    )
-    
-    actions = ["approve_withdrawals", "reject_withdrawals"]
-    
-    def approve_withdrawals(self, request, queryset):
-        """تایید برداشت‌های انتخاب شده"""
-        updated = queryset.update(status="SUCCESS")
-        self.message_user(request, f"{updated} برداشت با موفقیت تایید شد.")
-    approve_withdrawals.short_description = "✅ تایید برداشت‌های انتخاب شده"
-    
-    def reject_withdrawals(self, request, queryset):
-        """رد برداشت‌های انتخاب شده"""
-        updated = queryset.update(status="FAILED", fail_reason="رد شده توسط ادمین")
-        self.message_user(request, f"{updated} برداشت رد شد.")
-    reject_withdrawals.short_description = "❌ رد برداشت‌های انتخاب شده"
 
+    list_display = (
+        "id",
+        "user",
+        "asset",
+        "amount",
+        "wallet_address",
+        "status",
+        "created_at",
+    )
+
+    list_filter = (
+        "status",
+        "asset",
+        "created_at",
+    )
+
+    search_fields = (
+        "user__wallet_address",
+        "wallet_address",
+        "tx_hash",
+    )
+
+    readonly_fields = (
+        "created_at",
+        "updated_at",
+    )
 # ==========================================
 # ReferralLevel Admin
 # ==========================================
 @admin.register(ReferralLevel)
 class ReferralLevelAdmin(admin.ModelAdmin):
+
     list_display = (
         "id",
-        "user",
-        "level_1_count",
-        "level_2_count",
-        "level_3_count",
-        "level_4_count",
-        "level_5_count",
-        "updated_at"
+        "level",
+        "title",
+        "percentage",
+        "is_active",
+        "created_at",
     )
-    list_filter = ("updated_at",)
-    search_fields = ("user__wallet_address", "user__telegram_id")
-    readonly_fields = ("updated_at",)
-    
-    fieldsets = (
-        ("کاربر", {
-            "fields": ("user",)
-        }),
-        ("تعداد در سطوح", {
-            "fields": (
-                "level_1_count",
-                "level_2_count",
-                "level_3_count",
-                "level_4_count",
-                "level_5_count"
-            )
-        }),
-        ("لیست کاربران در سطوح", {
-            "fields": (
-                "level_1_users",
-                "level_2_users",
-                "level_3_users",
-                "level_4_users",
-                "level_5_users"
-            ),
-            "classes": ("collapse",)
-        }),
-        ("زمان بروزرسانی", {
-            "fields": ("updated_at",)
-        }),
+
+    list_filter = (
+        "is_active",
+        "created_at",
+    )
+
+    search_fields = (
+        "title",
+        "level",
+    )
+
+    readonly_fields = (
+        "created_at",
     )
 
 # ==========================================
