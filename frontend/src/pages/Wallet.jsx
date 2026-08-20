@@ -234,6 +234,12 @@ export default function Wallet() {
     setWithdrawAsset,
   ] = useState("ECG");
 
+  // ECG keeps the old ECG/TON choices. USDT has one path only: USDT -> TON.
+  const [
+    withdrawSource,
+    setWithdrawSource,
+  ] = useState("ECG");
+
   const [
     destinationWallet,
     setDestinationWallet,
@@ -1023,40 +1029,32 @@ export default function Wallet() {
   // OPEN / CLOSE WITHDRAW
   // ====================================================
 
-  const openWithdraw =
-    () => {
-      setWithdrawError(
-        ""
-      );
+  const openWithdraw = () => {
+    setWithdrawError("");
+    setWithdrawNotice("");
+    setAmount("");
+    setWithdrawSource("ECG");
+    setWithdrawAsset("TON");
+    setDestinationWallet("");
+    setIsWithdrawOpen(true);
+  };
 
-      setAmount("");
+  const openUsdtWithdraw = () => {
+    setWithdrawError("");
+    setWithdrawNotice("");
+    setAmount("");
+    setWithdrawSource("USDT");
+    // Tether has exactly one output option.
+    setWithdrawAsset("TON");
+    setDestinationWallet("");
+    setIsWithdrawOpen(true);
+  };
 
-      setWithdrawAsset(
-        "TON"
-      );
+  const closeWithdraw = () => {
+    if (isWithdrawing) return;
+    setIsWithdrawOpen(false);
+  };
 
-      setDestinationWallet(
-        ""
-      );
-
-      setIsWithdrawOpen(
-        true
-      );
-    };
-
-
-  const closeWithdraw =
-    () => {
-      if (
-        isWithdrawing
-      ) {
-        return;
-      }
-
-      setIsWithdrawOpen(
-        false
-      );
-    };
 
   // ====================================================
   // WITHDRAW HISTORY
@@ -1133,21 +1131,34 @@ export default function Wallet() {
       return;
     }
 
-    if (withdrawAsset === "TON" && n < 1) {
-      setWithdrawError("Minimum TON withdrawal is 1 TON.");
-      return;
+    if (withdrawSource === "USDT") {
+      if (!tonPrice) {
+        setWithdrawError("TON price is not available yet.");
+        return;
+      }
+
+      const estimatedTon = n / Number(tonPrice);
+      if (estimatedTon < 1) {
+        setWithdrawError(
+          `Minimum conversion output is 1 TON (about ${Number(tonPrice).toFixed(4)} USDT).`
+        );
+        return;
+      }
+    } else {
+      if (withdrawAsset === "TON" && n < 1) {
+        setWithdrawError("Minimum TON withdrawal is 1 TON.");
+        return;
+      }
+
+      if (withdrawAsset === "ECG" && n < 60) {
+        setWithdrawError("Minimum withdrawal is 60 ECG.");
+        return;
+      }
     }
 
-    if (withdrawAsset === "ECG" && n < 60) {
-      setWithdrawError("Minimum withdrawal is 60 ECG.");
-      return;
-    }
-
-    // ECG and TON use the same manual request flow:
-    // the user enters both the amount and destination wallet.
     if (!destinationWallet.trim()) {
       setWithdrawError(
-        `Please enter the destination ${withdrawAsset} wallet address.`
+        `Please enter the destination ${withdrawSource === "USDT" ? "TON" : withdrawAsset} wallet address.`
       );
       return;
     }
@@ -1155,8 +1166,11 @@ export default function Wallet() {
     const payload = {
       wallet_address: address,
       destination_wallet: destinationWallet.trim(),
-      asset: withdrawAsset,
-      scope: "ALL_WITHDRAWABLE",
+      source_asset: withdrawSource,
+      asset: withdrawSource === "USDT" ? "TON" : withdrawAsset,
+      scope: withdrawSource === "USDT"
+        ? "USDT_PROFIT_ONLY"
+        : "ALL_WITHDRAWABLE",
       amount: n,
     };
 
@@ -1168,7 +1182,6 @@ export default function Wallet() {
         payload
       );
 
-      // Refresh wallet balance after the request is reserved as Pending.
       const walletResponse = await api.get(
         `/wallet/${address}/`
       );
@@ -1178,7 +1191,9 @@ export default function Wallet() {
       const createdRequest = withdrawResponse?.data || {};
 
       setWithdrawNotice(
-        `Withdrawal request #${createdRequest.id || ""} submitted. Please wait for admin approval.`
+        withdrawSource === "USDT"
+          ? `USDT → TON request #${createdRequest.id || ""} submitted. Please wait for admin approval.`
+          : `Withdrawal request #${createdRequest.id || ""} submitted. Please wait for admin approval.`
       );
 
       await loadWithdrawHistory();
@@ -1261,91 +1276,122 @@ export default function Wallet() {
   // CALCULATIONS
   // ====================================================
 
-  // Wallet main balance is Purchase profit only, denominated in ECG.
-  const purchaseProfitBalance =
-    useMemo(
-      () =>
-        Number(
-          wallet?.purchase_profit_ecg ??
-          (
-            Number(wallet?.self_profit_locked || 0) +
-            Number(wallet?.self_profit_unlocked || 0)
-          )
-        ),
-      [wallet]
-    );
+  // Total ECG Purchase Profit is displayed, but only the unlocked part can
+  // be withdrawn. The backend moves locked -> unlocked after 30 days.
+  const purchaseProfitBalance = useMemo(
+    () =>
+      Number(
+        wallet?.purchase_profit_ecg ??
+        (
+          Number(wallet?.self_profit_locked || 0) +
+          Number(wallet?.self_profit_unlocked || 0)
+        )
+      ),
+    [wallet]
+  );
 
+  const purchaseProfitLocked = Number(
+    wallet?.purchase_profit_ecg_locked ??
+    wallet?.self_profit_locked ??
+    0
+  );
 
-  // The withdrawal amount is intentionally tied to the exact same
-  // Purchase Profit balance shown as Total Balance.
-  const withdrawableBalance =
-    purchaseProfitBalance;
+  const withdrawableBalance = Number(
+    wallet?.purchase_profit_ecg_unlocked ??
+    wallet?.self_profit_unlocked ??
+    0
+  );
 
+  const purchaseProfitUsdt = Number(
+    wallet?.purchase_profit_usdt ?? 0
+  );
 
-  const withdrawableTon =
-    useMemo(() => {
-      const ecg = purchaseProfitBalance;
+  const purchaseProfitUsdtLocked = Number(
+    wallet?.purchase_profit_usdt_locked ?? 0
+  );
 
-      if (
-        !tonPrice ||
-        !ecg
-      ) {
-        return "0.0000";
+  const withdrawableUsdt = Number(
+    wallet?.withdrawable_usdt_profit ??
+    wallet?.purchase_profit_usdt_unlocked ??
+    0
+  );
+
+  const withdrawableTon = useMemo(() => {
+    const ecg = withdrawableBalance;
+
+    if (!tonPrice || !ecg) {
+      return "0.0000";
+    }
+
+    return (
+      ecg / (tonPrice * ECG_PER_USDT)
+    ).toFixed(4);
+  }, [withdrawableBalance, tonPrice]);
+
+  const withdrawableUsdtTon = useMemo(() => {
+    if (!tonPrice || !withdrawableUsdt) {
+      return "0.0000";
+    }
+
+    return (
+      withdrawableUsdt / tonPrice
+    ).toFixed(4);
+  }, [withdrawableUsdt, tonPrice]);
+
+  const sumReferralProfit = (users = [], asset = "ECG") =>
+    users.reduce((sum, user) => {
+      if (asset === "USDT") {
+        return sum + Number(user?.profit_usdt || 0);
       }
 
-      return (
-        ecg /
-        (
-          tonPrice *
-          ECG_PER_USDT
-        )
-      ).toFixed(4);
-    }, [
-      purchaseProfitBalance,
-      tonPrice,
-    ]);
+      // Existing rows only had ``profit`` and that value was ECG.
+      return sum + Number(
+        user?.profit_ecg ?? user?.profit ?? 0
+      );
+    }, 0);
 
+  const uniLevelFivePercentEcg = sumReferralProfit(
+    referralLevels?.level_1?.users || [],
+    "ECG"
+  );
+  const uniLevelFivePercentUsdt = sumReferralProfit(
+    referralLevels?.level_1?.users || [],
+    "USDT"
+  );
 
-  const sumReferralProfit = (users = []) =>
-    users.reduce(
-      (sum, user) =>
-        sum + Number(user?.profit || 0),
-      0
-    );
+  const uniLevelOnePercentEcg = [2, 3, 4, 5].reduce(
+    (sum, level) =>
+      sum + sumReferralProfit(
+        referralLevels?.[`level_${level}`]?.users || [],
+        "ECG"
+      ),
+    0
+  );
+  const uniLevelOnePercentUsdt = [2, 3, 4, 5].reduce(
+    (sum, level) =>
+      sum + sumReferralProfit(
+        referralLevels?.[`level_${level}`]?.users || [],
+        "USDT"
+      ),
+    0
+  );
 
-  const uniLevelFivePercent =
-    sumReferralProfit(
-      referralLevels?.level_1?.users || []
-    );
+  const uniLevelDirectUsers = Number(
+    referralLevels?.level_1?.count || 0
+  );
 
-  const uniLevelOnePercent =
-    [2, 3, 4, 5].reduce(
-      (sum, level) =>
-        sum +
-        sumReferralProfit(
-          referralLevels?.[`level_${level}`]?.users || []
-        ),
-      0
-    );
+  const uniLevelIndirectUsers = [2, 3, 4, 5].reduce(
+    (sum, level) =>
+      sum + Number(
+        referralLevels?.[`level_${level}`]?.count || 0
+      ),
+    0
+  );
 
-  const uniLevelDirectUsers =
-    Number(
-      referralLevels?.level_1?.count || 0
-    );
-
-  const uniLevelIndirectUsers =
-    [2, 3, 4, 5].reduce(
-      (sum, level) =>
-        sum +
-        Number(
-          referralLevels?.[`level_${level}`]?.count || 0
-        ),
-      0
-    );
-
-  const uniLevelTotal =
-    uniLevelFivePercent +
-    uniLevelOnePercent;
+  const uniLevelTotalEcg =
+    uniLevelFivePercentEcg + uniLevelOnePercentEcg;
+  const uniLevelTotalUsdt =
+    uniLevelFivePercentUsdt + uniLevelOnePercentUsdt;
 
 
   // Total completed withdrawals.
@@ -1386,6 +1432,9 @@ export default function Wallet() {
   const canWithdraw =
     withdrawableBalance >=
     WITHDRAW_TARGET;
+
+  const canWithdrawUsdt =
+    Number(withdrawableUsdtTon) >= 1;
 
   // ====================================================
   // UI
@@ -1759,6 +1808,23 @@ export default function Wallet() {
                     </div>
 
                   </div>
+
+                  <div
+                    style={{
+                      marginTop: 8,
+                      fontSize: 11,
+                      opacity: 0.68,
+                    }}
+                  >
+                    Available after unlock: {withdrawableBalance.toFixed(4)} ECG
+                    {purchaseProfitLocked > 0 && (
+                      <>
+                        {" • "}
+                        Locked 30d: {purchaseProfitLocked.toFixed(4)} ECG
+                      </>
+                    )}
+                  </div>
+
 {walletLocked && (
 
                     <div className="wallet-locked-pill">
@@ -1770,7 +1836,45 @@ export default function Wallet() {
                 </div>
 
 
-                {/* UNI-LEVEL REFERRAL — ECG */}
+                {/* TETHER PROFIT BALANCE */}
+
+                <div
+                  className="wallet-balance-card"
+                  style={{ marginTop: 12 }}
+                >
+                  <div className="balance-label">
+                    TETHER PROFIT BALANCE
+                  </div>
+
+                  <div className="wallet-balance-row">
+                    <div className="balance-number">
+                      {purchaseProfitUsdt.toFixed(4)}
+                    </div>
+                    <div className="balance-token-pill">
+                      USDT
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: 8,
+                      fontSize: 11,
+                      opacity: 0.68,
+                      lineHeight: 1.55,
+                    }}
+                  >
+                    Available: {withdrawableUsdt.toFixed(4)} USDT
+                    {purchaseProfitUsdtLocked > 0 && (
+                      <>
+                        {" • "}
+                        Locked 30d: {purchaseProfitUsdtLocked.toFixed(4)} USDT
+                      </>
+                    )}
+                  </div>
+                </div>
+
+
+                {/* UNI-LEVEL REFERRAL — ASSET AWARE */}
 
                 <section
                   className="uni-level-referral-card"
@@ -1847,7 +1951,13 @@ export default function Wallet() {
                         5% Referral
                       </div>
                       <strong>
-                        {uniLevelFivePercent.toFixed(4)} ECG
+                        {uniLevelFivePercentEcg.toFixed(4)} ECG
+                        {uniLevelFivePercentUsdt > 0 && (
+                          <>
+                            <br />
+                            {uniLevelFivePercentUsdt.toFixed(4)} USDT
+                          </>
+                        )}
                       </strong>
                       <div style={{ fontSize: 10, opacity: 0.55, marginTop: 4 }}>
                         Level 1 • {uniLevelDirectUsers} users
@@ -1865,7 +1975,13 @@ export default function Wallet() {
                         1% Referral
                       </div>
                       <strong>
-                        {uniLevelOnePercent.toFixed(4)} ECG
+                        {uniLevelOnePercentEcg.toFixed(4)} ECG
+                        {uniLevelOnePercentUsdt > 0 && (
+                          <>
+                            <br />
+                            {uniLevelOnePercentUsdt.toFixed(4)} USDT
+                          </>
+                        )}
                       </strong>
                       <div style={{ fontSize: 10, opacity: 0.55, marginTop: 4 }}>
                         Levels 2-5 • {uniLevelIndirectUsers} users
@@ -1884,7 +2000,13 @@ export default function Wallet() {
                         Total Bonus
                       </div>
                       <strong>
-                        {uniLevelTotal.toFixed(4)} ECG
+                        {uniLevelTotalEcg.toFixed(4)} ECG
+                        {uniLevelTotalUsdt > 0 && (
+                          <>
+                            <br />
+                            {uniLevelTotalUsdt.toFixed(4)} USDT
+                          </>
+                        )}
                       </strong>
                       <div style={{ fontSize: 10, opacity: 0.55, marginTop: 4 }}>
                         5% + 1% combined
@@ -2007,6 +2129,34 @@ export default function Wallet() {
                 </button>
 
 
+                {/* USDT -> TON: single-option Tether action */}
+                <button
+                  style={{
+                    marginTop: 8,
+                    marginBottom: 3,
+                  }}
+                  className={`wallet-main-action ${
+                    canWithdrawUsdt
+                      ? ""
+                      : "disabled"
+                  }`}
+                  onClick={openUsdtWithdraw}
+                  disabled={!canWithdrawUsdt}
+                >
+                  <span className="wallet-main-action-title">
+                    {canWithdrawUsdt
+                      ? `Convert ${withdrawableUsdt.toFixed(4)} USDT → TON`
+                      : `Convert ${withdrawableUsdt.toFixed(4)} USDT → TON 🔒`}
+                  </span>
+
+                  <span className="wallet-main-action-subtitle">
+                    {canWithdrawUsdt
+                      ? `≈ ${withdrawableUsdtTon} TON available`
+                      : "Tether profit unlocks after 30 days; minimum output is 1 TON"}
+                  </span>
+                </button>
+
+
                 {withdrawNotice && (
                   <div
                     style={{
@@ -2083,6 +2233,10 @@ export default function Wallet() {
                         const isTon =
                           String(item.raw_asset || item.asset || "").toUpperCase() === "TON";
 
+                        const sourceAsset = String(
+                          item.source_asset || "ECG"
+                        ).toUpperCase();
+
                         const requestedValue = isTon
                           ? `${Number(item.ton_amount || 0).toLocaleString(undefined, {
                               maximumFractionDigits: 9,
@@ -2133,13 +2287,23 @@ export default function Wallet() {
 
                               {isTon && (
                                 <div className="withdraw-history-detail-row">
-                                  <span className="withdraw-history-label">ECG reserved</span>
+                                  <span className="withdraw-history-label">
+                                    {sourceAsset === "USDT"
+                                      ? "USDT reserved"
+                                      : "ECG reserved"}
+                                  </span>
                                   <span className="withdraw-history-value">
-                                    {Number(
-                                      item.ecg_debited || item.amount || 0
-                                    ).toLocaleString(undefined, {
-                                      maximumFractionDigits: 6,
-                                    })} ECG
+                                    {sourceAsset === "USDT"
+                                      ? `${Number(
+                                          item.usdt_debited || item.amount || 0
+                                        ).toLocaleString(undefined, {
+                                          maximumFractionDigits: 6,
+                                        })} USDT`
+                                      : `${Number(
+                                          item.ecg_debited || item.amount || 0
+                                        ).toLocaleString(undefined, {
+                                          maximumFractionDigits: 6,
+                                        })} ECG`}
                                   </span>
                                 </div>
                               )}
@@ -2360,285 +2524,173 @@ export default function Wallet() {
                 Withdrawal Method
               </label>
 
+              {withdrawSource === "USDT" ? (
+                <div className="asset-picker">
+                  <button
+                    type="button"
+                    className="selected"
+                    disabled
+                  >
+                    Convert USDT → TON
+                  </button>
+                </div>
+              ) : (
+                <div className="asset-picker">
+                  <button
+                    type="button"
+                    className={withdrawAsset === "ECG" ? "selected" : ""}
+                    onClick={() => {
+                      setWithdrawAsset("ECG");
+                      setDestinationWallet("");
+                      setAmount("");
+                      setWithdrawError("");
+                    }}
+                    disabled={isWithdrawing}
+                  >
+                    Withdraw with ECG
+                  </button>
 
-              {/* ASSET PICKER */}
-
-              <div className="asset-picker">
-
-                <button
-                  type="button"
-                  className={
-                    withdrawAsset ===
-                    "ECG"
-                      ? "selected"
-                      : ""
-                  }
-                  onClick={() => {
-                    setWithdrawAsset(
-                      "ECG"
-                    );
-
-                    setDestinationWallet(
-                      ""
-                    );
-
-                    setAmount("");
-
-                    setWithdrawError(
-                      ""
-                    );
-                  }}
-                  disabled={
-                    isWithdrawing
-                  }
-                >
-                  Withdraw with ECG
-                </button>
-
-
-                <button
-                  type="button"
-                  className={
-                    withdrawAsset ===
-                    "TON"
-                      ? "selected"
-                      : ""
-                  }
-                  onClick={() => {
-                    setWithdrawAsset(
-                      "TON"
-                    );
-
-                    setDestinationWallet(
-                      ""
-                    );
-
-                    setAmount("");
-
-                    setWithdrawError(
-                      ""
-                    );
-                  }}
-                  disabled={
-                    isWithdrawing
-                  }
-                >
-                  Withdraw with TON
-                </button>
-
-              </div>
-
-
-              {/* DESTINATION - SAME FLOW FOR ECG AND TON */}
+                  <button
+                    type="button"
+                    className={withdrawAsset === "TON" ? "selected" : ""}
+                    onClick={() => {
+                      setWithdrawAsset("TON");
+                      setDestinationWallet("");
+                      setAmount("");
+                      setWithdrawError("");
+                    }}
+                    disabled={isWithdrawing}
+                  >
+                    Withdraw with TON
+                  </button>
+                </div>
+              )}
 
               <label htmlFor="withdraw-destination">
-                {withdrawAsset} Wallet Address
+                {withdrawSource === "USDT"
+                  ? "TON Wallet Address"
+                  : `${withdrawAsset} Wallet Address`}
               </label>
-
 
               <input
                 id="withdraw-destination"
                 type="text"
                 value={destinationWallet}
-                onChange={(e) =>
-                  setDestinationWallet(
-                    e.target.value
-                  )
+                onChange={(e) => setDestinationWallet(e.target.value)}
+                placeholder={
+                  withdrawSource === "USDT"
+                    ? "Enter destination TON wallet address"
+                    : `Enter destination ${withdrawAsset} wallet address`
                 }
-                placeholder={`Enter destination ${withdrawAsset} wallet address`}
                 disabled={isWithdrawing}
                 autoComplete="off"
               />
 
-
               <div className="ton-info">
-                This {withdrawAsset} request will stay Pending until an admin pays the destination wallet and marks it Complete.
+                {withdrawSource === "USDT"
+                  ? "Your unlocked Tether profit will be reserved and converted to TON. The request stays Pending until admin pays the TON destination and marks it Complete."
+                  : `This ${withdrawAsset} request will stay Pending until an admin pays the destination wallet and marks it Complete.`}
               </div>
 
-
-              {/* AMOUNT LABEL */}
-
               <label htmlFor="withdraw-amount">
-
-                {withdrawAsset ===
-                "TON"
-                  ? "TON Amount"
-                  : "Withdrawable Amount (ECG)"}
-
+                {withdrawSource === "USDT"
+                  ? "USDT Amount to Convert"
+                  : withdrawAsset === "TON"
+                    ? "TON Amount"
+                    : "Withdrawable Amount (ECG)"}
               </label>
 
-
-              {/* AMOUNT */}
-
               <div className="amount-wrapper">
-
                 <input
                   id="withdraw-amount"
                   type="number"
                   inputMode="decimal"
-                  value={
-                    amount
-                  }
-                  onChange={(e) =>
-                    setAmount(
-                      e.target.value
-                    )
-                  }
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
                   placeholder={
-                    withdrawAsset ===
-                    "TON"
-                      ? "Minimum 1 TON"
-                      : "Minimum 60 ECG"
+                    withdrawSource === "USDT"
+                      ? "Enter unlocked USDT amount"
+                      : withdrawAsset === "TON"
+                        ? "Minimum 1 TON"
+                        : "Minimum 60 ECG"
                   }
                   min={
-                    withdrawAsset ===
-                    "TON"
-                      ? "1"
-                      : "60"
+                    withdrawSource === "USDT"
+                      ? "0"
+                      : withdrawAsset === "TON"
+                        ? "1"
+                        : "60"
                   }
-                  disabled={
-                    isWithdrawing
-                  }
+                  disabled={isWithdrawing}
                 />
 
-
-                {/* TON MAX */}
-
-                {withdrawAsset ===
-                  "TON" && (
-
-                  <button
-                    type="button"
-                    className="max-btn"
-                    onClick={() =>
-                      setAmount(
-                        withdrawableTon
-                      )
-                    }
-                    disabled={
-                      isWithdrawing
-                    }
-                  >
-                    MAX
-                  </button>
-
-                )}
-
-
-                {/* ECG MAX */}
-
-                {withdrawAsset ===
-                  "ECG" && (
-
-                  <button
-                    type="button"
-                    className="max-btn"
-                    onClick={() =>
-                      setAmount(
-                        Number(
-                          withdrawableBalance
-                        )
-                      )
-                    }
-                    disabled={
-                      isWithdrawing
-                    }
-                  >
-                    MAX
-                  </button>
-
-                )}
-
+                <button
+                  type="button"
+                  className="max-btn"
+                  onClick={() =>
+                    setAmount(
+                      withdrawSource === "USDT"
+                        ? withdrawableUsdt
+                        : withdrawAsset === "TON"
+                          ? withdrawableTon
+                          : withdrawableBalance
+                    )
+                  }
+                  disabled={isWithdrawing}
+                >
+                  MAX
+                </button>
               </div>
 
-
-              {/* ECG INFO */}
-
-              {withdrawAsset ===
-                "ECG" && (
-
-                <div className="max-balance-info">
-
-                  Available:{" "}
-
-                  <b>
-
-                    {Number(
-                      withdrawableBalance
-                    ).toFixed(4)}
-
-                    {" ECG"}
-
-                  </b>
-
-                </div>
-
-              )}
-
-
-              {/* TON INFO */}
-
-              {withdrawAsset ===
-                "TON" && (
-
+              {withdrawSource === "USDT" ? (
                 <div className="ton-info">
-
                   <div>
-
-                    Withdrawable TON:{" "}
-
+                    Available Tether profit:{" "}
+                    <b>{withdrawableUsdt.toFixed(4)} USDT</b>
+                  </div>
+                  <div>
+                    Estimated TON:{" "}
                     <b>
-                      {withdrawableTon}
+                      {tonPrice && Number(amount) > 0
+                        ? (Number(amount) / Number(tonPrice)).toFixed(4)
+                        : "0.0000"}
                       {" TON"}
                     </b>
-
                   </div>
-
-
                   <div>
-
-                    Based on:{" "}
-
-                    <b>
-
-                      {Number(
-                        withdrawableBalance
-                      ).toFixed(2)}
-
-                      {" ECG"}
-
-                    </b>
-
+                    MAX output: <b>{withdrawableUsdtTon} TON</b>
                   </div>
-
-
                   <div>
-
-                    Minimum withdrawal:{" "}
-
-                    <b>
-                      1 TON
-                    </b>
-
+                    Minimum output: <b>1 TON</b>
                   </div>
-
                 </div>
-
+              ) : withdrawAsset === "ECG" ? (
+                <div className="max-balance-info">
+                  Available after 30-day unlock:{" "}
+                  <b>{withdrawableBalance.toFixed(4)} ECG</b>
+                </div>
+              ) : (
+                <div className="ton-info">
+                  <div>
+                    Withdrawable TON: <b>{withdrawableTon} TON</b>
+                  </div>
+                  <div>
+                    Based on unlocked Purchase Profit:{" "}
+                    <b>{withdrawableBalance.toFixed(2)} ECG</b>
+                  </div>
+                  <div>
+                    Minimum withdrawal: <b>1 TON</b>
+                  </div>
+                </div>
               )}
 
-
-              {/* WITHDRAW ERROR */}
-
               {withdrawError && (
-
                 <div className="error-text">
                   {withdrawError}
                 </div>
-
               )}
 
             </div>
-
 
             {/* FOOTER */}
 
@@ -2675,10 +2727,11 @@ export default function Wallet() {
 
                 {isWithdrawing
                   ? "Submitting Request..."
-                  : withdrawAsset ===
-                    "TON"
-                  ? "Request TON Withdrawal"
-                  : "Request ECG Withdrawal"}
+                  : withdrawSource === "USDT"
+                    ? "Convert USDT to TON"
+                    : withdrawAsset === "TON"
+                      ? "Request TON Withdrawal"
+                      : "Request ECG Withdrawal"}
 
               </button>
 

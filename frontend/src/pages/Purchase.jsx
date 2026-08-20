@@ -341,6 +341,8 @@ export default function Purchase() {
       ton_amount: String(payment?.ton_amount || "0"),
       ecg_value: ecg ? ecg.toFixed(2) : "-",
       self_profit_5: profit ? profit.toFixed(2) : "-",
+      output_asset: payment?.output_asset || "ECG",
+      profit_asset: payment?.output_asset || "ECG",
       created_at: new Date(createdAt).toISOString(),
       lock_period_days: 365,
       principal_unlock_at: "Waiting for blockchain confirmation",
@@ -1068,14 +1070,14 @@ export default function Purchase() {
   }
 
 
-  function InvestmentCountdown({ unlockAt, createdAt }) {
+  function InvestmentCountdown({ unlockAt, createdAt, fallbackDays = 365, completedLabel = "Mining Completed" }) {
     const getTargetTime = () => {
       const direct = new Date(unlockAt).getTime();
       if (Number.isFinite(direct)) return direct;
 
       const start = new Date(createdAt).getTime();
       if (Number.isFinite(start)) {
-        return start + 365 * 24 * 60 * 60 * 1000;
+        return start + fallbackDays * 24 * 60 * 60 * 1000;
       }
 
       return null;
@@ -1200,7 +1202,7 @@ export default function Purchase() {
         title={
           remainingMs > 0
             ? `Unlocks at ${new Date(targetTime).toLocaleString()}`
-            : "Mining Completed"
+            : completedLabel
         }
       >
         {timeParts.map((part, index) => (
@@ -1775,9 +1777,13 @@ export default function Purchase() {
 
                         <Row
                           label="5% Profit"
-                          value={
-                            item.self_profit_5
-                          }
+                          value={`${
+                            item.self_profit_5 ?? "-"
+                          } ${
+                            item.profit_asset ||
+                            item.output_asset ||
+                            "ECG"
+                          }`}
                         />
 
                         <Row
@@ -1799,9 +1805,14 @@ export default function Purchase() {
 
                         <Row
                           label="Profit Unlock"
-                          value={formatInvoiceDate(
-                            item.self_profit_unlock_at
-                          )}
+                          value={
+                            <InvestmentCountdown
+                              unlockAt={item.self_profit_unlock_at}
+                              createdAt={item.created_at}
+                              fallbackDays={30}
+                              completedLabel="Profit Unlocked"
+                            />
+                          }
                         />
                       </div>
 

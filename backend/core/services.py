@@ -486,8 +486,8 @@ def give_referral_bonus(
     """
     Credit the referral join reward through the upline chain.
 
-    Level 1 (direct inviter): 1000 FLOWER
-    Levels 2-5 (indirect uplines): 500 FLOWER each
+    Level 1 (direct inviter): 1000 EPL
+    Levels 2-5 (indirect uplines): 500 EPL each
 
     Each (upline, invitee, referral_level) reward is idempotent.
     """
@@ -511,7 +511,7 @@ def give_referral_bonus(
         )
 
         # Legacy direct REF_BONUS rows did not contain referral_level.
-        # For level 1, matching by invitee alone prevents an old 3 FLOWER reward
+        # For level 1, matching by invitee alone prevents an old 3 EPL reward
         # from being duplicated if the same relationship is processed again.
         ledger_filter = {
             "user": current,
@@ -561,7 +561,7 @@ def give_referral_bonus(
                         if level == 1
                         else "indirect"
                     ),
-                    "asset": "FLOWER",
+                    "asset": "EPL",
                 },
             )
 
@@ -625,7 +625,11 @@ def update_referral_levels(
             "telegram_photo_url": new_user.telegram_photo_url,
             "wallet": new_user.wallet_address,
             "investment": 0,
+            # Legacy ECG-only referral-profit field.
             "profit": 0,
+            "profit_ecg": 0,
+            "profit_usdt": 0,
+            "profit_asset": "ECG",
             "referral_bonus": 0,
         }
 
@@ -818,11 +822,11 @@ def update_referral_join_bonus(
 @transaction.atomic
 def reconcile_existing_referral_join_rewards(owner: AppUser):
     """
-    Bring referrals created under the old 3 FLOWER rule up to the new join-reward
+    Bring referrals created under the old 3 EPL rule up to the new join-reward
     schedule without duplicating already-correct rewards.
 
-    Level 1 target: 1000 FLOWER per referral row.
-    Levels 2-5 target: 500 FLOWER per referral row.
+    Level 1 target: 1000 EPL per referral row.
+    Levels 2-5 target: 500 EPL per referral row.
 
     The top-up is real accounting: Wallet.referral_bonus and Ledger are updated,
     then ReferralLevel JSON is synchronized to the actual credited total.
@@ -906,7 +910,7 @@ def reconcile_existing_referral_join_rewards(owner: AppUser):
                         "referral_level": level,
                         "reward_kind": "legacy_reconcile",
                         "target_total": str(target),
-                        "asset": "FLOWER",
+                        "asset": "EPL",
                     },
                 )
 
@@ -923,7 +927,7 @@ def reconcile_existing_referral_join_rewards(owner: AppUser):
 
             # Keep the tree row aligned with the actual join bonus credited for
             # this owner/downline relationship. For a legacy direct referral
-            # that had 3 FLOWER, this becomes exactly 1000 after the 997 top-up.
+            # that had 3 EPL, this becomes exactly 1000 after the 997 top-up.
             shown_bonus = max(
                 Decimal(str(row.get("referral_bonus", 0) or 0)),
                 credited,
@@ -1054,61 +1058,138 @@ def update_level_profit(
     level: int,
     from_wallet: str,
     profit: Decimal,
+    asset: str = "ECG",
 ):
-    """
-    بروزرسانی سود در referral levels.
-    """
+    """Store Referral Tree stake profit in its real asset."""
+    asset = str(asset or "ECG").upper()
+    if asset not in {"ECG", "USDT"}:
+        asset = "ECG"
 
-    level_obj = (
-        ReferralLevel.objects
-        .filter(user=user)
-        .first()
-    )
-
+    profit = Decimal(str(profit))
+    level_obj = ReferralLevel.objects.filter(user=user).first()
     if not level_obj:
         return
 
-    level_field = (
-        f"level_{level}_users"
-    )
-
-    users = (
-        getattr(level_obj, level_field)
-        or []
-    )
+    level_field = f"level_{level}_users"
+    users = getattr(level_obj, level_field) or []
 
     for i, item in enumerate(users):
-
-        if not isinstance(item, dict):
+        if not isinstance(item, dict) or item.get("wallet") != from_wallet:
             continue
 
-        if item.get("wallet") == from_wallet:
+        # All historical ``profit`` values were ECG. Preserve them as ECG.
+        legacy_ecg = Decimal(str(item.get("profit", 0) or 0))
+        current_ecg = Decimal(str(item.get("profit_ecg", legacy_ecg) or 0))
+        current_usdt = Decimal(str(item.get("profit_usdt", 0) or 0))
 
-            current_profit = Decimal(
-                str(
-                    item.get(
-                        "profit",
-                        0,
-                    )
+        if asset == "USDT":
+            current_usdt += profit
+        else:
+            current_ecg += profit
+
+        users[i]["profit_ecg"] = float(current_ecg)
+        users[i]["profit_usdt"] = float(current_usdt)
+        # Backward compatibility: do not mix units in the legacy field.
+        users[i]["profit"] = float(current_ecg)
+        users[i]["profit_asset"] = (
+            "MIXED"
+            if current_ecg > 0 and current_usdt > 0
+            else "USDT"
+            if current_usdt > 0
+            else "ECG"
+        )
+        break
+
+    setattr(level_obj, level_field, users)
+    level_obj.save(update_fields=[level_field])
+
+
+# ============================================================
+# Release matured 5% self profit after 30 days
+# ============================================================
+
+@transaction.atomic
+def release_matured_purchase_profits(user: AppUser):
+    """
+    Release TON-purchase 5% self profit after self_profit_unlock_at.
+    ECG -> Wallet.self_profit_unlocked
+    USDT -> AssetBalance(USDT).profit_unlocked
+    """
+    now = timezone.now()
+    released = {"ECG": Decimal("0"), "USDT": Decimal("0")}
+
+    matured = (
+        Purchase.objects
+        .select_for_update()
+        .filter(
+            user=user,
+            self_profit_unlock_at__isnull=False,
+            self_profit_unlock_at__lte=now,
+        )
+        .order_by("id")
+    )
+
+    for purchase in matured:
+        invoice_no = str(purchase.invoice_no)
+        if Ledger.objects.filter(
+            user=user,
+            typ="SELF_PROFIT_UNLOCK",
+            meta__invoice=invoice_no,
+        ).exists():
+            continue
+
+        amount = Decimal(str(purchase.self_profit_5 or 0))
+        if amount <= 0:
+            continue
+
+        asset = str(
+            purchase.profit_asset or purchase.output_asset or "ECG"
+        ).upper()
+        if asset not in {"ECG", "USDT"}:
+            asset = "ECG"
+
+        if asset == "USDT":
+            balance, _ = (
+                AssetBalance.objects
+                .select_for_update()
+                .get_or_create(user=user, asset="USDT")
+            )
+            locked = Decimal(str(balance.profit_locked or 0))
+            if locked < amount:
+                logger.warning(
+                    "[SELF_UNLOCK] insufficient USDT locked invoice=%s required=%s locked=%s",
+                    invoice_no, amount, locked,
                 )
-            )
+                continue
+            balance.profit_locked = locked - amount
+            balance.profit_unlocked = Decimal(str(balance.profit_unlocked or 0)) + amount
+            balance.save(update_fields=["profit_locked", "profit_unlocked", "updated_at"])
+        else:
+            wallet = Wallet.objects.select_for_update().get(user=user)
+            locked = Decimal(str(wallet.self_profit_locked or 0))
+            if locked < amount:
+                logger.warning(
+                    "[SELF_UNLOCK] insufficient ECG locked invoice=%s required=%s locked=%s",
+                    invoice_no, amount, locked,
+                )
+                continue
+            wallet.self_profit_locked = locked - amount
+            wallet.self_profit_unlocked = Decimal(str(wallet.self_profit_unlocked or 0)) + amount
+            wallet.save(update_fields=["self_profit_locked", "self_profit_unlocked", "updated_at"])
 
-            users[i]["profit"] = float(
-                current_profit + profit
-            )
+        Ledger.objects.create(
+            user=user,
+            typ="SELF_PROFIT_UNLOCK",
+            amount=amount,
+            meta={
+                "invoice": invoice_no,
+                "asset": asset,
+                "unlock_at": purchase.self_profit_unlock_at.isoformat(),
+            },
+        )
+        released[asset] += amount
 
-            break
-
-    setattr(
-        level_obj,
-        level_field,
-        users,
-    )
-
-    level_obj.save(
-        update_fields=[level_field]
-    )
-
+    return {"ECG": str(released["ECG"]), "USDT": str(released["USDT"])}
 
 
 # ============================================================
@@ -1123,102 +1204,53 @@ def credit_direct_upline_purchase_bonus(
     tx_hash: str,
     currency: str,
     is_test: bool = False,
+    asset: str = "ECG",
 ):
-    """
-    Credit the direct inviter with the 5% purchase bonus and keep the
-    Referral Tree profit column in sync with the real wallet balance.
-
-    The Ledger invoice key makes the operation idempotent for the same
-    purchase, so polling/retries cannot credit the same invoice twice.
-    """
-
+    """Credit Level-1 5% in the SAME asset as the purchase output."""
     if not buyer.inviter_id:
-        logger.warning(
-            "[UPLINE5] skipped: buyer=%s has no inviter",
-            buyer.wallet_address,
-        )
-        return {
-            "credited": False,
-            "reason": "buyer_has_no_inviter",
-        }
+        return {"credited": False, "reason": "buyer_has_no_inviter"}
 
     bonus = Decimal(str(bonus))
-
+    asset = str(asset or "ECG").upper()
+    if asset not in {"ECG", "USDT"}:
+        asset = "ECG"
     if bonus <= 0:
-        logger.warning(
-            "[UPLINE5] skipped non-positive bonus buyer=%s bonus=%s",
-            buyer.wallet_address,
-            bonus,
-        )
-        return {
-            "credited": False,
-            "reason": "invalid_bonus",
-        }
+        return {"credited": False, "reason": "invalid_bonus"}
 
-    inviter = (
-        AppUser.objects
-        .select_for_update()
-        .get(pk=buyer.inviter_id)
-    )
-
+    inviter = AppUser.objects.select_for_update().get(pk=buyer.inviter_id)
     ensure_user_has_wallet(inviter)
 
-    # Prevent the same purchase from paying the direct upline twice.
-    already_credited = (
-        Ledger.objects
-        .filter(
-            user=inviter,
-            typ="DOWNLINE_PROFIT",
-            meta__invoice=invoice_no,
-        )
-        .exists()
-    )
-
+    already_credited = Ledger.objects.filter(
+        user=inviter,
+        typ="DOWNLINE_PROFIT",
+        meta__invoice=invoice_no,
+        meta__level=1,
+    ).exists()
     if already_credited:
-        wallet = (
-            Wallet.objects
-            .select_for_update()
-            .get(user=inviter)
-        )
-
-        logger.warning(
-            "[UPLINE5] duplicate blocked invoice=%s buyer=%s inviter=%s balance=%s",
-            invoice_no,
-            buyer.wallet_address,
-            inviter.wallet_address,
-            wallet.downline_profit_instant,
-        )
-
         return {
             "credited": False,
             "reason": "already_credited",
             "inviter": inviter.wallet_address,
             "bonus": str(bonus),
-            "balance": str(wallet.downline_profit_instant or Decimal("0")),
+            "asset": asset,
         }
 
-    wallet = (
-        Wallet.objects
-        .select_for_update()
-        .get(user=inviter)
-    )
-
-    before = Decimal(
-        str(
-            wallet.downline_profit_instant
-            or Decimal("0")
+    if asset == "USDT":
+        balance, _ = (
+            AssetBalance.objects
+            .select_for_update()
+            .get_or_create(user=inviter, asset="USDT")
         )
-    )
-
-    after = before + bonus
-
-    wallet.downline_profit_instant = after
-    wallet.save(
-        update_fields=[
-            "downline_profit_instant",
-            "updated_at",
-        ]
-    )
+        before = Decimal(str(balance.profit_unlocked or 0))
+        after = before + bonus
+        balance.profit_unlocked = after
+        balance.save(update_fields=["profit_unlocked", "updated_at"])
+    else:
+        wallet = Wallet.objects.select_for_update().get(user=inviter)
+        before = Decimal(str(wallet.downline_profit_instant or 0))
+        after = before + bonus
+        wallet.downline_profit_instant = after
+        wallet.save(update_fields=["downline_profit_instant", "updated_at"])
 
     Ledger.objects.create(
         user=inviter,
@@ -1232,33 +1264,20 @@ def credit_direct_upline_purchase_bonus(
             "level": 1,
             "rate": "5%",
             "is_test": is_test,
-            "asset": "FLOWER",
+            "asset": asset,
         },
     )
-
-    # This is the missing synchronization for Referrals.jsx.
-    # It updates level_1_users[].profit for the direct inviter.
-    update_level_profit(
-        inviter,
-        1,
-        buyer.wallet_address,
-        bonus,
-    )
+    update_level_profit(inviter, 1, buyer.wallet_address, bonus, asset=asset)
 
     logger.info(
-        "[UPLINE5] CREDITED buyer=%s inviter=%s invoice=%s bonus=%s before=%s after=%s",
-        buyer.wallet_address,
-        inviter.wallet_address,
-        invoice_no,
-        bonus,
-        before,
-        after,
+        "[UPLINE5] CREDITED buyer=%s inviter=%s invoice=%s asset=%s bonus=%s before=%s after=%s",
+        buyer.wallet_address, inviter.wallet_address, invoice_no, asset, bonus, before, after,
     )
-
     return {
         "credited": True,
         "inviter": inviter.wallet_address,
         "bonus": str(bonus),
+        "asset": asset,
         "balance_before": str(before),
         "balance_after": str(after),
     }
@@ -1276,74 +1295,59 @@ def credit_indirect_upline_purchase_bonuses(
     tx_hash: str,
     currency: str,
     is_test: bool = False,
+    asset: str = "ECG",
 ):
-    """
-    Credit 1% of the purchase ECG value to each indirect upline
-    from referral Level 2 through Level 5.
-
-    Each level is idempotent per invoice, and ReferralLevel.profit is
-    updated for the exact downline row shown in Referrals.jsx.
-    """
-
-    purchase_ecg_value = Decimal(str(purchase_ecg_value))
-
-    if purchase_ecg_value <= 0:
+    """Credit Level 2..5 1% in the SAME asset as the purchase output."""
+    purchase_value = Decimal(str(purchase_ecg_value))
+    asset = str(asset or "ECG").upper()
+    if asset not in {"ECG", "USDT"}:
+        asset = "ECG"
+    if purchase_value <= 0:
         return []
 
-    # Level 1 is handled by credit_direct_upline_purchase_bonus (5%).
     direct_inviter = buyer.inviter
     current = direct_inviter.inviter if direct_inviter else None
     level = 2
     results = []
 
     while current and level <= 5:
-        bonus = (purchase_ecg_value * INDIRECT_UPLINE_RATE)
-
+        bonus = purchase_value * INDIRECT_UPLINE_RATE
         ensure_user_has_wallet(current)
 
-        already_credited = (
-            Ledger.objects
-            .filter(
-                user=current,
-                typ="DOWNLINE_PROFIT",
-                meta__invoice=invoice_no,
-                meta__level=level,
-            )
-            .exists()
-        )
-
+        already_credited = Ledger.objects.filter(
+            user=current,
+            typ="DOWNLINE_PROFIT",
+            meta__invoice=invoice_no,
+            meta__level=level,
+        ).exists()
         if already_credited:
             results.append({
                 "level": level,
                 "credited": False,
                 "reason": "already_credited",
                 "upline": current.wallet_address,
+                "asset": asset,
             })
             current = current.inviter
             level += 1
             continue
 
-        wallet = (
-            Wallet.objects
-            .select_for_update()
-            .get(user=current)
-        )
-
-        before = Decimal(
-            str(
-                wallet.downline_profit_instant
-                or Decimal("0")
+        if asset == "USDT":
+            balance, _ = (
+                AssetBalance.objects
+                .select_for_update()
+                .get_or_create(user=current, asset="USDT")
             )
-        )
-        after = before + bonus
-
-        wallet.downline_profit_instant = after
-        wallet.save(
-            update_fields=[
-                "downline_profit_instant",
-                "updated_at",
-            ]
-        )
+            before = Decimal(str(balance.profit_unlocked or 0))
+            after = before + bonus
+            balance.profit_unlocked = after
+            balance.save(update_fields=["profit_unlocked", "updated_at"])
+        else:
+            wallet = Wallet.objects.select_for_update().get(user=current)
+            before = Decimal(str(wallet.downline_profit_instant or 0))
+            after = before + bonus
+            wallet.downline_profit_instant = after
+            wallet.save(update_fields=["downline_profit_instant", "updated_at"])
 
         Ledger.objects.create(
             user=current,
@@ -1357,38 +1361,20 @@ def credit_indirect_upline_purchase_bonuses(
                 "level": level,
                 "rate": "1%",
                 "is_test": is_test,
-                "asset": "FLOWER",
+                "asset": asset,
             },
         )
-
-        update_level_profit(
-            current,
-            level,
-            buyer.wallet_address,
-            bonus,
-        )
-
-        logger.info(
-            "[UPLINE1] CREDITED buyer=%s upline=%s level=%s "
-            "invoice=%s bonus=%s before=%s after=%s",
-            buyer.wallet_address,
-            current.wallet_address,
-            level,
-            invoice_no,
-            bonus,
-            before,
-            after,
-        )
+        update_level_profit(current, level, buyer.wallet_address, bonus, asset=asset)
 
         results.append({
             "level": level,
             "credited": True,
             "upline": current.wallet_address,
             "bonus": str(bonus),
+            "asset": asset,
             "balance_before": str(before),
             "balance_after": str(after),
         })
-
         current = current.inviter
         level += 1
 
@@ -1563,8 +1549,9 @@ def register_purchase(
         * SELF_BONUS_RATE
     )
 
+    # 5% upline profit follows the selected output asset.
     upline_bonus = (
-        ecg_value
+        output_amount
         * UPLINE_RATE
     )
 
@@ -1703,6 +1690,7 @@ def register_purchase(
         tx_hash=ton_tx_hash,
         currency="TON",
         is_test=is_test,
+        asset=output_asset,
     )
 
     logger.info(
@@ -1717,11 +1705,13 @@ def register_purchase(
 
     indirect_results = credit_indirect_upline_purchase_bonuses(
         buyer=user,
-        purchase_ecg_value=ecg_value,
+        # ECG output -> ECG amount; USDT output -> USDT amount.
+        purchase_ecg_value=output_amount,
         invoice_no=invoice_no,
         tx_hash=ton_tx_hash,
         currency="TON",
         is_test=is_test,
+        asset=output_asset,
     )
 
     logger.info(

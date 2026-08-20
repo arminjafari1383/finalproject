@@ -18,9 +18,10 @@ from .services import (
     register_purchase_usdt,
     register_purchase_bnb,
     reconcile_existing_referral_join_rewards,
+    release_matured_purchase_profits,
 )
 from .models import (
-    AppUser, Wallet, Ledger, Purchase, 
+    AppUser, Wallet, AssetBalance, Ledger, Purchase, 
     WithdrawRequest, ReferralLevel,
     PurchaseUSDT, PurchaseBNB
 )
@@ -606,8 +607,17 @@ def wallet_view(request, wallet_address):
     # Upgrade any referrals that were created under the old 3 ECG rule before
     # returning balances, so Wallet and Referral Tree agree immediately.
     reconcile_existing_referral_join_rewards(user)
+
+    # Unlock matured 5% self-profit lazily whenever the Wallet is opened.
+    # This is idempotent and works for both ECG and USDT.
+    release_matured_purchase_profits(user)
+
     user.refresh_from_db()
     wallet = Wallet.objects.get(user=user)
+    usdt_balance, _ = AssetBalance.objects.get_or_create(
+        user=user,
+        asset="USDT",
+    )
 
     # Existing serializer fields are kept for backward compatibility.
     payload = dict(
@@ -702,6 +712,21 @@ def wallet_view(request, wallet_address):
         or Decimal("0")
     )
 
+    # USDT / Tether profit buckets. Self-profit stays locked for 30 days;
+    # referral 5%/1% USDT profit is credited directly to profit_unlocked.
+    usdt_profit_locked = (
+        usdt_balance.profit_locked
+        or Decimal("0")
+    )
+    usdt_profit_unlocked = (
+        usdt_balance.profit_unlocked
+        or Decimal("0")
+    )
+    usdt_profit_total = (
+        usdt_profit_locked
+        + usdt_profit_unlocked
+    )
+
     # ECG wallet: only stake-origin ECG that is currently withdrawable.
     ecg_balance = (
         self_profit_unlocked
@@ -754,8 +779,17 @@ def wallet_view(request, wallet_address):
         "principal_unlocked": str(principal_unlocked),
         "self_profit_locked": str(self_profit_locked),
         "self_profit_unlocked": str(self_profit_unlocked),
-        # Wallet page main balance: Purchase profit only (ECG).
+        # Wallet page ECG Purchase Profit: total shown separately from spendable.
         "purchase_profit_ecg": str(self_profit_locked + self_profit_unlocked),
+        "purchase_profit_ecg_locked": str(self_profit_locked),
+        "purchase_profit_ecg_unlocked": str(self_profit_unlocked),
+
+        # Tether profit wallet. Only unlocked USDT can be converted to TON.
+        "purchase_profit_usdt": str(usdt_profit_total),
+        "purchase_profit_usdt_locked": str(usdt_profit_locked),
+        "purchase_profit_usdt_unlocked": str(usdt_profit_unlocked),
+        "withdrawable_usdt_profit": str(usdt_profit_unlocked),
+
         "daily_reward_unlocked": str(daily_reward_unlocked),
 
         "total_earned": str(total_earned),
@@ -1030,15 +1064,24 @@ def list_purchases(request):
 @api_view(["POST"])
 def request_withdraw(request):
     """
-    Create a MANUAL withdrawal request for both ECG and TON.
+    Manual profit withdrawal/conversion flow.
 
-    Nothing is sent on-chain here. The requested ECG value is reserved immediately
-    so the same balance cannot be requested twice. An admin must pay the user and
-    then mark the request complete from the admin dashboard.
+    ECG source:
+      - only self_profit_unlocked is spendable (30-day self-profit lock enforced)
+      - output may be ECG or TON, preserving the existing two-option UI
+
+    USDT source:
+      - only AssetBalance(USDT).profit_unlocked is spendable
+      - output is TON only
+      - the request amount is the SOURCE USDT amount
     """
     wallet_address = str(request.data.get("wallet_address", "") or "").strip()
     requested_asset = str(request.data.get("asset", "") or "").strip().upper()
-    scope = request.data.get("scope", "ALL_WITHDRAWABLE")
+    source_asset = str(request.data.get("source_asset", "ECG") or "ECG").strip().upper()
+    scope = str(request.data.get("scope", "ALL_WITHDRAWABLE") or "ALL_WITHDRAWABLE")
+
+    if source_asset not in {"ECG", "USDT"}:
+        return Response({"error": "Invalid source_asset."}, status=400)
 
     is_ton = requested_asset in {"GRAM", "TON"}
     asset = "TON" if is_ton else requested_asset
@@ -1057,11 +1100,18 @@ def request_withdraw(request):
     if requested_amount <= 0:
         return Response({"error": "Amount must be greater than zero."}, status=400)
 
-    if scope not in {"DOWNLINE_ONLY", "ALL_WITHDRAWABLE"}:
+    # USDT has a single allowed path: convert Tether profit -> TON.
+    if source_asset == "USDT" and asset != "TON":
+        return Response(
+            {"error": "USDT profit can only be converted to TON."},
+            status=400,
+        )
+
+    if source_asset == "USDT":
+        scope = "USDT_PROFIT_ONLY"
+    elif scope not in {"ALL_WITHDRAWABLE"}:
         return Response({"error": "Invalid scope."}, status=400)
 
-    # ECG and TON intentionally use the same manual withdrawal flow:
-    # the user supplies BOTH the requested amount and the destination wallet.
     destination = str(
         request.data.get("destination_wallet", "") or ""
     ).strip()
@@ -1071,12 +1121,9 @@ def request_withdraw(request):
             status=400,
         )
 
-    if is_ton:
-        if requested_amount < Decimal("1"):
-            return Response({"error": "Minimum TON withdrawal is 1 TON."}, status=400)
+    ton_rate = None
 
-        # TON only needs to be a valid TON address. It does NOT have to match
-        # the connected/account wallet because admin pays the user-entered target.
+    if asset == "TON":
         try:
             _ton_address_to_raw(destination)
         except ValueError:
@@ -1092,18 +1139,6 @@ def request_withdraw(request):
                 status=503,
             )
 
-        # Internal accounting is still ECG-denominated.
-        ecg_amount = (
-            requested_amount * ton_rate * ECG_PER_USD
-        ).quantize(Decimal("0.000001"), rounding=ROUND_UP)
-        ton_amount = requested_amount.quantize(Decimal("0.000000001"))
-    else:
-        if requested_amount < Decimal("60"):
-            return Response({"error": "Minimum withdrawal is 60 ECG."}, status=400)
-
-        ecg_amount = requested_amount
-        ton_amount = Decimal("0")
-
     telegram_id = request.headers.get("X-Telegram-Id")
     is_telegram = request.headers.get("X-Telegram") == "true"
     user = get_or_create_user(
@@ -1112,82 +1147,173 @@ def request_withdraw(request):
         is_telegram if telegram_id else False,
     )
 
-    # Reserve ECG immediately. Admin completion must NOT deduct again.
-    with transaction.atomic():
-        locked_wallet = Wallet.objects.select_for_update().get(user=user)
-        if scope == "DOWNLINE_ONLY":
+    # Make any exactly-due 30-day profit spendable before checking balance.
+    release_matured_purchase_profits(user)
+
+    if source_asset == "USDT":
+        # User enters the SOURCE Tether amount. 1 USDT ~= 1 USD.
+        source_usdt = requested_amount.quantize(Decimal("0.000001"))
+        ton_amount = (
+            source_usdt / ton_rate
+        ).quantize(Decimal("0.000000001"))
+
+        if ton_amount < Decimal("1"):
+            minimum_usdt = ton_rate.quantize(Decimal("0.000001"), rounding=ROUND_UP)
             return Response(
-                {"error": "EPL withdrawal is coming soon."},
+                {
+                    "error": "Minimum conversion output is 1 TON.",
+                    "minimum_usdt": str(minimum_usdt),
+                    "estimated_ton": str(ton_amount),
+                },
                 status=400,
             )
 
-        # Wallet withdrawal is tied to the exact Purchase Profit balance
-        # shown in the frontend: locked + unlocked self-profit only.
-        available = (
-            (locked_wallet.self_profit_locked or Decimal("0"))
-            + (locked_wallet.self_profit_unlocked or Decimal("0"))
-        )
+        with transaction.atomic():
+            balance, _ = (
+                AssetBalance.objects
+                .select_for_update()
+                .get_or_create(
+                    user=user,
+                    asset="USDT",
+                )
+            )
+            available = Decimal(str(balance.profit_unlocked or 0))
 
-        if ecg_amount > available:
-            if is_ton:
-                max_ton = ecg_to_ton(available) if available > 0 else Decimal("0")
+            if source_usdt > available:
+                max_ton = (
+                    available / ton_rate
+                ).quantize(Decimal("0.000000001")) if available > 0 else Decimal("0")
                 return Response(
                     {
-                        "error": "Insufficient ECG balance for this TON withdrawal.",
-                        "required_ecg": str(ecg_amount),
-                        "available_ecg": str(available),
+                        "error": "Insufficient unlocked USDT profit.",
+                        "available_usdt": str(available),
                         "max_ton": str(max_ton),
                     },
                     status=400,
                 )
-            return Response({"error": "Insufficient withdrawable balance."}, status=400)
 
-        remaining = ecg_amount
-        # Reserve ECG only. EPL buckets must never be consumed here.
-        fields = [
-            "self_profit_unlocked",
-            "self_profit_locked",
-        ]
+            balance.profit_unlocked = available - source_usdt
+            balance.save(
+                update_fields=[
+                    "profit_unlocked",
+                    "updated_at",
+                ]
+            )
 
-        breakdown = {}
-        for field in fields:
-            value = getattr(locked_wallet, field)
-            used = min(value, remaining)
-            if used > 0:
-                setattr(locked_wallet, field, value - used)
-                breakdown[field] = str(used)
-                remaining -= used
-            if remaining <= 0:
-                break
+            breakdown = {
+                "source_asset": "USDT",
+                "profit_unlocked": str(source_usdt),
+                "usdt_debited": str(source_usdt),
+            }
 
-        locked_wallet.save(update_fields=list(breakdown.keys()) + ["updated_at"])
+            req = WithdrawRequest.objects.create(
+                user=user,
+                scope=scope,
+                asset="TON",
+                # For a USDT-source conversion amount stores USDT debited.
+                amount=source_usdt,
+                ton_amount=ton_amount,
+                destination_wallet=destination,
+                status="PENDING",
+                balance_breakdown=breakdown,
+            )
 
-        req = WithdrawRequest.objects.create(
-            user=user,
-            scope=scope,
-            asset=asset,
-            amount=ecg_amount,
-            ton_amount=ton_amount,
-            destination_wallet=destination,
-            status="PENDING",
-            balance_breakdown=breakdown,
-        )
+            Ledger.objects.create(
+                user=user,
+                typ="WITHDRAW",
+                amount=-source_usdt,
+                meta={
+                    "withdraw_id": req.id,
+                    "source_asset": "USDT",
+                    "asset": "TON",
+                    "status": "PENDING",
+                    "usdt_debited": str(source_usdt),
+                    "requested_ton": str(ton_amount),
+                    "destination": destination,
+                    "approval_required": True,
+                },
+            )
 
-        Ledger.objects.create(
-            user=user,
-            typ="WITHDRAW",
-            amount=-ecg_amount,
-            meta={
-                "withdraw_id": req.id,
-                "asset": asset,
-                "status": "PENDING",
-                "requested_amount": str(ton_amount if is_ton else ecg_amount),
-                "requested_ton": str(ton_amount) if is_ton else None,
+    else:
+        # ECG source keeps the old ECG / TON output choices, but LOCKED
+        # self-profit is no longer spendable before the 30-day unlock.
+        if is_ton:
+            if requested_amount < Decimal("1"):
+                return Response({"error": "Minimum TON withdrawal is 1 TON."}, status=400)
+
+            ecg_amount = (
+                requested_amount * ton_rate * ECG_PER_USD
+            ).quantize(Decimal("0.000001"), rounding=ROUND_UP)
+            ton_amount = requested_amount.quantize(Decimal("0.000000001"))
+        else:
+            if requested_amount < Decimal("60"):
+                return Response({"error": "Minimum withdrawal is 60 ECG."}, status=400)
+
+            ecg_amount = requested_amount.quantize(Decimal("0.000001"))
+            ton_amount = Decimal("0")
+
+        with transaction.atomic():
+            locked_wallet = Wallet.objects.select_for_update().get(user=user)
+            available = Decimal(str(locked_wallet.self_profit_unlocked or 0))
+
+            if ecg_amount > available:
+                if is_ton:
+                    max_ton = ecg_to_ton(available) if available > 0 else Decimal("0")
+                    return Response(
+                        {
+                            "error": "Insufficient unlocked ECG purchase profit for this TON withdrawal.",
+                            "required_ecg": str(ecg_amount),
+                            "available_ecg": str(available),
+                            "max_ton": str(max_ton),
+                        },
+                        status=400,
+                    )
+                return Response(
+                    {"error": "Insufficient unlocked ECG purchase profit."},
+                    status=400,
+                )
+
+            locked_wallet.self_profit_unlocked = available - ecg_amount
+            locked_wallet.save(
+                update_fields=[
+                    "self_profit_unlocked",
+                    "updated_at",
+                ]
+            )
+
+            breakdown = {
+                "source_asset": "ECG",
+                "self_profit_unlocked": str(ecg_amount),
                 "ecg_debited": str(ecg_amount),
-                "destination": destination,
-                "approval_required": True,
-            },
-        )
+            }
+
+            req = WithdrawRequest.objects.create(
+                user=user,
+                scope="ALL_WITHDRAWABLE",
+                asset=asset,
+                amount=ecg_amount,
+                ton_amount=ton_amount,
+                destination_wallet=destination,
+                status="PENDING",
+                balance_breakdown=breakdown,
+            )
+
+            Ledger.objects.create(
+                user=user,
+                typ="WITHDRAW",
+                amount=-ecg_amount,
+                meta={
+                    "withdraw_id": req.id,
+                    "source_asset": "ECG",
+                    "asset": asset,
+                    "status": "PENDING",
+                    "requested_amount": str(ton_amount if is_ton else ecg_amount),
+                    "requested_ton": str(ton_amount) if is_ton else None,
+                    "ecg_debited": str(ecg_amount),
+                    "destination": destination,
+                    "approval_required": True,
+                },
+            )
 
     payload = serialize_withdraw(req)
     payload.update({
@@ -1205,13 +1331,18 @@ def serialize_withdraw(item):
         else raw_status
     )
 
+    breakdown = item.balance_breakdown or {}
+    source_asset = str(breakdown.get("source_asset") or "ECG").upper()
+    is_usdt_source = source_asset == "USDT"
+
     return {
         "id": item.id,
         "asset": "TON" if is_ton else item.asset,
         "raw_asset": item.asset,
-        # amount is the ECG amount reserved/debited from the internal wallet.
+        "source_asset": source_asset,
         "amount": str(item.amount),
-        "ecg_debited": str(item.amount),
+        "ecg_debited": "0" if is_usdt_source else str(item.amount),
+        "usdt_debited": str(item.amount) if is_usdt_source else "0",
         "ton_amount": str(item.ton_amount),
         "requested_amount": str(item.ton_amount if is_ton else item.amount),
         "requested_asset": "TON" if is_ton else "ECG",
@@ -1433,13 +1564,21 @@ def admin_complete_withdraw(request, withdraw_id):
         req.save(update_fields=update_fields)
 
         locked_wallet = Wallet.objects.select_for_update().get(user=req.user)
-        locked_wallet.total_withdrawn = (
-            (locked_wallet.total_withdrawn or Decimal("0")) + req.amount
-        )
+        breakdown = req.balance_breakdown or {}
+        source_asset = str(breakdown.get("source_asset") or "ECG").upper()
+
+        # Wallet.total_withdrawn is historically ECG-denominated. Do not mix
+        # USDT amounts into that field. USDT completion is still tracked by
+        # WithdrawRequest + Ledger.
+        update_fields = ["last_withdraw_at", "updated_at"]
+        if source_asset != "USDT":
+            locked_wallet.total_withdrawn = (
+                (locked_wallet.total_withdrawn or Decimal("0")) + req.amount
+            )
+            update_fields.insert(0, "total_withdrawn")
+
         locked_wallet.last_withdraw_at = req.completed_at
-        locked_wallet.save(
-            update_fields=["total_withdrawn", "last_withdraw_at", "updated_at"]
-        )
+        locked_wallet.save(update_fields=update_fields)
 
         ledger = (
             Ledger.objects
