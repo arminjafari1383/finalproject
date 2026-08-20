@@ -410,37 +410,26 @@ class WithdrawRequest(models.Model):
         return f"{self.user.wallet_address[:8]} - {self.amount} {self.asset}"
 
 class ReferralLevel(models.Model):
-    """
-    سطح بندی سیستم رفرال
-    """
 
-    level = models.PositiveIntegerField(
-        unique=True
+    user = models.OneToOneField(
+        AppUser,
+        on_delete=models.CASCADE,
+        related_name="referral_level"
     )
 
-    percentage = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        default=0
-    )
+    level_1_count = models.PositiveIntegerField(default=0)
+    level_2_count = models.PositiveIntegerField(default=0)
+    level_3_count = models.PositiveIntegerField(default=0)
+    level_4_count = models.PositiveIntegerField(default=0)
+    level_5_count = models.PositiveIntegerField(default=0)
 
-    title = models.CharField(
-        max_length=100,
-        default=""
-    )
+    level_1_users = models.JSONField(default=list, blank=True)
+    level_2_users = models.JSONField(default=list, blank=True)
+    level_3_users = models.JSONField(default=list, blank=True)
+    level_4_users = models.JSONField(default=list, blank=True)
+    level_5_users = models.JSONField(default=list, blank=True)
 
-    is_active = models.BooleanField(
-        default=True
-    )
-
-    created_at = models.DateTimeField(
-        auto_now_add=True
-    )
-
-
-    class Meta:
-        ordering = ["level"]
-
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"Level {self.level} - {self.percentage}%"
+        return f"{self.user.wallet_address} referral"
