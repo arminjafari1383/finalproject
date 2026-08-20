@@ -2050,13 +2050,31 @@ def get_referral_levels(request):
                     or telegram_id
                 )
 
+            # Referral purchase profit is stored per asset in ReferralLevel JSON.
+            # Older rows may only have the legacy ``profit`` field, which was ECG.
+            legacy_profit = item.get("profit", 0) or 0
+            profit_asset = str(item.get("profit_asset", "ECG") or "ECG").upper()
+
+            profit_ecg = item.get("profit_ecg")
+            if profit_ecg is None:
+                profit_ecg = 0 if profit_asset == "USDT" else legacy_profit
+
+            profit_usdt = item.get("profit_usdt")
+            if profit_usdt is None:
+                profit_usdt = legacy_profit if profit_asset == "USDT" else 0
+
             result.append({
                 "telegram_id": telegram_id,
                 "telegram_username": username,
                 "telegram_photo_url": photo_url,
                 "wallet": wallet,
                 "investment": item.get("investment", 0),
-                "profit": item.get("profit", 0),
+                # Keep legacy field for older frontends.
+                "profit": legacy_profit,
+                # IMPORTANT: expose both real asset fields to Referral Tree UI.
+                "profit_ecg": profit_ecg,
+                "profit_usdt": profit_usdt,
+                "profit_asset": profit_asset,
                 "referral_bonus": item.get("referral_bonus", 0),
             })
 
