@@ -2980,6 +2980,60 @@ const [totalRewards, setTotalRewards] =
           </span>
 
         </button>
+                {/* =====================================================
+            REFERRAL RANKING
+        ===================================================== */}
+
+        <section className="glass-card referral-ranking">
+
+          <div className="referral-title">
+            Referral Ranking
+          </div>
+
+          {[
+            { rank:1, username:"Username", reward:"1000" },
+            { rank:2, username:"Username", reward:"500" },
+            { rank:3, username:"Username", reward:"500" },
+            { rank:4, username:"Username", reward:"500" },
+            { rank:5, username:"Username", reward:"500" },
+          ].map((user)=>(
+
+            <div className="referral-item" key={user.rank}>
+
+              <div className="rank-number">
+                {user.rank}
+              </div>
+
+              <div className="person-icon">
+                👤
+              </div>
+
+              <div className="username">
+                {user.username}
+              </div>
+
+              <div className="arrow">
+                →
+              </div>
+
+              <div className="epl-value">
+                {user.reward} EPL
+              </div>
+
+            </div>
+
+          ))}
+
+        </section>
+
+
+        {/* MESSAGE */}
+
+        {message && (
+          <p className="server-message">
+            {message}
+          </p>
+        )}
 
 
       </nav>
