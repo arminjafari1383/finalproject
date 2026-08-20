@@ -5,6 +5,7 @@ from django.db.models import F, Sum
 import requests
 import uuid
 import logging
+from datetime import timedelta
 
 from .models import (
     AppUser,
@@ -38,7 +39,7 @@ COINGECKO_URL = (
     "https://api.coingecko.com/api/v3/simple/price"
     "?ids=the-open-network&vs_currencies=usd"
 )
-
+LOCK_DAYS = 30
 
 # ============================================================
 # Wallet helper
@@ -1108,88 +1109,96 @@ def update_level_profit(
 
 @transaction.atomic
 def release_matured_purchase_profits(user: AppUser):
-    """
-    Release TON-purchase 5% self profit after self_profit_unlock_at.
-    ECG -> Wallet.self_profit_unlocked
-    USDT -> AssetBalance(USDT).profit_unlocked
-    """
-    now = timezone.now()
-    released = {"ECG": Decimal("0"), "USDT": Decimal("0")}
 
-    matured = (
+    now = timezone.now()
+
+    released = {
+        "ECG": Decimal("0"),
+        "USDT": Decimal("0")
+    }
+
+    purchases = (
         Purchase.objects
         .select_for_update()
         .filter(
             user=user,
             self_profit_unlock_at__isnull=False,
-            self_profit_unlock_at__lte=now,
+            self_profit_unlock_at__lte=now
         )
-        .order_by("id")
     )
 
-    for purchase in matured:
-        invoice_no = str(purchase.invoice_no)
+
+    wallet = (
+        Wallet.objects
+        .select_for_update()
+        .get(user=user)
+    )
+
+
+    for purchase in purchases:
+
+        invoice = str(purchase.invoice_no)
+
+
         if Ledger.objects.filter(
             user=user,
             typ="SELF_PROFIT_UNLOCK",
-            meta__invoice=invoice_no,
+            meta__invoice=invoice
         ).exists():
             continue
 
-        amount = Decimal(str(purchase.self_profit_5 or 0))
+
+        amount = Decimal(
+            str(purchase.self_profit_5 or 0)
+        )
+
+
         if amount <= 0:
             continue
 
+
         asset = str(
-            purchase.profit_asset or purchase.output_asset or "ECG"
+            purchase.profit_asset or "ECG"
         ).upper()
-        if asset not in {"ECG", "USDT"}:
-            asset = "ECG"
+
 
         if asset == "USDT":
-            balance, _ = (
-                AssetBalance.objects
-                .select_for_update()
-                .get_or_create(user=user, asset="USDT")
-            )
-            locked = Decimal(str(balance.profit_locked or 0))
-            if locked < amount:
-                logger.warning(
-                    "[SELF_UNLOCK] insufficient USDT locked invoice=%s required=%s locked=%s",
-                    invoice_no, amount, locked,
-                )
-                continue
-            balance.profit_locked = locked - amount
-            balance.profit_unlocked = Decimal(str(balance.profit_unlocked or 0)) + amount
-            balance.save(update_fields=["profit_locked", "profit_unlocked", "updated_at"])
+
+            wallet.usdt_self_locked -= amount
+            wallet.usdt_self_unlocked += amount
+
+            released["USDT"] += amount
+
+
         else:
-            wallet = Wallet.objects.select_for_update().get(user=user)
-            locked = Decimal(str(wallet.self_profit_locked or 0))
-            if locked < amount:
-                logger.warning(
-                    "[SELF_UNLOCK] insufficient ECG locked invoice=%s required=%s locked=%s",
-                    invoice_no, amount, locked,
-                )
-                continue
-            wallet.self_profit_locked = locked - amount
-            wallet.self_profit_unlocked = Decimal(str(wallet.self_profit_unlocked or 0)) + amount
-            wallet.save(update_fields=["self_profit_locked", "self_profit_unlocked", "updated_at"])
+
+            wallet.ecg_self_locked -= amount
+            wallet.ecg_self_unlocked += amount
+
+            released["ECG"] += amount
+
+
 
         Ledger.objects.create(
             user=user,
             typ="SELF_PROFIT_UNLOCK",
             amount=amount,
             meta={
-                "invoice": invoice_no,
+                "invoice": invoice,
                 "asset": asset,
-                "unlock_at": purchase.self_profit_unlock_at.isoformat(),
-            },
+                "unlock_at":
+                    purchase.self_profit_unlock_at.isoformat()
+            }
         )
-        released[asset] += amount
-
-    return {"ECG": str(released["ECG"]), "USDT": str(released["USDT"])}
 
 
+    wallet.save()
+
+
+    return {
+        "ECG": str(released["ECG"]),
+        "USDT": str(released["USDT"])
+    }
 # ============================================================
 # Direct upline 5% purchase bonus
 # ============================================================
@@ -1247,8 +1256,8 @@ def credit_direct_upline_purchase_bonus(
         wallet = Wallet.objects.select_for_update().get(user=inviter)
         before = Decimal(str(wallet.downline_profit_instant or 0))
         after = before + bonus
-        wallet.downline_profit_instant = after
-        wallet.save(update_fields=["downline_profit_instant", "updated_at"])
+        wallet.ecg_referral_profit = after
+        wallet.save(update_fields=["ecg_referral_profit", "updated_at"])
 
     Ledger.objects.create(
         user=inviter,
@@ -1344,8 +1353,8 @@ def credit_indirect_upline_purchase_bonuses(
             wallet = Wallet.objects.select_for_update().get(user=current)
             before = Decimal(str(wallet.downline_profit_instant or 0))
             after = before + bonus
-            wallet.downline_profit_instant = after
-            wallet.save(update_fields=["downline_profit_instant", "updated_at"])
+            wallet.ecg_referral_profit = after
+            wallet.save(update_fields=["ecg_referral_profit", "updated_at"])
 
         Ledger.objects.create(
             user=current,
@@ -1613,7 +1622,7 @@ def register_purchase(
                     + output_amount
                 ),
                 self_profit_locked=(
-                    F("self_profit_locked")
+                    F("ecg_self_locked")
                     + self_bonus
                 ),
             )
@@ -1641,7 +1650,7 @@ def register_purchase(
                     + output_amount
                 ),
                 profit_locked=(
-                    F("profit_locked")
+                    F("usdt_self_locked")
                     + self_bonus
                 ),
             )

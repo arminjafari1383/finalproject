@@ -1,3 +1,4 @@
+# backend/core/views.py
 from django.conf import settings
 import time
 import logging
@@ -578,83 +579,6 @@ def connect_wallet(request):
             )
 
 
-def _usdt_profit_available_breakdown(user: AppUser, balance: AssetBalance):
-    """
-    Split the current unlocked USDT profit into two logical buckets without a
-    schema migration:
-      - SELF: matured own 5% profit (30-day lock already completed)
-      - REFERRAL: instant 5% / 1% upline profit
-
-    Older USDT withdrawals that did not record a bucket are allocated
-    referral-first, matching the historical ECG withdrawal policy. The final
-    values are clamped to AssetBalance.profit_unlocked so the two buckets can
-    never exceed the real spendable balance.
-    """
-    available = Decimal(str(balance.profit_unlocked or 0))
-
-    referral_earned = (
-        user.ledgers
-        .filter(typ="DOWNLINE_PROFIT", meta__asset="USDT")
-        .aggregate(total=Sum("amount"))["total"]
-        or Decimal("0")
-    )
-
-    self_earned = (
-        user.ledgers
-        .filter(typ="SELF_PROFIT_UNLOCK", meta__asset="USDT")
-        .aggregate(total=Sum("amount"))["total"]
-        or Decimal("0")
-    )
-
-    withdrawn_referral = Decimal("0")
-    withdrawn_self = Decimal("0")
-    withdrawn_legacy = Decimal("0")
-
-    for entry in user.ledgers.filter(typ="WITHDRAW"):
-        meta = entry.meta or {}
-        if str(meta.get("source_asset") or "").upper() != "USDT":
-            continue
-
-        debit = abs(Decimal(str(entry.amount or 0)))
-        bucket = str(meta.get("withdraw_bucket") or "").upper()
-
-        if bucket == "REFERRAL":
-            withdrawn_referral += debit
-        elif bucket == "SELF":
-            withdrawn_self += debit
-        else:
-            withdrawn_legacy += debit
-
-    referral_after_explicit = max(
-        referral_earned - withdrawn_referral,
-        Decimal("0"),
-    )
-    self_after_explicit = max(
-        self_earned - withdrawn_self,
-        Decimal("0"),
-    )
-
-    legacy_from_referral = min(withdrawn_legacy, referral_after_explicit)
-    referral_current = referral_after_explicit - legacy_from_referral
-    remaining_legacy = withdrawn_legacy - legacy_from_referral
-    self_current = max(self_after_explicit - remaining_legacy, Decimal("0"))
-
-    # Never report more than the real unlocked AssetBalance.
-    referral_current = min(referral_current, available)
-    self_current = min(self_current, max(available - referral_current, Decimal("0")))
-
-    # If old data exists without detailed ledgers, keep the real balance usable.
-    residual = available - referral_current - self_current
-    if residual > 0:
-        self_current += residual
-
-    return {
-        "self": self_current,
-        "referral": referral_current,
-        "total": available,
-    }
-
-
 @api_view(["GET"])
 def wallet_view(request, wallet_address):
     """
@@ -708,8 +632,8 @@ def wallet_view(request, wallet_address):
     # downline_profit_instant and is withdrawable immediately.
     # Do NOT include locked self profit or principal here.
     available_balance = (
-        Decimal(str(wallet.self_profit_unlocked or 0))
-        + Decimal(str(wallet.downline_profit_instant or 0))
+        Decimal(str(wallet.ecg_self_unlocked or 0))
+        + Decimal(str(wallet.ecg_referral_profit or 0))
     )
 
     # --------------------------------------------------------
@@ -764,7 +688,7 @@ def wallet_view(request, wallet_address):
     )
 
     downline_profit_current = (
-        wallet.downline_profit_instant
+        wallet.ecg_referral_profit
         or Decimal("0")
     )
 
@@ -784,7 +708,7 @@ def wallet_view(request, wallet_address):
     )
 
     self_profit_unlocked = (
-        wallet.self_profit_unlocked
+        wallet.ecg_self_unlocked
         or Decimal("0")
     )
 
@@ -807,13 +731,6 @@ def wallet_view(request, wallet_address):
         usdt_profit_locked
         + usdt_profit_unlocked
     )
-
-    usdt_available_breakdown = _usdt_profit_available_breakdown(
-        user,
-        usdt_balance,
-    )
-    usdt_self_profit_unlocked = usdt_available_breakdown["self"]
-    usdt_referral_profit_unlocked = usdt_available_breakdown["referral"]
 
     # ECG profit wallet:
     # - matured self 5% profit is unlocked after 30 days
@@ -872,12 +789,12 @@ def wallet_view(request, wallet_address):
         "referral_bonus_balance": str(referral_bonus_current),
         "referral_bonus_total": str(referral_bonus_total),
 
-        "downline_profit_instant": str(downline_profit_current),
+        "ecg_referral_profit": str(downline_profit_current),
 
         "principal_locked": str(principal_locked),
         "principal_unlocked": str(principal_unlocked),
         "self_profit_locked": str(self_profit_locked),
-        "self_profit_unlocked": str(self_profit_unlocked),
+        "ecg_self_unlocked": str(self_profit_unlocked),
         # ECG self-profit fields kept for backward compatibility.
         "purchase_profit_ecg": str(self_profit_locked + self_profit_unlocked),
         "purchase_profit_ecg_locked": str(self_profit_locked),
@@ -895,10 +812,6 @@ def wallet_view(request, wallet_address):
         "purchase_profit_usdt_locked": str(usdt_profit_locked),
         "purchase_profit_usdt_unlocked": str(usdt_profit_unlocked),
         "withdrawable_usdt_profit": str(usdt_profit_unlocked),
-        # Explicit current USDT buckets for the four Wallet cards.
-        "self_profit_usdt_locked": str(usdt_profit_locked),
-        "self_profit_usdt_unlocked": str(usdt_self_profit_unlocked),
-        "referral_profit_usdt_unlocked": str(usdt_referral_profit_unlocked),
 
         "daily_reward_unlocked": str(daily_reward_unlocked),
 
@@ -1190,10 +1103,6 @@ def request_withdraw(request):
     requested_asset = str(request.data.get("asset", "") or "").strip().upper()
     source_asset = str(request.data.get("source_asset", "ECG") or "ECG").strip().upper()
     scope = str(request.data.get("scope", "ALL_WITHDRAWABLE") or "ALL_WITHDRAWABLE")
-    withdraw_bucket = str(request.data.get("withdraw_bucket", "ALL") or "ALL").strip().upper()
-
-    if withdraw_bucket not in {"ALL", "SELF", "REFERRAL"}:
-        return Response({"error": "Invalid withdraw_bucket."}, status=400)
 
     if source_asset not in {"ECG", "USDT"}:
         return Response({"error": "Invalid source_asset."}, status=400)
@@ -1267,14 +1176,21 @@ def request_withdraw(request):
 
     if source_asset == "USDT":
         # User enters the SOURCE Tether amount. 1 USDT ~= 1 USD.
-        # There is intentionally NO 1 TON minimum anymore.
         source_usdt = requested_amount.quantize(Decimal("0.000001"))
         ton_amount = (
             source_usdt / ton_rate
         ).quantize(Decimal("0.000000001"))
 
-        if ton_amount <= 0:
-            return Response({"error": "Amount is too small to convert."}, status=400)
+        if ton_amount < Decimal("1"):
+            minimum_usdt = ton_rate.quantize(Decimal("0.000001"), rounding=ROUND_UP)
+            return Response(
+                {
+                    "error": "Minimum conversion output is 1 TON.",
+                    "minimum_usdt": str(minimum_usdt),
+                    "estimated_ton": str(ton_amount),
+                },
+                status=400,
+            )
 
         with transaction.atomic():
             balance, _ = (
@@ -1285,18 +1201,7 @@ def request_withdraw(request):
                     asset="USDT",
                 )
             )
-
-            split = _usdt_profit_available_breakdown(user, balance)
-            total_available = split["total"]
-            self_available = split["self"]
-            referral_available = split["referral"]
-
-            if withdraw_bucket == "SELF":
-                available = self_available
-            elif withdraw_bucket == "REFERRAL":
-                available = referral_available
-            else:
-                available = total_available
+            available = Decimal(str(balance.profit_unlocked or 0))
 
             if source_usdt > available:
                 max_ton = (
@@ -1304,16 +1209,14 @@ def request_withdraw(request):
                 ).quantize(Decimal("0.000000001")) if available > 0 else Decimal("0")
                 return Response(
                     {
-                        "error": f"Insufficient unlocked USDT {withdraw_bucket.lower()} profit.",
+                        "error": "Insufficient unlocked USDT profit.",
                         "available_usdt": str(available),
-                        "available_self_profit_usdt": str(self_available),
-                        "available_referral_profit_usdt": str(referral_available),
                         "max_ton": str(max_ton),
                     },
                     status=400,
                 )
 
-            balance.profit_unlocked = total_available - source_usdt
+            balance.profit_unlocked = available - source_usdt
             balance.save(
                 update_fields=[
                     "profit_unlocked",
@@ -1321,22 +1224,9 @@ def request_withdraw(request):
                 ]
             )
 
-            if withdraw_bucket == "SELF":
-                self_debit = source_usdt
-                referral_debit = Decimal("0")
-            elif withdraw_bucket == "REFERRAL":
-                self_debit = Decimal("0")
-                referral_debit = source_usdt
-            else:
-                referral_debit = min(referral_available, source_usdt)
-                self_debit = source_usdt - referral_debit
-
             breakdown = {
                 "source_asset": "USDT",
-                "withdraw_bucket": withdraw_bucket,
                 "profit_unlocked": str(source_usdt),
-                "self_profit_unlocked": str(self_debit),
-                "referral_profit_unlocked": str(referral_debit),
                 "usdt_debited": str(source_usdt),
             }
 
@@ -1359,12 +1249,9 @@ def request_withdraw(request):
                 meta={
                     "withdraw_id": req.id,
                     "source_asset": "USDT",
-                    "withdraw_bucket": withdraw_bucket,
                     "asset": "TON",
                     "status": "PENDING",
                     "usdt_debited": str(source_usdt),
-                    "self_profit_debited": str(self_debit),
-                    "referral_profit_debited": str(referral_debit),
                     "requested_ton": str(ton_amount),
                     "destination": destination,
                     "approval_required": True,
@@ -1376,14 +1263,17 @@ def request_withdraw(request):
         # Locked self-profit is not spendable before the 30-day unlock, while
         # referral purchase profit is immediately spendable.
         if is_ton:
-            # No 1 TON minimum. Any positive TON amount backed by unlocked ECG
-            # can be requested.
+            if requested_amount < Decimal("1"):
+                return Response({"error": "Minimum TON withdrawal is 1 TON."}, status=400)
+
             ecg_amount = (
                 requested_amount * ton_rate * ECG_PER_USD
             ).quantize(Decimal("0.000001"), rounding=ROUND_UP)
             ton_amount = requested_amount.quantize(Decimal("0.000000001"))
         else:
-            # No 60 ECG minimum.
+            if requested_amount < Decimal("60"):
+                return Response({"error": "Minimum withdrawal is 60 ECG."}, status=400)
+
             ecg_amount = requested_amount.quantize(Decimal("0.000001"))
             ton_amount = Decimal("0")
 
@@ -1391,18 +1281,12 @@ def request_withdraw(request):
             locked_wallet = Wallet.objects.select_for_update().get(user=user)
 
             self_unlocked = Decimal(
-                str(locked_wallet.self_profit_unlocked or 0)
+                str(locked_wallet.ecg_self_unlocked or 0)
             )
             referral_unlocked = Decimal(
-                str(locked_wallet.downline_profit_instant or 0)
+                str(locked_wallet.ecg_referral_profit or 0)
             )
-            total_available = self_unlocked + referral_unlocked
-            if withdraw_bucket == "SELF":
-                available = self_unlocked
-            elif withdraw_bucket == "REFERRAL":
-                available = referral_unlocked
-            else:
-                available = total_available
+            available = self_unlocked + referral_unlocked
 
             if ecg_amount > available:
                 if is_ton:
@@ -1428,38 +1312,31 @@ def request_withdraw(request):
                     status=400,
                 )
 
-            # Respect the selected Wallet card. ALL keeps legacy
-            # referral-first behavior.
-            if withdraw_bucket == "SELF":
-                referral_debit = Decimal("0")
-                self_debit = ecg_amount
-            elif withdraw_bucket == "REFERRAL":
-                referral_debit = ecg_amount
-                self_debit = Decimal("0")
-            else:
-                referral_debit = min(referral_unlocked, ecg_amount)
-                remaining = ecg_amount - referral_debit
-                self_debit = min(self_unlocked, remaining)
+            # Spend instant referral profit first, then matured self profit.
+            # This keeps the 30-day self-profit accounting clear and records
+            # exactly how much was consumed from each bucket.
+            referral_debit = min(referral_unlocked, ecg_amount)
+            remaining = ecg_amount - referral_debit
+            self_debit = min(self_unlocked, remaining)
 
-            locked_wallet.downline_profit_instant = (
+            locked_wallet.ecg_referral_profit = (
                 referral_unlocked - referral_debit
             )
-            locked_wallet.self_profit_unlocked = (
+            locked_wallet.ecg_self_unlocked = (
                 self_unlocked - self_debit
             )
             locked_wallet.save(
                 update_fields=[
-                    "downline_profit_instant",
-                    "self_profit_unlocked",
+                    "ecg_referral_profit",
+                    "ecg_self_unlocked",
                     "updated_at",
                 ]
             )
 
             breakdown = {
                 "source_asset": "ECG",
-                "withdraw_bucket": withdraw_bucket,
-                "self_profit_unlocked": str(self_debit),
-                "downline_profit_instant": str(referral_debit),
+                "ecg_self_unlocked": str(self_debit),
+                "ecg_referral_profit": str(referral_debit),
                 "ecg_debited": str(ecg_amount),
             }
 
@@ -1481,7 +1358,6 @@ def request_withdraw(request):
                 meta={
                     "withdraw_id": req.id,
                     "source_asset": "ECG",
-                    "withdraw_bucket": withdraw_bucket,
                     "asset": asset,
                     "status": "PENDING",
                     "requested_amount": str(ton_amount if is_ton else ecg_amount),
@@ -2443,219 +2319,4 @@ def create_purchase_bnb(request):
 
     user = get_or_create_user(wallet_address, None, False)
 
-    try:
-        p = register_purchase_bnb(user, bnb_amount, str(bnb_tx_hash))
-        logger.info(f"✅ BNB Purchase created: {p.invoice_no}")
-    except Exception as e:
-        logger.error(f"❌ Error: {e}")
-        return Response({"error": str(e)}, status=400)
-
-    return Response({
-        "id": p.id,
-        "invoice_no": p.invoice_no,
-        "bnb_amount": str(p.bnb_amount),
-        "ecg_value": str(p.ecg_value),
-        "self_profit_5": str(p.self_profit_5),
-        "principal_unlock_at": p.principal_unlock_at,
-        "self_profit_unlock_at": p.self_profit_unlock_at,
-    }, status=201)
-
-
-@api_view(["GET"])
-def list_purchases_bnb(request):
-    wallet_address = request.query_params.get("wallet")
     
-    if not wallet_address:
-        return Response({"error": "wallet param required"}, status=400)
-
-    user = AppUser.objects.filter(wallet_address=wallet_address).first()
-    if not user:
-        return Response([], status=status.HTTP_200_OK)
-
-    qs = user.purchases_bnb.all().order_by("-created_at")
-
-    return Response([{
-        "id": p.id,
-        "invoice_no": p.invoice_no,
-        "bnb_amount": str(p.bnb_amount),
-        "ecg_value": str(p.ecg_value),
-        "self_profit_5": str(p.self_profit_5),
-        "principal_unlock_at": p.principal_unlock_at,
-        "self_profit_unlock_at": p.self_profit_unlock_at,
-        "bnb_tx_hash": p.bnb_tx_hash,
-    } for p in qs])
-
-@api_view(["POST"])
-def create_ton_transaction(request):
-    """
-    Build the TON Connect transaction payload.
-
-    Merchant address always comes from GRAM_MERCHANT_ADDRESS on the backend.
-    The connected wallet address and network are bound into the TON Connect
-    request when provided.
-    """
-    logger.info("=" * 60)
-    logger.info("💎 CREATE_GRAM_TRANSACTION CALLED")
-    logger.info("📥 Request data: %s", request.data)
-
-    raw_amount = request.data.get("amount")
-
-    wallet_address = str(
-        request.data.get("wallet_address", "")
-    ).strip()
-
-    network = str(
-        request.data.get("network", "-239")
-    ).strip()
-
-    if raw_amount in (None, ""):
-        logger.error("❌ amount required")
-
-        return Response(
-            {"error": "amount required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    try:
-        amount_int = int(
-            str(raw_amount)
-        )
-
-        if amount_int <= 0:
-            raise ValueError(
-                "amount must be greater than zero"
-            )
-
-    except (TypeError, ValueError):
-        logger.error(
-            "❌ invalid amount: %r",
-            raw_amount,
-        )
-
-        return Response(
-            {
-                "error":
-                    "amount must be a positive integer in nanoTON"
-            },
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if network not in {"-239", "-3"}:
-        return Response(
-            {"error": "Invalid TON network"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    gram_address = str(
-        getattr(
-            settings,
-            "GRAM_MERCHANT_ADDRESS",
-            "",
-        ) or ""
-    ).strip()
-
-    if not gram_address:
-        logger.error(
-            "❌ GRAM_MERCHANT_ADDRESS is not configured"
-        )
-
-        return Response(
-            {
-                "error":
-                    "GRAM_MERCHANT_ADDRESS is not configured",
-                "gram_address": "",
-            },
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        )
-
-    # TON Connect requires messages[].address to be a valid TEP-2
-    # user-friendly address (48-char base64/base64url representation).
-    # Validate it on the backend so a malformed env value never reaches
-    # tonConnectUI.sendTransaction().
-    try:
-        _ton_address_to_raw(gram_address)
-    except ValueError as exc:
-        logger.error(
-            "❌ Invalid GRAM_MERCHANT_ADDRESS=%r: %s",
-            gram_address,
-            exc,
-        )
-        return Response(
-            {
-                "error": "Invalid GRAM_MERCHANT_ADDRESS configuration",
-                "detail": str(exc),
-                "gram_address": gram_address,
-            },
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        )
-
-    gram_amount = str(
-        amount_int
-    )
-
-    transaction_data = {
-        "validUntil":
-            int(time.time()) + 600,
-
-        # TON Connect recommends explicitly binding the network.
-        "network":
-            network,
-
-        "messages": [
-            {
-                # TON Connect protocol field must stay named "address".
-                "address":
-                    gram_address,
-
-                "amount":
-                    gram_amount,
-            }
-        ],
-    }
-
-    if wallet_address:
-        transaction_data["from"] = wallet_address
-
-    gram_amount_ton = str(
-        Decimal(gram_amount)
-        / Decimal("1000000000")
-    )
-
-    logger.info(
-        "✅ GRAM merchant address: %s",
-        gram_address,
-    )
-
-    logger.info(
-        "✅ GRAM amount nanoTON: %s",
-        gram_amount,
-    )
-
-    logger.info(
-        "✅ GRAM amount TON: %s",
-        gram_amount_ton,
-    )
-
-    logger.info(
-        "✅ TON Connect network: %s",
-        network,
-    )
-
-    logger.info("=" * 60)
-
-    return Response(
-        {
-            "transaction":
-                transaction_data,
-
-            "gram_address":
-                gram_address,
-
-            "gram_amount":
-                gram_amount,
-
-            "gram_amount_ton":
-                gram_amount_ton,
-        },
-        status=status.HTTP_200_OK,
-    )

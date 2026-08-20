@@ -242,10 +242,7 @@ export default function Wallet() {
   // Which profit bucket opened the modal:
   // SELF = user's own 5% after the 30-day lock
   // REFERRAL = instant 5% / 1% upline profit
-  const [
-    withdrawBucket,
-    setWithdrawBucket,
-  ] = useState("ALL");
+  const [withdrawBucket, setWithdrawBucket] = useState("ECG_SELF");
 
   const [
     destinationWallet,
@@ -645,14 +642,43 @@ export default function Wallet() {
           }
 
 
-          const r =
-            await api.get(
-              `/wallet/${address}/`
-            );
+          setWallet((prev) => {
+  if (!prev) return prev;
 
-          setWallet(
-            r.data
-          );
+  const value = Number(amount);
+
+  if (withdrawAsset === "ECG") {
+    return {
+      ...prev,
+      ecg_balance: Math.max(
+        0,
+        Number(prev.ecg_balance || 0) - value
+      ),
+    };
+  }
+
+  if (withdrawAsset === "EPL") {
+    return {
+      ...prev,
+      epl_balance: Math.max(
+        0,
+        Number(prev.epl_balance || 0) - value
+      ),
+    };
+  }
+
+  if (withdrawAsset === "USDT") {
+    return {
+      ...prev,
+      usdt_balance: Math.max(
+        0,
+        Number(prev.usdt_balance || 0) - value
+      ),
+    };
+  }
+
+  return prev;
+});
 
           setErrorType(
             "none"
@@ -1271,7 +1297,7 @@ export default function Wallet() {
   // 2) referral 5% / 1% profit -> instantly withdrawable
   const referralProfitEcgUnlocked = Number(
     wallet?.referral_profit_ecg_unlocked ??
-    wallet?.downline_profit_instant ??
+    wallet?.ecg_referral_profit ??
     0
   );
 
@@ -1283,7 +1309,7 @@ export default function Wallet() {
 
   const selfProfitUnlocked = Number(
     wallet?.purchase_profit_ecg_unlocked ??
-    wallet?.self_profit_unlocked ??
+    wallet?.ecg_self_unlocked ??
     0
   );
 
@@ -1293,8 +1319,8 @@ export default function Wallet() {
         wallet?.total_ecg_profit ??
         (
           Number(wallet?.self_profit_locked || 0) +
-          Number(wallet?.self_profit_unlocked || 0) +
-          Number(wallet?.downline_profit_instant || 0)
+          Number(wallet?.ecg_self_unlocked || 0) +
+          Number(wallet?.ecg_referral_profit || 0)
         )
       ),
     [wallet]
@@ -2593,7 +2619,7 @@ marginTop: 14,
                       ? "Request TON Withdrawal"
                       : "Request ECG Withdrawal"}
 
-              </button><br /><br /><br /><br /><br /><br />
+              </button><br /><br /><br /><br />
 
             </div>
 

@@ -1,5 +1,5 @@
 # backend/core/models.py
-
+from decimal import Decimal
 from django.db import models
 from django.utils import timezone
 from django.db.models import F
@@ -44,34 +44,121 @@ class AppUser(models.Model):
         return f"{self.telegram_id} - {self.wallet_address[:8]}..."
     
 class Wallet(models.Model):
-    user = models.OneToOneField(AppUser, on_delete=models.CASCADE, related_name="wallet")
 
-    referral_bonus = models.DecimalField(max_digits=24, decimal_places=6, default=0)
-    daily_reward_locked = models.DecimalField(max_digits=24, decimal_places=6, default=0)
-    daily_reward_unlocked = models.DecimalField(max_digits=24, decimal_places=6, default=0)
-    downline_profit_instant = models.DecimalField(max_digits=24, decimal_places=6, default=0)
-    self_profit_locked = models.DecimalField(max_digits=24, decimal_places=6, default=0)
-    self_profit_unlocked = models.DecimalField(max_digits=24, decimal_places=6, default=0)
-    principal_locked = models.DecimalField(max_digits=24, decimal_places=6, default=0)
-    principal_unlocked = models.DecimalField(max_digits=24, decimal_places=6, default=0)
+    user = models.OneToOneField(
+        "AppUser",
+        on_delete=models.CASCADE,
+        related_name="wallet"
+    )
 
-    updated_at = models.DateTimeField(auto_now=True)
-    level_profits = models.JSONField(default=dict)
-    total_deposited = models.DecimalField(max_digits=24, decimal_places=6, default=0)
-    total_withdrawn = models.DecimalField(max_digits=24, decimal_places=6, default=0)
-    last_withdraw_at = models.DateTimeField(null=True, blank=True)
 
-    def withdrawable_total(self):
-        # Only ECG originating from stake can be withdrawn.
-        # FLOWER buckets (referral/hourly/uni-level rewards) stay separate.
-        return (
-            self.self_profit_unlocked
-            + self.principal_unlocked
-        )
+    # ==================================
+    # ECG BALANCE
+    # ==================================
+
+    # سود خرید خود کاربر - قفل 30 روزه
+    ecg_self_locked = models.DecimalField(
+        max_digits=24,
+        decimal_places=8,
+        default=Decimal("0")
+    )
+
+    # سود خرید خود کاربر - آزاد شده
+    ecg_self_unlocked = models.DecimalField(
+        max_digits=24,
+        decimal_places=8,
+        default=Decimal("0")
+    )
+
+    # سود بالاسری ECG (لحظه ای)
+    ecg_referral_profit = models.DecimalField(
+        max_digits=24,
+        decimal_places=8,
+        default=Decimal("0")
+    )
+
+
+    # ==================================
+    # USDT BALANCE
+    # ==================================
+
+    # سود خرید خود کاربر - قفل 30 روزه
+    usdt_self_locked = models.DecimalField(
+        max_digits=24,
+        decimal_places=8,
+        default=Decimal("0")
+    )
+
+
+    # سود خرید خود کاربر - آزاد شده
+    usdt_self_unlocked = models.DecimalField(
+        max_digits=24,
+        decimal_places=8,
+        default=Decimal("0")
+    )
+
+
+    # سود بالاسری USDT
+    usdt_referral_profit = models.DecimalField(
+        max_digits=24,
+        decimal_places=8,
+        default=Decimal("0")
+    )
+
+
+    # ==================================
+    # EPL TIMER ONLY
+    # ==================================
+
+    # موجودی Timer
+    epl_balance = models.DecimalField(
+        max_digits=24,
+        decimal_places=8,
+        default=Decimal("0")
+    )
+
+
+    # کل EPL گرفته شده
+    epl_total_earned = models.DecimalField(
+        max_digits=24,
+        decimal_places=8,
+        default=Decimal("0")
+    )
+
+
+    created_at = models.DateTimeField(
+        auto_now_add=True
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True
+    )
+
 
     def __str__(self):
-        return f"Wallet: {self.user.wallet_address[:8]}..."
+        return f"{self.user} wallet"
 
+
+
+    # فقط ECG قابل برداشت
+    def available_ecg(self):
+
+        return (
+            self.ecg_self_unlocked
+            +
+            self.ecg_referral_profit
+        )
+
+
+
+    # فقط USDT قابل برداشت
+    def available_usdt(self):
+
+        return (
+            self.usdt_self_unlocked
+            +
+            self.usdt_referral_profit
+        )
 class AssetBalance(models.Model):
     ASSET_CHOICES = [
         ("USDT", "USDT"),
@@ -204,91 +291,3 @@ class PurchaseUSDT(models.Model):
 
     principal_unlock_at = models.DateTimeField()
     self_profit_unlock_at = models.DateTimeField()
-
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"USDT: {self.invoice_no} - {self.usdt_amount} USDT"
-
-
-class PurchaseBNB(models.Model):
-    """خرید ECG با BNB (BEP-20)"""
-    user = models.ForeignKey(AppUser, on_delete=models.CASCADE, related_name="purchases_bnb")
-    invoice_no = models.CharField(max_length=32, unique=True)
-
-    bnb_amount = models.DecimalField(max_digits=24, decimal_places=6)
-    bnb_tx_hash = models.CharField(max_length=256, unique=True)
-
-    bnb_usd_rate = models.DecimalField(max_digits=24, decimal_places=6)
-    usd_value = models.DecimalField(max_digits=24, decimal_places=6)
-
-    ecg_value = models.DecimalField(max_digits=24, decimal_places=6)
-    self_profit_5 = models.DecimalField(max_digits=24, decimal_places=6)
-
-    principal_unlock_at = models.DateTimeField()
-    self_profit_unlock_at = models.DateTimeField()
-
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"BNB: {self.invoice_no} - {self.bnb_amount} BNB"
-
-
-class WithdrawRequest(models.Model):
-    STATUS = [
-        ("PENDING", "Pending"),
-        ("SUCCESS", "Success"),
-        ("FAILED", "Failed"),
-    ]
-    SCOPE = [
-        ("DOWNLINE_ONLY", "Downline only"),
-        ("ALL_WITHDRAWABLE", "All withdrawable"),
-        ]
-
-    ASSET = [
-        ("TON","TON"),
-        ("ECG","ECG"),
-    ]
-
-
-
-
-    user = models.ForeignKey(AppUser, on_delete=models.CASCADE, related_name="withdraws")
-    scope = models.CharField(max_length=32, choices=SCOPE,default="ALL_WITHDRAWABLE",)
-    asset = models.CharField(max_length=8,choices=ASSET,default="TON")
-    amount = models.DecimalField(max_digits=24, decimal_places=6)
-    ton_amount = models.DecimalField(max_digits=24, decimal_places=9, default=0)
-    destination_wallet = models.CharField(max_length=128)
-    tx_hash = models.CharField(max_length=256, blank=True, default="")
-    fail_reason = models.TextField(blank=True, default="")
-    balance_breakdown = models.JSONField(default=dict,blank=True)
-    status = models.CharField(max_length=16, choices=STATUS, default="PENDING")
-    created_at = models.DateTimeField(auto_now_add=True)
-    completed_at = models.DateTimeField(null=True,blank=True)
-
-    def __str__(self):
-        return f"{self.status} - {self.amount} ECG ->{self.asset}"
-
-
-class ReferralLevel(models.Model):
-    user = models.OneToOneField(AppUser, on_delete=models.CASCADE, related_name='referral_level')
-
-    level_1_count = models.IntegerField(default=0)
-    level_2_count = models.IntegerField(default=0)
-    level_3_count = models.IntegerField(default=0)
-    level_4_count = models.IntegerField(default=0)
-    level_5_count = models.IntegerField(default=0)
-
-    # ==========================================
-    # ✅ ذخیره اطلاعات کامل کاربران
-    # ==========================================
-    level_1_users = models.JSONField(default=list, blank=True)
-    level_2_users = models.JSONField(default=list, blank=True)
-    level_3_users = models.JSONField(default=list, blank=True)
-    level_4_users = models.JSONField(default=list, blank=True)
-    level_5_users = models.JSONField(default=list, blank=True)
-
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return f"{self.user.wallet_address[:8]}... - Levels"
