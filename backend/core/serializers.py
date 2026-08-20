@@ -7,19 +7,29 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ["id", "wallet_address", "referral_code", "inviter"]
 
 class WalletSerializer(serializers.ModelSerializer):
+
     withdrawable_total = serializers.SerializerMethodField()
+
     class Meta:
         model = Wallet
         fields = [
-            "referral_bonus",
-            "daily_reward_locked", "daily_reward_unlocked",
-            "downline_profit_instant",
-            "self_profit_locked", "self_profit_unlocked",
-            "principal_locked", "principal_unlocked",
+            "ecg_referral_profit",
+
+            "ecg_self_locked",
+            "ecg_self_unlocked",
+
+            "usdt_referral_profit",
+            "usdt_self_locked",
+            "usdt_self_unlocked",
+
+            "epl_balance",
+            "epl_total_earned",
+
             "withdrawable_total",
         ]
+
     def get_withdrawable_total(self, obj):
-        return obj.withdrawable_total()
+        return obj.available_ecg()
 
 class PurchaseSerializer(serializers.ModelSerializer):
     class Meta:
