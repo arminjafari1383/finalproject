@@ -2727,6 +2727,110 @@ const [totalRewards, setTotalRewards] =
 
 
         {/* =====================================================
+    REFERRAL MINING SAMPLE
+===================================================== */}
+
+<section
+  className="glass-card"
+  style={{
+    marginTop: 18,
+    padding: 16,
+    borderRadius: 20,
+  }}
+>
+
+  <div
+    style={{
+      fontSize: 13,
+      fontWeight: 900,
+      marginBottom: 14,
+      color: "#00d9ff",
+      letterSpacing: "0.08em",
+    }}
+  >
+    👥 REFERRAL MINING
+  </div>
+
+
+  {[
+    ["Username", "1000 EPL"],
+    ["Username", "500 EPL"],
+    ["Username", "500 EPL"],
+    ["Username", "500 EPL"],
+    ["Username", "500 EPL"],
+  ].map(([name, reward], index) => (
+
+    <div
+      key={index}
+      style={{
+        display:"flex",
+        alignItems:"center",
+        justifyContent:"space-between",
+        padding:"10px 8px",
+        borderBottom:
+          index !== 4
+            ? "1px solid rgba(255,255,255,0.08)"
+            : "none",
+      }}
+    >
+
+      <div
+        style={{
+          display:"flex",
+          alignItems:"center",
+          gap:10,
+        }}
+      >
+
+        <span
+          style={{
+            width:24,
+            height:24,
+            borderRadius:"50%",
+            border:"1px solid rgba(0,217,255,.5)",
+            display:"flex",
+            alignItems:"center",
+            justifyContent:"center",
+            fontSize:12,
+            color:"#00d9ff",
+          }}
+        >
+          {index + 1}
+        </span>
+
+
+        <span
+          style={{
+            fontSize:13,
+            opacity:.8,
+          }}
+        >
+          👤 {name}
+        </span>
+
+      </div>
+
+
+      <span
+        style={{
+          color:"#00d9ff",
+          fontWeight:900,
+          fontSize:14,
+        }}
+      >
+        → {reward}
+      </span>
+
+
+    </div>
+
+  ))}
+
+
+</section>
+
+
+        {/* =====================================================
             EPL WALLET — moved from Wallet page
         ===================================================== */}
 
