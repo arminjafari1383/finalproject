@@ -1320,3 +1320,62 @@ body {
     width: 100%;
   }
 }
+
+/* Fix withdraw modal bottom buttons hidden on mobile */
+
+.modal-backdrop {
+  align-items: flex-start;
+  overflow-y: auto;
+  padding: 20px 12px 120px;
+}
+
+.modal {
+  width: 100%;
+  max-height: calc(100dvh - 40px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal-body {
+  flex: 1;
+  overflow-y: auto;
+  max-height: none;
+  padding-bottom: 20px;
+}
+
+.modal-footer {
+  flex-shrink: 0;
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  background: #081631;
+  padding: 14px;
+  display: flex;
+  gap: 12px;
+}
+
+.modal-footer button {
+  flex: 1;
+  min-height: 50px;
+}
+
+
+@media(max-width:640px){
+
+  .modal-backdrop {
+    padding-bottom: 140px;
+  }
+
+  .modal {
+    max-height: calc(100dvh - 60px);
+  }
+
+  .modal-footer {
+    flex-direction: column;
+  }
+
+  .modal-footer button {
+    width:100%;
+  }
+}
