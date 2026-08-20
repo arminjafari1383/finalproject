@@ -1420,7 +1420,7 @@ def withdraw_history(request):
     user = AppUser.objects.filter(wallet_address=wallet_address).first()
     if not user:
         return Response([], status=200)
-    rows = user.withdraws.order_by("-created_at")[:50]
+    rows = user.withdraw_requests.order_by("-created_at")[:50]
     return Response([serialize_withdraw(row) for row in rows])
 
 
