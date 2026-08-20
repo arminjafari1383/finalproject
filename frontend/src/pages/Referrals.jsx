@@ -1783,8 +1783,8 @@ export default function Referrals() {
   ) {
     const levelProfitMessage =
       level === 1
-        ? "Direct referral: 1000 EPL join bonus + 5% stake profit in the purchase asset (ECG or USDT)."
-        : "Indirect referral: 500 EPL join bonus + 1% stake profit in the purchase asset (ECG or USDT).";
+        ? "Direct referral: 1000 EPL join bonus + 5% stake profit (ECG)."
+        : "Indirect referral: 500 EPL join bonus + 1% stake profit (ECG).";
 
     if (!data) {
       return (
@@ -1851,7 +1851,7 @@ export default function Referrals() {
               opacity: 0.8,
             }}
           >
-            ✅ Direct join bonus is 1000 EPL. Indirect Levels 2–5 receive 500 EPL per new downline. Stake profit keeps its real asset: ECG stays ECG and Tether stays USDT.
+            ✅ Direct join bonus is 1000 EPL. Indirect Levels 2–5 receive 500 EPL per new downline. Purchase profit is shown separately in ECG and USDT.
           </div>
         )}
 
@@ -1869,8 +1869,13 @@ export default function Referrals() {
                 </th>
                 <th>
                   {level === 1
-                    ? "5% Profit"
-                    : "1% Profit"}
+                    ? "5% Profit (ECG)"
+                    : "1% Profit (ECG)"}
+                </th>
+                <th>
+                  {level === 1
+                    ? "5% Profit (USDT)"
+                    : "1% Profit (USDT)"}
                 </th>
               </tr>
             </thead>
@@ -1880,7 +1885,7 @@ export default function Referrals() {
               0 ? (
                 <tr>
                   <td
-                    colSpan="5"
+                    colSpan="6"
                     className="empty-message"
                   >
                     No users in this
@@ -1919,21 +1924,42 @@ export default function Referrals() {
                         : user?.investment ||
                           0;
 
-                    const profitEcg =
+                    const legacyProfit =
+                      isString
+                        ? 0
+                        : Number(
+                            user?.profit ||
+                              0
+                          );
+
+                    const legacyProfitAsset =
+                      isString
+                        ? "ECG"
+                        : String(
+                            user?.profit_asset ||
+                              "ECG"
+                          ).toUpperCase();
+
+                    const profitECG =
                       isString
                         ? 0
                         : Number(
                             user?.profit_ecg ??
-                            user?.profit ??
-                            0
+                              (legacyProfitAsset ===
+                              "ECG"
+                                ? legacyProfit
+                                : 0)
                           );
 
-                    const profitUsdt =
+                    const profitUSDT =
                       isString
                         ? 0
                         : Number(
                             user?.profit_usdt ??
-                            0
+                              (legacyProfitAsset ===
+                              "USDT"
+                                ? legacyProfit
+                                : 0)
                           );
 
                     const referralJoinBonus =
@@ -2034,22 +2060,15 @@ export default function Referrals() {
                         </td>
 
                         <td className="profit-cell">
-                          {profitEcg > 0 && (
-                            <div>
-                              + {profitEcg.toFixed(4)} ECG
-                            </div>
-                          )}
+                          + {Number(
+                            profitECG || 0
+                          ).toFixed(4)} ECG
+                        </td>
 
-                          {profitUsdt > 0 && (
-                            <div>
-                              + {profitUsdt.toFixed(4)} USDT
-                            </div>
-                          )}
-
-                          {profitEcg <= 0 &&
-                            profitUsdt <= 0 && (
-                              <div>+ 0.0000 ECG</div>
-                            )}
+                        <td className="profit-cell">
+                          + {Number(
+                            profitUSDT || 0
+                          ).toFixed(4)} USDT
                         </td>
                       </tr>
                     );
