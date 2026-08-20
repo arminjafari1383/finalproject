@@ -676,9 +676,9 @@ def wallet_view(request, wallet_address):
 
     # Current referral balance can decrease after a withdrawal.
     referral_bonus_current = (
-        wallet.referral_bonus
-        or Decimal("0")
-    )
+    wallet.ecg_referral_profit
+    or Decimal("0")
+        )
 
     # Lifetime referral join bonus earned by the user (direct + indirect).
     # Every successful referral reward is recorded as REF_BONUS.
@@ -1773,7 +1773,7 @@ def reward_status(request):
                 user.wallet.daily_reward_unlocked or Decimal("0")
             ),
             "epl_balance": str(
-                (user.wallet.referral_bonus or Decimal("0"))
+                (user.wallet.ecg_referral_profit or Decimal('0'))
                 + (user.wallet.daily_reward_unlocked or Decimal("0"))
             ),
             "stake_balance": str(
