@@ -1276,18 +1276,13 @@ export default function Wallet() {
   // CALCULATIONS
   // ====================================================
 
-  // Total ECG Purchase Profit is displayed, but only the unlocked part can
-  // be withdrawn. The backend moves locked -> unlocked after 30 days.
-  const purchaseProfitBalance = useMemo(
-    () =>
-      Number(
-        wallet?.purchase_profit_ecg ??
-        (
-          Number(wallet?.self_profit_locked || 0) +
-          Number(wallet?.self_profit_unlocked || 0)
-        )
-      ),
-    [wallet]
+  // ECG profit has two sources:
+  // 1) user's own 5% purchase profit -> locked for 30 days
+  // 2) referral 5% / 1% profit -> instantly withdrawable
+  const referralProfitEcgUnlocked = Number(
+    wallet?.referral_profit_ecg_unlocked ??
+    wallet?.downline_profit_instant ??
+    0
   );
 
   const purchaseProfitLocked = Number(
@@ -1296,10 +1291,28 @@ export default function Wallet() {
     0
   );
 
-  const withdrawableBalance = Number(
+  const selfProfitUnlocked = Number(
     wallet?.purchase_profit_ecg_unlocked ??
     wallet?.self_profit_unlocked ??
     0
+  );
+
+  const purchaseProfitBalance = useMemo(
+    () =>
+      Number(
+        wallet?.total_ecg_profit ??
+        (
+          Number(wallet?.self_profit_locked || 0) +
+          Number(wallet?.self_profit_unlocked || 0) +
+          Number(wallet?.downline_profit_instant || 0)
+        )
+      ),
+    [wallet]
+  );
+
+  const withdrawableBalance = Number(
+    wallet?.withdrawable_ecg_profit ??
+    (selfProfitUnlocked + referralProfitEcgUnlocked)
   );
 
   const purchaseProfitUsdt = Number(
@@ -1816,11 +1829,17 @@ export default function Wallet() {
                       opacity: 0.68,
                     }}
                   >
-                    Available after unlock: {withdrawableBalance.toFixed(4)} ECG
+                    Available now: {withdrawableBalance.toFixed(4)} ECG
+                    {referralProfitEcgUnlocked > 0 && (
+                      <>
+                        {" • "}
+                        Referral instant: {referralProfitEcgUnlocked.toFixed(4)} ECG
+                      </>
+                    )}
                     {purchaseProfitLocked > 0 && (
                       <>
                         {" • "}
-                        Locked 30d: {purchaseProfitLocked.toFixed(4)} ECG
+                        Own profit locked 30d: {purchaseProfitLocked.toFixed(4)} ECG
                       </>
                     )}
                   </div>
@@ -2666,8 +2685,18 @@ export default function Wallet() {
                 </div>
               ) : withdrawAsset === "ECG" ? (
                 <div className="max-balance-info">
-                  Available after 30-day unlock:{" "}
-                  <b>{withdrawableBalance.toFixed(4)} ECG</b>
+                  <div>
+                    Available now:{" "}
+                    <b>{withdrawableBalance.toFixed(4)} ECG</b>
+                  </div>
+                  <div>
+                    Referral profit (instant):{" "}
+                    <b>{referralProfitEcgUnlocked.toFixed(4)} ECG</b>
+                  </div>
+                  <div>
+                    Own matured profit:{" "}
+                    <b>{selfProfitUnlocked.toFixed(4)} ECG</b>
+                  </div>
                 </div>
               ) : (
                 <div className="ton-info">
@@ -2675,8 +2704,11 @@ export default function Wallet() {
                     Withdrawable TON: <b>{withdrawableTon} TON</b>
                   </div>
                   <div>
-                    Based on unlocked Purchase Profit:{" "}
+                    Based on all unlocked ECG profit:{" "}
                     <b>{withdrawableBalance.toFixed(2)} ECG</b>
+                  </div>
+                  <div>
+                    Referral profit is available instantly; own 5% profit unlocks after 30 days.
                   </div>
                   <div>
                     Minimum withdrawal: <b>1 TON</b>
