@@ -1379,3 +1379,70 @@ body {
     width:100%;
   }
 }
+
+/* ==========================================================
+   FIX: Wallet withdraw modal wallet address overflow
+   ========================================================== */
+
+.modal {
+  width: 100%;
+  max-width: 460px;
+  max-height: calc(100dvh - 40px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-body {
+  overflow-x: hidden;
+  overflow-y: auto;
+  min-width: 0;
+}
+
+.modal-body input {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  height: 52px;
+  box-sizing: border-box;
+
+  border-radius: 16px;
+  border: 1px solid rgba(143, 179, 255, 0.18);
+
+  background: rgba(255, 255, 255, 0.04);
+  padding: 0 1rem;
+
+  color: #eef4ff;
+  outline: none;
+
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.modal-body input:focus {
+  border-color: rgba(118, 190, 255, 0.65);
+  box-shadow: 0 0 0 3px rgba(118, 190, 255, 0.12);
+}
+
+.wallet-address-input {
+  direction: ltr;
+  text-align: left;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.modal-footer {
+  flex-shrink: 0;
+  width: 100%;
+}
+
+@media (max-width:640px) {
+  .modal {
+    width: 100%;
+    max-height: calc(100dvh - 24px);
+  }
+
+  .modal-body input {
+    font-size: 0.82rem;
+  }
+}
