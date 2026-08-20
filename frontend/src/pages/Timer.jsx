@@ -12,6 +12,7 @@ import "./Timer.css";
 
 import Logo from "../assets/2.png";
 import Blade from "../assets/1.png";
+import eplLogo from "../assets/epl-logo.png";
 
 
 // ✅ استفاده از آدرس نسبی برای جلوگیری از مشکل CORS و Nginx
@@ -2726,111 +2727,111 @@ const [totalRewards, setTotalRewards] =
         )}
 
 
-        {/* =====================================================
-    REFERRAL MINING SAMPLE
-===================================================== */}
+        
+          {/* =====================================================
+              REFERRAL MINING SAMPLE
+          ===================================================== */}
 
-<section
-  className="glass-card"
+          <section
+            className="glass-card"
+            style={{
+              marginTop: 18,
+              padding: 16,
+              borderRadius: 20,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 13,
+                fontWeight: 900,
+                marginBottom: 14,
+                color: "#00d9ff",
+                letterSpacing: "0.08em",
+              }}
+            >
+              👥 REFERRAL MINING
+            </div>
+
+            {[
+              ["Username", "1000 EPL"],
+              ["Username", "500 EPL"],
+              ["Username", "500 EPL"],
+              ["Username", "500 EPL"],
+              ["Username", "500 EPL"],
+            ].map(([name, reward], index) => (
+              <div
+                key={index}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "10px 8px",
+                  borderBottom:
+                    index !== 4
+                      ? "1px solid rgba(255,255,255,0.08)"
+                      : "none",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 24,
+                      height: 24,
+                      borderRadius: "50%",
+                      border: "1px solid rgba(0,217,255,.5)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 12,
+                      color: "#00d9ff",
+                    }}
+                  >
+                    {index + 1}
+                  </span>
+
+                  <span
+                    style={{
+                      fontSize: 13,
+                      opacity: 0.8,
+                    }}
+                  >
+                    🏆 {level}
+                  </span>
+                </div>
+
+                <span
   style={{
-    marginTop: 18,
-    padding: 16,
-    borderRadius: 20,
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    color: "#00d9ff",
+    fontWeight: 900,
   }}
 >
+  →
+  {reward.replace(" EPL", "")}
 
-  <div
+  <img
+    src={eplLogo}
+    alt="EPL"
     style={{
-      fontSize: 13,
-      fontWeight: 900,
-      marginBottom: 14,
-      color: "#00d9ff",
-      letterSpacing: "0.08em",
+      width: "18px",
+      height: "18px",
+      objectFit: "contain",
     }}
-  >
-    👥 REFERRAL MINING
-  </div>
+  />
+</span>
+              </div>
+            ))}
+          </section>
 
-
-  {[
-    ["Username", "1000 EPL"],
-    ["Username", "500 EPL"],
-    ["Username", "500 EPL"],
-    ["Username", "500 EPL"],
-    ["Username", "500 EPL"],
-  ].map(([name, reward], index) => (
-
-    <div
-      key={index}
-      style={{
-        display:"flex",
-        alignItems:"center",
-        justifyContent:"space-between",
-        padding:"10px 8px",
-        borderBottom:
-          index !== 4
-            ? "1px solid rgba(255,255,255,0.08)"
-            : "none",
-      }}
-    >
-
-      <div
-        style={{
-          display:"flex",
-          alignItems:"center",
-          gap:10,
-        }}
-      >
-
-        <span
-          style={{
-            width:24,
-            height:24,
-            borderRadius:"50%",
-            border:"1px solid rgba(0,217,255,.5)",
-            display:"flex",
-            alignItems:"center",
-            justifyContent:"center",
-            fontSize:12,
-            color:"#00d9ff",
-          }}
-        >
-          {index + 1}
-        </span>
-
-
-        <span
-          style={{
-            fontSize:13,
-            opacity:.8,
-          }}
-        >
-          👤 {name}
-        </span>
-
-      </div>
-
-
-      <span
-        style={{
-          color:"#00d9ff",
-          fontWeight:900,
-          fontSize:14,
-        }}
-      >
-        → {reward}
-      </span>
-
-
-    </div>
-
-  ))}
-
-
-</section>
-
-
-        {/* =====================================================
+{/* =====================================================
             EPL WALLET — moved from Wallet page
         ===================================================== */}
 
@@ -3095,11 +3096,11 @@ const [totalRewards, setTotalRewards] =
           </div>
 
           {[
-            { rank:1, username:"Username", reward:"1000" },
-            { rank:2, username:"Username", reward:"500" },
-            { rank:3, username:"Username", reward:"500" },
-            { rank:4, username:"Username", reward:"500" },
-            { rank:5, username:"Username", reward:"500" },
+            { rank:"Level 1", username:"", reward:"1000" },
+            { rank:"Level 2", username:"", reward:"500" },
+            { rank:"Level 3", username:"", reward:"300" },
+            { rank:"Level 4", username:"", reward:"200" },
+            { rank:"Level 5", username:"", reward:"100" },
           ].map((user)=>(
 
             <div className="referral-item" key={user.rank}>
@@ -3109,7 +3110,7 @@ const [totalRewards, setTotalRewards] =
               </div>
 
               <div className="person-icon">
-                👤
+                🏆
               </div>
 
               <div className="username">
@@ -3121,7 +3122,10 @@ const [totalRewards, setTotalRewards] =
               </div>
 
               <div className="epl-value">
-                {user.reward} EPL
+                <span style={{display:"inline-flex",alignItems:"center",gap:5}}>
+                  <img src="/epl-logo.png" alt="EPL" style={{width:18,height:18,borderRadius:"50%"}} />
+                  {user.reward}
+                </span>
               </div>
 
             </div>
