@@ -695,12 +695,12 @@ def wallet_view(request, wallet_address):
     )
 
     principal_locked = (
-        wallet.principal_locked
-        or Decimal("0")
-    )
+    wallet.ecg_self_locked
+    or Decimal("0")
+)
 
     self_profit_locked = (
-        wallet.self_profit_locked
+        wallet.ecg_self_locked
         or Decimal("0")
     )
 
@@ -1778,7 +1778,7 @@ def reward_status(request):
             ),
             "stake_balance": str(
                 (user.wallet.principal_locked or Decimal("0"))
-                + (user.wallet.principal_unlocked or Decimal("0"))
+                + (user.wallet.ecg_self_unlocked or Decimal("0"))
             ),
         },
         status=status.HTTP_200_OK,
