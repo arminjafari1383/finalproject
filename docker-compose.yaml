@@ -3,18 +3,28 @@ version: "3.9"
 services:
 
   backend:
-    build: ./backend
-    container_name: django-backend
-    volumes:
-      - ./backend:/backend
-    expose:
-      - 8000
-    depends_on:
-      - db
-      - tonservice
-    environment:
-      - TON_SERVICE_URL=http://tonservice:3001
-      
+  build: ./backend
+  container_name: django-backend
+  restart: always
+
+  volumes:
+    - ./backend:/backend
+
+  expose:
+    - "8000"
+
+  depends_on:
+    - db
+    - tonservice
+
+  environment:
+    - TON_SERVICE_URL=http://tonservice:3001
+
+  command: >
+    sh -c "
+    python manage.py migrate &&
+    gunicorn core.wsgi:application --bind 0.0.0.0:8000
+    "
 
 
   frontend:
