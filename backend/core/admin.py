@@ -346,35 +346,75 @@ class WithdrawRequestAdmin(admin.ModelAdmin):
 # ==========================================
 # ReferralLevel Admin
 # ==========================================
+# ==========================================
+# ReferralLevel Admin
+# ==========================================
+
+# ==========================================
+# ReferralLevel Admin
+# ==========================================
+
 @admin.register(ReferralLevel)
 class ReferralLevelAdmin(admin.ModelAdmin):
 
     list_display = (
         "id",
-        "level",
-        "title",
-        "percentage",
-        "is_active",
-        "created_at",
+        "user",
+        "level_1_count",
+        "level_2_count",
+        "level_3_count",
+        "level_4_count",
+        "level_5_count",
+        "updated_at",
     )
 
     list_filter = (
-        "is_active",
-        "created_at",
+        "updated_at",
     )
 
     search_fields = (
-        "title",
-        "level",
+        "user__wallet_address",
+        "user__telegram_id",
     )
 
     readonly_fields = (
-        "created_at",
+        "updated_at",
     )
 
-# ==========================================
-# تنظیمات ظاهری پنل ادمین
-# ==========================================
-admin.site.site_header = "مدیریت AI PolyNet"
-admin.site.site_title = "پنل مدیریت AI PolyNet"
-admin.site.index_title = "خوش آمدید به پنل مدیریت"
+    fieldsets = (
+
+        ("User", {
+            "fields": (
+                "user",
+            )
+        }),
+
+        ("Level Counts", {
+            "fields": (
+                "level_1_count",
+                "level_2_count",
+                "level_3_count",
+                "level_4_count",
+                "level_5_count",
+            )
+        }),
+
+        ("Level Users", {
+            "fields": (
+                "level_1_users",
+                "level_2_users",
+                "level_3_users",
+                "level_4_users",
+                "level_5_users",
+            ),
+            "classes": (
+                "collapse",
+            )
+        }),
+
+        ("Dates", {
+            "fields": (
+                "updated_at",
+            )
+        }),
+    )
