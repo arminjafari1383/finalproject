@@ -10,7 +10,6 @@ import {
 
 const USER_DATA_KEY = "my_app_user_data";
 const INVITER_CODE_KEY = "inviter_code";
-const WITHDRAW_TARGET = 60;
 const ECG_PER_USDT = 312;
 
 const ECG_CONTRACT_ADDRESS = "0x79b88B5298C6025b09d910428A30e960dcEeB282";
@@ -239,6 +238,14 @@ export default function Wallet() {
     withdrawSource,
     setWithdrawSource,
   ] = useState("ECG");
+
+  // Which profit bucket opened the modal:
+  // SELF = user's own 5% after the 30-day lock
+  // REFERRAL = instant 5% / 1% upline profit
+  const [
+    withdrawBucket,
+    setWithdrawBucket,
+  ] = useState("ALL");
 
   const [
     destinationWallet,
@@ -1029,21 +1036,23 @@ export default function Wallet() {
   // OPEN / CLOSE WITHDRAW
   // ====================================================
 
-  const openWithdraw = () => {
+  const openWithdraw = (bucket = "ALL") => {
     setWithdrawError("");
     setWithdrawNotice("");
     setAmount("");
     setWithdrawSource("ECG");
+    setWithdrawBucket(bucket);
     setWithdrawAsset("TON");
     setDestinationWallet("");
     setIsWithdrawOpen(true);
   };
 
-  const openUsdtWithdraw = () => {
+  const openUsdtWithdraw = (bucket = "ALL") => {
     setWithdrawError("");
     setWithdrawNotice("");
     setAmount("");
     setWithdrawSource("USDT");
+    setWithdrawBucket(bucket);
     // Tether has exactly one output option.
     setWithdrawAsset("TON");
     setDestinationWallet("");
@@ -1131,29 +1140,9 @@ export default function Wallet() {
       return;
     }
 
-    if (withdrawSource === "USDT") {
-      if (!tonPrice) {
-        setWithdrawError("TON price is not available yet.");
-        return;
-      }
-
-      const estimatedTon = n / Number(tonPrice);
-      if (estimatedTon < 1) {
-        setWithdrawError(
-          `Minimum conversion output is 1 TON (about ${Number(tonPrice).toFixed(4)} USDT).`
-        );
-        return;
-      }
-    } else {
-      if (withdrawAsset === "TON" && n < 1) {
-        setWithdrawError("Minimum TON withdrawal is 1 TON.");
-        return;
-      }
-
-      if (withdrawAsset === "ECG" && n < 60) {
-        setWithdrawError("Minimum withdrawal is 60 ECG.");
-        return;
-      }
+    if (withdrawSource === "USDT" && !tonPrice) {
+      setWithdrawError("TON price is not available yet.");
+      return;
     }
 
     if (!destinationWallet.trim()) {
@@ -1171,6 +1160,7 @@ export default function Wallet() {
       scope: withdrawSource === "USDT"
         ? "USDT_PROFIT_ONLY"
         : "ALL_WITHDRAWABLE",
+      withdraw_bucket: withdrawBucket,
       amount: n,
     };
 
@@ -1329,8 +1319,37 @@ export default function Wallet() {
     0
   );
 
+  const selfProfitUsdtUnlocked = Number(
+    wallet?.self_profit_usdt_unlocked ?? 0
+  );
+
+  const referralProfitUsdtUnlocked = Number(
+    wallet?.referral_profit_usdt_unlocked ??
+    Math.max(withdrawableUsdt - selfProfitUsdtUnlocked, 0)
+  );
+
+  const ownEcgProfitTotal =
+    purchaseProfitLocked + selfProfitUnlocked;
+
+  const ownUsdtProfitTotal =
+    purchaseProfitUsdtLocked + selfProfitUsdtUnlocked;
+
+  const selectedEcgAvailable =
+    withdrawBucket === "SELF"
+      ? selfProfitUnlocked
+      : withdrawBucket === "REFERRAL"
+        ? referralProfitEcgUnlocked
+        : withdrawableBalance;
+
+  const selectedUsdtAvailable =
+    withdrawBucket === "SELF"
+      ? selfProfitUsdtUnlocked
+      : withdrawBucket === "REFERRAL"
+        ? referralProfitUsdtUnlocked
+        : withdrawableUsdt;
+
   const withdrawableTon = useMemo(() => {
-    const ecg = withdrawableBalance;
+    const ecg = selectedEcgAvailable;
 
     if (!tonPrice || !ecg) {
       return "0.0000";
@@ -1339,17 +1358,17 @@ export default function Wallet() {
     return (
       ecg / (tonPrice * ECG_PER_USDT)
     ).toFixed(4);
-  }, [withdrawableBalance, tonPrice]);
+  }, [selectedEcgAvailable, tonPrice]);
 
   const withdrawableUsdtTon = useMemo(() => {
-    if (!tonPrice || !withdrawableUsdt) {
+    if (!tonPrice || !selectedUsdtAvailable) {
       return "0.0000";
     }
 
     return (
-      withdrawableUsdt / tonPrice
+      selectedUsdtAvailable / tonPrice
     ).toFixed(4);
-  }, [withdrawableUsdt, tonPrice]);
+  }, [selectedUsdtAvailable, tonPrice]);
 
   const sumReferralProfit = (users = [], asset = "ECG") =>
     users.reduce((sum, user) => {
@@ -1424,30 +1443,10 @@ export default function Wallet() {
 
 
 
-  const progressPercent =
-    Math.min(
-      (
-        withdrawableBalance /
-        WITHDRAW_TARGET
-      ) * 100,
-      100
-    );
-
-
-  const remainingToUnlock =
-    Math.max(
-      WITHDRAW_TARGET -
-        withdrawableBalance,
-      0
-    );
-
-
-  const canWithdraw =
-    withdrawableBalance >=
-    WITHDRAW_TARGET;
-
-  const canWithdrawUsdt =
-    Number(withdrawableUsdtTon) >= 1;
+  const canWithdrawEcgSelf = selfProfitUnlocked > 0;
+  const canWithdrawEcgReferral = referralProfitEcgUnlocked > 0;
+  const canWithdrawUsdtSelf = selfProfitUsdtUnlocked > 0;
+  const canWithdrawUsdtReferral = referralProfitUsdtUnlocked > 0;
 
   // ====================================================
   // UI
@@ -2035,145 +2034,236 @@ export default function Wallet() {
                 </section>
 
 
-                {/* WITHDRAW GOAL */}
+                {/* FOUR PROFIT WITHDRAW BOXES */}
 
-                <div className="withdraw-goal-card">
-
-                  <div className="goal-top-row">
-
-                    <div>
-
-                      <div className="goal-title">
-                        Withdrawal Goal
-                      </div>
-
-                      <div className="goal-subtitle">
-                        Reach 60 ECG to unlock withdrawal
-                      </div>
-
-                    </div>
-
-
-                    <div className="goal-percent-badge">
-
-                      {progressPercent.toFixed(
-                        1
-                      )}
-                      %
-
-                    </div>
-
-                  </div>
-
-
-                  <div className="goal-progress-track">
-
-                    <div
-                      className="goal-progress-fill"
-                      style={{
-                        width:
-                          `${progressPercent}%`,
-                      }}
-                    />
-
-                  </div>
-
-
-                  <div className="goal-bottom-row">
-
-                    <span>
-
-                      {Number(
-                        withdrawableBalance
-                      ).toFixed(2)}
-
-                      {" / "}
-
-                      {WITHDRAW_TARGET}
-
-                      {" ECG"}
-
-                    </span>
-
-
-                    <span>
-
-                      {Number(
-                        remainingToUnlock
-                      ).toFixed(2)}
-
-                      {" ECG to go"}
-
-                    </span>
-
-                  </div>
-
-                </div>
-
-
-                {/* WITHDRAW */}
-
-                <button
-                  style={{ marginBottom: 8 }}
-                  className={`wallet-main-action ${
-                    canWithdraw
-                      ? ""
-                      : "disabled"
-                  }`}
-                  onClick={
-                    openWithdraw
-                  }
-                  disabled={
-                    !canWithdraw
-                  }
-                >
-
-                  <span className="wallet-main-action-title">
-
-                    {canWithdraw
-                      ? `Withdraw ${withdrawableBalance.toFixed(4)} ECG`
-                      : `Withdraw ${withdrawableBalance.toFixed(4)} ECG 🔒`}
-
-                  </span>
-
-
-                  <span className="wallet-main-action-subtitle">
-
-                    {canWithdraw
-                      ? "Your withdrawal is unlocked"
-                      : "Available at 60 ECG"}
-
-                  </span>
-
-                </button>
-
-
-                {/* USDT -> TON: single-option Tether action */}
-                <button
+                <section
+                  className="wallet-profit-withdraw-card"
                   style={{
-                    marginTop: 8,
-                    marginBottom: 3,
+                    marginTop: 14,
+                    padding: 16,
+                    borderRadius: 18,
+                    border: "1px solid rgba(255,255,255,0.10)",
+                    background: "rgba(255,255,255,0.035)",
                   }}
-                  className={`wallet-main-action ${
-                    canWithdrawUsdt
-                      ? ""
-                      : "disabled"
-                  }`}
-                  onClick={openUsdtWithdraw}
-                  disabled={!canWithdrawUsdt}
                 >
-                  <span className="wallet-main-action-title">
-                    {canWithdrawUsdt
-                      ? `Convert ${withdrawableUsdt.toFixed(4)} USDT → TON`
-                      : `Convert ${withdrawableUsdt.toFixed(4)} USDT → TON 🔒`}
-                  </span>
+                  <div style={{ marginBottom: 12 }}>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        opacity: 0.65,
+                        letterSpacing: "0.10em",
+                        fontWeight: 800,
+                      }}
+                    >
+                      PROFIT WITHDRAW
+                    </div>
+                    <strong
+                      style={{
+                        display: "block",
+                        marginTop: 4,
+                        fontSize: 18,
+                      }}
+                    >
+                      ECG & Tether Profit
+                    </strong>
+                  </div>
 
-                  <span className="wallet-main-action-subtitle">
-                    {canWithdrawUsdt
-                      ? `≈ ${withdrawableUsdtTon} TON available`
-                      : "Tether profit unlocks after 30 days; minimum output is 1 TON"}
-                  </span>
-                </button>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(145px, 1fr))",
+                      gap: 10,
+                    }}
+                  >
+                    {/* ECG OWN 5% */}
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        minHeight: 158,
+                        padding: 12,
+                        borderRadius: 12,
+                        background: "rgba(255,255,255,0.03)",
+                        border: "1px solid rgba(255,255,255,0.06)",
+                      }}
+                    >
+                      <div style={{ fontSize: 11, opacity: 0.62 }}>
+                        ECG • Own 5% Profit
+                      </div>
+                      <strong style={{ marginTop: 5, fontSize: 16 }}>
+                        {ownEcgProfitTotal.toFixed(4)} ECG
+                      </strong>
+                      <div style={{ fontSize: 10, opacity: 0.58, marginTop: 6, lineHeight: 1.5 }}>
+                        Available: {selfProfitUnlocked.toFixed(4)} ECG
+                        <br />
+                        Locked 30d: {purchaseProfitLocked.toFixed(4)} ECG
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => openWithdraw("SELF")}
+                        disabled={!canWithdrawEcgSelf}
+                        style={{
+                          marginTop: "auto",
+                          alignSelf: "flex-start",
+                          padding: "6px 11px",
+                          borderRadius: 8,
+                          border: "1px solid rgba(255,255,255,0.12)",
+                          background: canWithdrawEcgSelf
+                            ? "rgba(35,211,238,0.12)"
+                            : "rgba(255,255,255,0.04)",
+                          color: "inherit",
+                          fontSize: 10,
+                          fontWeight: 800,
+                          cursor: canWithdrawEcgSelf ? "pointer" : "not-allowed",
+                          opacity: canWithdrawEcgSelf ? 1 : 0.55,
+                        }}
+                      >
+                        {canWithdrawEcgSelf ? "Withdraw" : "🔒 Locked 30d"}
+                      </button>
+                    </div>
+
+                    {/* ECG REFERRAL */}
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        minHeight: 158,
+                        padding: 12,
+                        borderRadius: 12,
+                        background: "rgba(35,211,238,0.06)",
+                        border: "1px solid rgba(35,211,238,0.14)",
+                      }}
+                    >
+                      <div style={{ fontSize: 11, opacity: 0.62 }}>
+                        ECG • Referral Profit
+                      </div>
+                      <strong style={{ marginTop: 5, fontSize: 16 }}>
+                        {referralProfitEcgUnlocked.toFixed(4)} ECG
+                      </strong>
+                      <div style={{ fontSize: 10, opacity: 0.58, marginTop: 6, lineHeight: 1.5 }}>
+                        5% Level 1 + 1% Levels 2–5
+                        <br />
+                        Available instantly
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => openWithdraw("REFERRAL")}
+                        disabled={!canWithdrawEcgReferral}
+                        style={{
+                          marginTop: "auto",
+                          alignSelf: "flex-start",
+                          padding: "6px 11px",
+                          borderRadius: 8,
+                          border: "1px solid rgba(255,255,255,0.12)",
+                          background: canWithdrawEcgReferral
+                            ? "rgba(35,211,238,0.12)"
+                            : "rgba(255,255,255,0.04)",
+                          color: "inherit",
+                          fontSize: 10,
+                          fontWeight: 800,
+                          cursor: canWithdrawEcgReferral ? "pointer" : "not-allowed",
+                          opacity: canWithdrawEcgReferral ? 1 : 0.55,
+                        }}
+                      >
+                        {canWithdrawEcgReferral ? "Withdraw" : "No balance"}
+                      </button>
+                    </div>
+
+                    {/* USDT OWN 5% */}
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        minHeight: 158,
+                        padding: 12,
+                        borderRadius: 12,
+                        background: "rgba(255,255,255,0.03)",
+                        border: "1px solid rgba(255,255,255,0.06)",
+                      }}
+                    >
+                      <div style={{ fontSize: 11, opacity: 0.62 }}>
+                        Tether • Own 5% Profit
+                      </div>
+                      <strong style={{ marginTop: 5, fontSize: 16 }}>
+                        {ownUsdtProfitTotal.toFixed(4)} USDT
+                      </strong>
+                      <div style={{ fontSize: 10, opacity: 0.58, marginTop: 6, lineHeight: 1.5 }}>
+                        Available: {selfProfitUsdtUnlocked.toFixed(4)} USDT
+                        <br />
+                        Locked 30d: {purchaseProfitUsdtLocked.toFixed(4)} USDT
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => openUsdtWithdraw("SELF")}
+                        disabled={!canWithdrawUsdtSelf}
+                        style={{
+                          marginTop: "auto",
+                          alignSelf: "flex-start",
+                          padding: "6px 11px",
+                          borderRadius: 8,
+                          border: "1px solid rgba(255,255,255,0.12)",
+                          background: canWithdrawUsdtSelf
+                            ? "rgba(35,211,238,0.12)"
+                            : "rgba(255,255,255,0.04)",
+                          color: "inherit",
+                          fontSize: 10,
+                          fontWeight: 800,
+                          cursor: canWithdrawUsdtSelf ? "pointer" : "not-allowed",
+                          opacity: canWithdrawUsdtSelf ? 1 : 0.55,
+                        }}
+                      >
+                        {canWithdrawUsdtSelf ? "Withdraw" : "🔒 Locked 30d"}
+                      </button>
+                    </div>
+
+                    {/* USDT REFERRAL */}
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        minHeight: 158,
+                        padding: 12,
+                        borderRadius: 12,
+                        background: "rgba(35,211,238,0.06)",
+                        border: "1px solid rgba(35,211,238,0.14)",
+                      }}
+                    >
+                      <div style={{ fontSize: 11, opacity: 0.62 }}>
+                        Tether • Referral Profit
+                      </div>
+                      <strong style={{ marginTop: 5, fontSize: 16 }}>
+                        {referralProfitUsdtUnlocked.toFixed(4)} USDT
+                      </strong>
+                      <div style={{ fontSize: 10, opacity: 0.58, marginTop: 6, lineHeight: 1.5 }}>
+                        5% Level 1 + 1% Levels 2–5
+                        <br />
+                        Available instantly • converts to TON
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => openUsdtWithdraw("REFERRAL")}
+                        disabled={!canWithdrawUsdtReferral}
+                        style={{
+                          marginTop: "auto",
+                          alignSelf: "flex-start",
+                          padding: "6px 11px",
+                          borderRadius: 8,
+                          border: "1px solid rgba(255,255,255,0.12)",
+                          background: canWithdrawUsdtReferral
+                            ? "rgba(35,211,238,0.12)"
+                            : "rgba(255,255,255,0.04)",
+                          color: "inherit",
+                          fontSize: 10,
+                          fontWeight: 800,
+                          cursor: canWithdrawUsdtReferral ? "pointer" : "not-allowed",
+                          opacity: canWithdrawUsdtReferral ? 1 : 0.55,
+                        }}
+                      >
+                        {canWithdrawUsdtReferral ? "Withdraw" : "No balance"}
+                      </button>
+                    </div>
+                  </div>
+                </section>
 
 
                 {withdrawNotice && (
@@ -2457,27 +2547,6 @@ export default function Wallet() {
 
                   </div>
 
-
-                  <div className="wallet-stat-card">
-
-                    <div className="stat-icon">
-                      🚀
-                    </div>
-
-                    <div className="stat-title">
-                      Next Target
-                    </div>
-
-                    <div className="stat-value">
-
-                      {WITHDRAW_TARGET}
-
-                      {" ECG"}
-
-                    </div>
-
-                  </div>
-
                 </div>
 
               </>
@@ -2517,7 +2586,11 @@ export default function Wallet() {
             <div className="modal-header">
 
               <h3>
-                Withdraw
+                {withdrawBucket === "SELF"
+                  ? `Withdraw Own ${withdrawSource} Profit`
+                  : withdrawBucket === "REFERRAL"
+                    ? `Withdraw Referral ${withdrawSource} Profit`
+                    : "Withdraw"}
               </h3>
 
               <button
@@ -2630,16 +2703,10 @@ export default function Wallet() {
                     withdrawSource === "USDT"
                       ? "Enter unlocked USDT amount"
                       : withdrawAsset === "TON"
-                        ? "Minimum 1 TON"
-                        : "Minimum 60 ECG"
+                        ? "Enter TON amount"
+                        : "Enter ECG amount"
                   }
-                  min={
-                    withdrawSource === "USDT"
-                      ? "0"
-                      : withdrawAsset === "TON"
-                        ? "1"
-                        : "60"
-                  }
+                  min="0.000001"
                   disabled={isWithdrawing}
                 />
 
@@ -2649,10 +2716,10 @@ export default function Wallet() {
                   onClick={() =>
                     setAmount(
                       withdrawSource === "USDT"
-                        ? withdrawableUsdt
+                        ? selectedUsdtAvailable
                         : withdrawAsset === "TON"
                           ? withdrawableTon
-                          : withdrawableBalance
+                          : selectedEcgAvailable
                     )
                   }
                   disabled={isWithdrawing}
@@ -2664,8 +2731,8 @@ export default function Wallet() {
               {withdrawSource === "USDT" ? (
                 <div className="ton-info">
                   <div>
-                    Available Tether profit:{" "}
-                    <b>{withdrawableUsdt.toFixed(4)} USDT</b>
+                    Available selected Tether profit:{" "}
+                    <b>{selectedUsdtAvailable.toFixed(4)} USDT</b>
                   </div>
                   <div>
                     Estimated TON:{" "}
@@ -2679,15 +2746,12 @@ export default function Wallet() {
                   <div>
                     MAX output: <b>{withdrawableUsdtTon} TON</b>
                   </div>
-                  <div>
-                    Minimum output: <b>1 TON</b>
-                  </div>
                 </div>
               ) : withdrawAsset === "ECG" ? (
                 <div className="max-balance-info">
                   <div>
-                    Available now:{" "}
-                    <b>{withdrawableBalance.toFixed(4)} ECG</b>
+                    Available selected profit:{" "}
+                    <b>{selectedEcgAvailable.toFixed(4)} ECG</b>
                   </div>
                   <div>
                     Referral profit (instant):{" "}
@@ -2704,14 +2768,11 @@ export default function Wallet() {
                     Withdrawable TON: <b>{withdrawableTon} TON</b>
                   </div>
                   <div>
-                    Based on all unlocked ECG profit:{" "}
-                    <b>{withdrawableBalance.toFixed(2)} ECG</b>
+                    Based on selected unlocked ECG profit:{" "}
+                    <b>{selectedEcgAvailable.toFixed(2)} ECG</b>
                   </div>
                   <div>
                     Referral profit is available instantly; own 5% profit unlocks after 30 days.
-                  </div>
-                  <div>
-                    Minimum withdrawal: <b>1 TON</b>
                   </div>
                 </div>
               )}

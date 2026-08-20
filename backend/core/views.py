@@ -1,4 +1,3 @@
-# backend/core/views.py
 from django.conf import settings
 import time
 import logging
@@ -579,6 +578,83 @@ def connect_wallet(request):
             )
 
 
+def _usdt_profit_available_breakdown(user: AppUser, balance: AssetBalance):
+    """
+    Split the current unlocked USDT profit into two logical buckets without a
+    schema migration:
+      - SELF: matured own 5% profit (30-day lock already completed)
+      - REFERRAL: instant 5% / 1% upline profit
+
+    Older USDT withdrawals that did not record a bucket are allocated
+    referral-first, matching the historical ECG withdrawal policy. The final
+    values are clamped to AssetBalance.profit_unlocked so the two buckets can
+    never exceed the real spendable balance.
+    """
+    available = Decimal(str(balance.profit_unlocked or 0))
+
+    referral_earned = (
+        user.ledgers
+        .filter(typ="DOWNLINE_PROFIT", meta__asset="USDT")
+        .aggregate(total=Sum("amount"))["total"]
+        or Decimal("0")
+    )
+
+    self_earned = (
+        user.ledgers
+        .filter(typ="SELF_PROFIT_UNLOCK", meta__asset="USDT")
+        .aggregate(total=Sum("amount"))["total"]
+        or Decimal("0")
+    )
+
+    withdrawn_referral = Decimal("0")
+    withdrawn_self = Decimal("0")
+    withdrawn_legacy = Decimal("0")
+
+    for entry in user.ledgers.filter(typ="WITHDRAW"):
+        meta = entry.meta or {}
+        if str(meta.get("source_asset") or "").upper() != "USDT":
+            continue
+
+        debit = abs(Decimal(str(entry.amount or 0)))
+        bucket = str(meta.get("withdraw_bucket") or "").upper()
+
+        if bucket == "REFERRAL":
+            withdrawn_referral += debit
+        elif bucket == "SELF":
+            withdrawn_self += debit
+        else:
+            withdrawn_legacy += debit
+
+    referral_after_explicit = max(
+        referral_earned - withdrawn_referral,
+        Decimal("0"),
+    )
+    self_after_explicit = max(
+        self_earned - withdrawn_self,
+        Decimal("0"),
+    )
+
+    legacy_from_referral = min(withdrawn_legacy, referral_after_explicit)
+    referral_current = referral_after_explicit - legacy_from_referral
+    remaining_legacy = withdrawn_legacy - legacy_from_referral
+    self_current = max(self_after_explicit - remaining_legacy, Decimal("0"))
+
+    # Never report more than the real unlocked AssetBalance.
+    referral_current = min(referral_current, available)
+    self_current = min(self_current, max(available - referral_current, Decimal("0")))
+
+    # If old data exists without detailed ledgers, keep the real balance usable.
+    residual = available - referral_current - self_current
+    if residual > 0:
+        self_current += residual
+
+    return {
+        "self": self_current,
+        "referral": referral_current,
+        "total": available,
+    }
+
+
 @api_view(["GET"])
 def wallet_view(request, wallet_address):
     """
@@ -625,10 +701,15 @@ def wallet_view(request, wallet_address):
     )
 
     # --------------------------------------------------------
-    # Current available balance
+    # Current available ECG profit balance
     # --------------------------------------------------------
+    # Self 5% profit is withdrawable only after its 30-day unlock.
+    # Referral purchase profit (5% / 1%) is credited to
+    # downline_profit_instant and is withdrawable immediately.
+    # Do NOT include locked self profit or principal here.
     available_balance = (
-        wallet.withdrawable_total()
+        Decimal(str(wallet.self_profit_unlocked or 0))
+        + Decimal(str(wallet.downline_profit_instant or 0))
     )
 
     # --------------------------------------------------------
@@ -727,11 +808,29 @@ def wallet_view(request, wallet_address):
         + usdt_profit_unlocked
     )
 
-    # ECG wallet: only stake-origin ECG that is currently withdrawable.
-    ecg_balance = (
-        self_profit_unlocked
-        + principal_unlocked
+    usdt_available_breakdown = _usdt_profit_available_breakdown(
+        user,
+        usdt_balance,
     )
+    usdt_self_profit_unlocked = usdt_available_breakdown["self"]
+    usdt_referral_profit_unlocked = usdt_available_breakdown["referral"]
+
+    # ECG profit wallet:
+    # - matured self 5% profit is unlocked after 30 days
+    # - referral 5% / 1% profit is instantly withdrawable
+    # Principal remains a separate bucket and is intentionally excluded here.
+    withdrawable_ecg_profit = (
+        self_profit_unlocked
+        + downline_profit_current
+    )
+
+    total_ecg_profit = (
+        self_profit_locked
+        + self_profit_unlocked
+        + downline_profit_current
+    )
+
+    ecg_balance = withdrawable_ecg_profit
 
     # EPL wallet: direct referral + hourly reward only.
     # These buckets are intentionally NOT withdrawable yet.
@@ -779,16 +878,27 @@ def wallet_view(request, wallet_address):
         "principal_unlocked": str(principal_unlocked),
         "self_profit_locked": str(self_profit_locked),
         "self_profit_unlocked": str(self_profit_unlocked),
-        # Wallet page ECG Purchase Profit: total shown separately from spendable.
+        # ECG self-profit fields kept for backward compatibility.
         "purchase_profit_ecg": str(self_profit_locked + self_profit_unlocked),
         "purchase_profit_ecg_locked": str(self_profit_locked),
         "purchase_profit_ecg_unlocked": str(self_profit_unlocked),
+
+        # New explicit ECG profit totals used by Wallet.jsx. Referral purchase
+        # profit is instant; self purchase profit joins the withdrawable bucket
+        # only after its 30-day unlock.
+        "referral_profit_ecg_unlocked": str(downline_profit_current),
+        "withdrawable_ecg_profit": str(withdrawable_ecg_profit),
+        "total_ecg_profit": str(total_ecg_profit),
 
         # Tether profit wallet. Only unlocked USDT can be converted to TON.
         "purchase_profit_usdt": str(usdt_profit_total),
         "purchase_profit_usdt_locked": str(usdt_profit_locked),
         "purchase_profit_usdt_unlocked": str(usdt_profit_unlocked),
         "withdrawable_usdt_profit": str(usdt_profit_unlocked),
+        # Explicit current USDT buckets for the four Wallet cards.
+        "self_profit_usdt_locked": str(usdt_profit_locked),
+        "self_profit_usdt_unlocked": str(usdt_self_profit_unlocked),
+        "referral_profit_usdt_unlocked": str(usdt_referral_profit_unlocked),
 
         "daily_reward_unlocked": str(daily_reward_unlocked),
 
@@ -1067,7 +1177,8 @@ def request_withdraw(request):
     Manual profit withdrawal/conversion flow.
 
     ECG source:
-      - only self_profit_unlocked is spendable (30-day self-profit lock enforced)
+      - matured self_profit_unlocked is spendable after 30 days
+      - downline_profit_instant (referral 5% / 1%) is spendable immediately
       - output may be ECG or TON, preserving the existing two-option UI
 
     USDT source:
@@ -1079,6 +1190,10 @@ def request_withdraw(request):
     requested_asset = str(request.data.get("asset", "") or "").strip().upper()
     source_asset = str(request.data.get("source_asset", "ECG") or "ECG").strip().upper()
     scope = str(request.data.get("scope", "ALL_WITHDRAWABLE") or "ALL_WITHDRAWABLE")
+    withdraw_bucket = str(request.data.get("withdraw_bucket", "ALL") or "ALL").strip().upper()
+
+    if withdraw_bucket not in {"ALL", "SELF", "REFERRAL"}:
+        return Response({"error": "Invalid withdraw_bucket."}, status=400)
 
     if source_asset not in {"ECG", "USDT"}:
         return Response({"error": "Invalid source_asset."}, status=400)
@@ -1152,21 +1267,14 @@ def request_withdraw(request):
 
     if source_asset == "USDT":
         # User enters the SOURCE Tether amount. 1 USDT ~= 1 USD.
+        # There is intentionally NO 1 TON minimum anymore.
         source_usdt = requested_amount.quantize(Decimal("0.000001"))
         ton_amount = (
             source_usdt / ton_rate
         ).quantize(Decimal("0.000000001"))
 
-        if ton_amount < Decimal("1"):
-            minimum_usdt = ton_rate.quantize(Decimal("0.000001"), rounding=ROUND_UP)
-            return Response(
-                {
-                    "error": "Minimum conversion output is 1 TON.",
-                    "minimum_usdt": str(minimum_usdt),
-                    "estimated_ton": str(ton_amount),
-                },
-                status=400,
-            )
+        if ton_amount <= 0:
+            return Response({"error": "Amount is too small to convert."}, status=400)
 
         with transaction.atomic():
             balance, _ = (
@@ -1177,7 +1285,18 @@ def request_withdraw(request):
                     asset="USDT",
                 )
             )
-            available = Decimal(str(balance.profit_unlocked or 0))
+
+            split = _usdt_profit_available_breakdown(user, balance)
+            total_available = split["total"]
+            self_available = split["self"]
+            referral_available = split["referral"]
+
+            if withdraw_bucket == "SELF":
+                available = self_available
+            elif withdraw_bucket == "REFERRAL":
+                available = referral_available
+            else:
+                available = total_available
 
             if source_usdt > available:
                 max_ton = (
@@ -1185,14 +1304,16 @@ def request_withdraw(request):
                 ).quantize(Decimal("0.000000001")) if available > 0 else Decimal("0")
                 return Response(
                     {
-                        "error": "Insufficient unlocked USDT profit.",
+                        "error": f"Insufficient unlocked USDT {withdraw_bucket.lower()} profit.",
                         "available_usdt": str(available),
+                        "available_self_profit_usdt": str(self_available),
+                        "available_referral_profit_usdt": str(referral_available),
                         "max_ton": str(max_ton),
                     },
                     status=400,
                 )
 
-            balance.profit_unlocked = available - source_usdt
+            balance.profit_unlocked = total_available - source_usdt
             balance.save(
                 update_fields=[
                     "profit_unlocked",
@@ -1200,9 +1321,22 @@ def request_withdraw(request):
                 ]
             )
 
+            if withdraw_bucket == "SELF":
+                self_debit = source_usdt
+                referral_debit = Decimal("0")
+            elif withdraw_bucket == "REFERRAL":
+                self_debit = Decimal("0")
+                referral_debit = source_usdt
+            else:
+                referral_debit = min(referral_available, source_usdt)
+                self_debit = source_usdt - referral_debit
+
             breakdown = {
                 "source_asset": "USDT",
+                "withdraw_bucket": withdraw_bucket,
                 "profit_unlocked": str(source_usdt),
+                "self_profit_unlocked": str(self_debit),
+                "referral_profit_unlocked": str(referral_debit),
                 "usdt_debited": str(source_usdt),
             }
 
@@ -1225,9 +1359,12 @@ def request_withdraw(request):
                 meta={
                     "withdraw_id": req.id,
                     "source_asset": "USDT",
+                    "withdraw_bucket": withdraw_bucket,
                     "asset": "TON",
                     "status": "PENDING",
                     "usdt_debited": str(source_usdt),
+                    "self_profit_debited": str(self_debit),
+                    "referral_profit_debited": str(referral_debit),
                     "requested_ton": str(ton_amount),
                     "destination": destination,
                     "approval_required": True,
@@ -1235,47 +1372,84 @@ def request_withdraw(request):
             )
 
     else:
-        # ECG source keeps the old ECG / TON output choices, but LOCKED
-        # self-profit is no longer spendable before the 30-day unlock.
+        # ECG source keeps the old ECG / TON output choices.
+        # Locked self-profit is not spendable before the 30-day unlock, while
+        # referral purchase profit is immediately spendable.
         if is_ton:
-            if requested_amount < Decimal("1"):
-                return Response({"error": "Minimum TON withdrawal is 1 TON."}, status=400)
-
+            # No 1 TON minimum. Any positive TON amount backed by unlocked ECG
+            # can be requested.
             ecg_amount = (
                 requested_amount * ton_rate * ECG_PER_USD
             ).quantize(Decimal("0.000001"), rounding=ROUND_UP)
             ton_amount = requested_amount.quantize(Decimal("0.000000001"))
         else:
-            if requested_amount < Decimal("60"):
-                return Response({"error": "Minimum withdrawal is 60 ECG."}, status=400)
-
+            # No 60 ECG minimum.
             ecg_amount = requested_amount.quantize(Decimal("0.000001"))
             ton_amount = Decimal("0")
 
         with transaction.atomic():
             locked_wallet = Wallet.objects.select_for_update().get(user=user)
-            available = Decimal(str(locked_wallet.self_profit_unlocked or 0))
+
+            self_unlocked = Decimal(
+                str(locked_wallet.self_profit_unlocked or 0)
+            )
+            referral_unlocked = Decimal(
+                str(locked_wallet.downline_profit_instant or 0)
+            )
+            total_available = self_unlocked + referral_unlocked
+            if withdraw_bucket == "SELF":
+                available = self_unlocked
+            elif withdraw_bucket == "REFERRAL":
+                available = referral_unlocked
+            else:
+                available = total_available
 
             if ecg_amount > available:
                 if is_ton:
                     max_ton = ecg_to_ton(available) if available > 0 else Decimal("0")
                     return Response(
                         {
-                            "error": "Insufficient unlocked ECG purchase profit for this TON withdrawal.",
+                            "error": "Insufficient unlocked ECG profit for this TON withdrawal.",
                             "required_ecg": str(ecg_amount),
                             "available_ecg": str(available),
+                            "available_self_profit_ecg": str(self_unlocked),
+                            "available_referral_profit_ecg": str(referral_unlocked),
                             "max_ton": str(max_ton),
                         },
                         status=400,
                     )
                 return Response(
-                    {"error": "Insufficient unlocked ECG purchase profit."},
+                    {
+                        "error": "Insufficient unlocked ECG profit.",
+                        "available_ecg": str(available),
+                        "available_self_profit_ecg": str(self_unlocked),
+                        "available_referral_profit_ecg": str(referral_unlocked),
+                    },
                     status=400,
                 )
 
-            locked_wallet.self_profit_unlocked = available - ecg_amount
+            # Respect the selected Wallet card. ALL keeps legacy
+            # referral-first behavior.
+            if withdraw_bucket == "SELF":
+                referral_debit = Decimal("0")
+                self_debit = ecg_amount
+            elif withdraw_bucket == "REFERRAL":
+                referral_debit = ecg_amount
+                self_debit = Decimal("0")
+            else:
+                referral_debit = min(referral_unlocked, ecg_amount)
+                remaining = ecg_amount - referral_debit
+                self_debit = min(self_unlocked, remaining)
+
+            locked_wallet.downline_profit_instant = (
+                referral_unlocked - referral_debit
+            )
+            locked_wallet.self_profit_unlocked = (
+                self_unlocked - self_debit
+            )
             locked_wallet.save(
                 update_fields=[
+                    "downline_profit_instant",
                     "self_profit_unlocked",
                     "updated_at",
                 ]
@@ -1283,7 +1457,9 @@ def request_withdraw(request):
 
             breakdown = {
                 "source_asset": "ECG",
-                "self_profit_unlocked": str(ecg_amount),
+                "withdraw_bucket": withdraw_bucket,
+                "self_profit_unlocked": str(self_debit),
+                "downline_profit_instant": str(referral_debit),
                 "ecg_debited": str(ecg_amount),
             }
 
@@ -1305,11 +1481,14 @@ def request_withdraw(request):
                 meta={
                     "withdraw_id": req.id,
                     "source_asset": "ECG",
+                    "withdraw_bucket": withdraw_bucket,
                     "asset": asset,
                     "status": "PENDING",
                     "requested_amount": str(ton_amount if is_ton else ecg_amount),
                     "requested_ton": str(ton_amount) if is_ton else None,
                     "ecg_debited": str(ecg_amount),
+                    "self_profit_debited": str(self_debit),
+                    "referral_profit_debited": str(referral_debit),
                     "destination": destination,
                     "approval_required": True,
                 },
