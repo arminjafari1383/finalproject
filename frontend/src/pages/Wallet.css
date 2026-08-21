@@ -1446,3 +1446,78 @@ body {
     font-size: 0.82rem;
   }
 }
+/* ==========================================================
+   iOS / iPhone WITHDRAW MODAL FIX
+   ========================================================== */
+
+html,
+body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  touch-action: manipulation;
+}
+
+
+/* جلوگیری از zoom شدن input در آیفون */
+.modal-body input,
+.modal-body textarea,
+.modal-body select {
+  font-size: 16px !important;
+  min-height: 48px;
+}
+
+
+/* اصلاح modal برای keyboard آیفون */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  height: 100dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+
+  padding: 8vh 1rem 2rem;
+}
+
+
+/* خود پنجره withdraw */
+.modal {
+  width: 100%;
+  max-width: 460px;
+
+  max-height: 90dvh;
+  overflow-y: auto;
+
+  -webkit-overflow-scrolling: touch;
+
+  margin: 0 auto;
+}
+
+
+/* input داخل withdraw */
+.modal-body input {
+  width: 100%;
+  box-sizing: border-box;
+
+  font-size: 16px !important;
+
+  padding: 0.95rem 1rem;
+
+  border-radius: 16px;
+
+  background: rgba(255,255,255,0.04);
+}
+
+
+/* وقتی keyboard باز می‌شود */
+@supports (-webkit-touch-callout: none) {
+
+  .modal-backdrop {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+}
