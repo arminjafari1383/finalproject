@@ -17,6 +17,9 @@ import eplLogo from "../assets/epl-logo.png";
 
 // ✅ استفاده از آدرس نسبی برای جلوگیری از مشکل CORS و Nginx
 const API = "/api/wallet";
+const BOT_USERNAME = "Aipolynetbot";
+const USER_DATA_KEY = "my_app_user_data";
+const OWN_REFERRAL_CODE_KEY = "my_referral_code";
 
 
 /* =========================================================
@@ -1268,6 +1271,12 @@ const [totalRewards, setTotalRewards] =
   const [message, setMessage] =
     useState("");
 
+  const [inviteLoading, setInviteLoading] =
+    useState(false);
+
+  const [inviteMessage, setInviteMessage] =
+    useState("");
+
   const [menuOpen, setMenuOpen] =
     useState(false);
 
@@ -2062,6 +2071,139 @@ const [totalRewards, setTotalRewards] =
 
 
   /* =========================================================
+     REFERRAL INVITE
+  ========================================================= */
+
+  const getStoredTelegramIdentity = () => {
+    try {
+      const raw = localStorage.getItem(USER_DATA_KEY);
+      const stored = raw ? JSON.parse(raw) : {};
+
+      const tgUser =
+        window.Telegram?.WebApp?.initDataUnsafe?.user || null;
+
+      const telegramId = Number(
+        tgUser?.id ??
+        stored?.telegramId ??
+        localStorage.getItem("telegram_id") ??
+        0
+      );
+
+      if (!Number.isFinite(telegramId) || telegramId <= 0) {
+        return null;
+      }
+
+      return {
+        telegram_id: telegramId,
+        telegram_username:
+          tgUser?.username || stored?.telegramUsername || null,
+        telegram_photo_url:
+          tgUser?.photo_url || stored?.telegramPhotoUrl || null,
+        is_telegram: Boolean(tgUser?.id || stored?.isTelegram),
+      };
+    } catch (error) {
+      console.error("[Timer] Could not read Telegram identity:", error);
+      return null;
+    }
+  };
+
+  const getOwnReferralCode = async () => {
+    const walletCode = String(
+      eplWallet?.referral_code ||
+      eplWallet?.user?.referral_code ||
+      ""
+    ).trim();
+
+    if (walletCode) {
+      localStorage.setItem(OWN_REFERRAL_CODE_KEY, walletCode);
+      return walletCode;
+    }
+
+    const cachedCode = String(
+      localStorage.getItem(OWN_REFERRAL_CODE_KEY) || ""
+    ).trim();
+
+    if (cachedCode) {
+      return cachedCode;
+    }
+
+    if (!walletAddress) {
+      throw new Error("Please connect your wallet first.");
+    }
+
+    const identity = getStoredTelegramIdentity();
+
+    if (!identity) {
+      throw new Error(
+        "Telegram identity is not available. Please open the Mini App inside Telegram."
+      );
+    }
+
+    // Read this user's own referral code from the existing connect endpoint.
+    // IMPORTANT: inviter_code is intentionally NOT sent here.
+    const response = await axios.post(
+      "/api/connect/",
+      {
+        wallet_address: walletAddress,
+        telegram_id: identity.telegram_id,
+        telegram_username: identity.telegram_username,
+        telegram_photo_url: identity.telegram_photo_url,
+        is_telegram: identity.is_telegram,
+      }
+    );
+
+    const code = String(
+      response?.data?.user?.referral_code || ""
+    ).trim();
+
+    if (!code) {
+      throw new Error("Referral code was not returned by the server.");
+    }
+
+    localStorage.setItem(OWN_REFERRAL_CODE_KEY, code);
+    return code;
+  };
+
+  const shareReferralOnTelegram = async () => {
+    if (inviteLoading) return;
+
+    setInviteLoading(true);
+    setInviteMessage("");
+
+    try {
+      const code = await getOwnReferralCode();
+
+      const referralLink =
+        `https://t.me/${BOT_USERNAME}/app?startapp=ref_${encodeURIComponent(code)}`;
+
+      const shareUrl =
+        `https://t.me/share/url?url=${encodeURIComponent(referralLink)}` +
+        `&text=${encodeURIComponent("Join AI POLIFY with my referral link")}`;
+
+      const tg = window.Telegram?.WebApp;
+
+      if (typeof tg?.openTelegramLink === "function") {
+        tg.openTelegramLink(shareUrl);
+      } else {
+        window.open(shareUrl, "_blank", "noopener,noreferrer");
+      }
+
+      setInviteMessage("Referral link opened in Telegram.");
+    } catch (error) {
+      console.error("[Timer] Invite referral error:", error);
+      setInviteMessage(
+        error?.response?.data?.error ||
+        error?.response?.data?.detail ||
+        error?.message ||
+        "Could not open the referral link."
+      );
+    } finally {
+      setInviteLoading(false);
+    }
+  };
+
+
+  /* =========================================================
      EPL CALCULATIONS
   ========================================================= */
 
@@ -2818,7 +2960,7 @@ const [totalRewards, setTotalRewards] =
           fontWeight: 900,
         }}
       >
-        →
+        +
         {reward.replace(" EPL", "")}
 
         <img
@@ -2833,6 +2975,45 @@ const [totalRewards, setTotalRewards] =
       </span>
     </div>
   ))}
+
+  <button
+    type="button"
+    onClick={shareReferralOnTelegram}
+    disabled={inviteLoading}
+    style={{
+      width: "100%",
+      marginTop: 14,
+      minHeight: 48,
+      border: "1px solid rgba(0,217,255,.55)",
+      borderRadius: 14,
+      background:
+        "linear-gradient(135deg, rgba(0,217,255,.22), rgba(30,104,255,.22))",
+      color: "#ffffff",
+      fontSize: 14,
+      fontWeight: 900,
+      letterSpacing: "0.03em",
+      cursor: inviteLoading ? "wait" : "pointer",
+      opacity: inviteLoading ? 0.7 : 1,
+      boxShadow: "0 10px 30px rgba(0,145,255,.15)",
+    }}
+  >
+    {inviteLoading ? "Opening Telegram..." : "Invite Me"}
+  </button>
+
+  {inviteMessage && (
+    <div
+      style={{
+        marginTop: 9,
+        textAlign: "center",
+        fontSize: 12,
+        color: inviteMessage.startsWith("Referral link")
+          ? "#66f5c7"
+          : "#ff9a9a",
+      }}
+    >
+      {inviteMessage}
+    </div>
+  )}
 </section>
 {/* =====================================================
             EPL WALLET — moved from Wallet page
