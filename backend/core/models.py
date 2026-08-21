@@ -161,6 +161,8 @@ class Wallet(models.Model):
         )
 class AssetBalance(models.Model):
     ASSET_CHOICES = [
+        ("ECG","ECG"),
+        ("EPL","EPL"),
         ("USDT", "USDT"),
     ]
 
@@ -175,53 +177,31 @@ class AssetBalance(models.Model):
         choices=ASSET_CHOICES,
     )
 
-    principal_locked = models.DecimalField(
+    available = models.DecimalField(
         max_digits=24,
-        decimal_places=6,
-        default=0,
+        decimal_places=8,
+        default=0
     )
 
-    principal_unlocked = models.DecimalField(
+    locked = models.DecimalField(
         max_digits=24,
-        decimal_places=6,
-        default=0,
+        decimal_places=8,
+        default=0
     )
 
-    profit_locked = models.DecimalField(
+    total_earned = models.DecimalField(
         max_digits=24,
-        decimal_places=6,
-        default=0,
-    )
-
-    profit_unlocked = models.DecimalField(
-        max_digits=24,
-        decimal_places=6,
-        default=0,
-    )
-
-    updated_at = models.DateTimeField(
-        auto_now=True,
+        decimal_places=8,
+        default=0
     )
 
     class Meta:
         constraints = [
             models.UniqueConstraint(
                 fields=["user", "asset"],
-                name="unique_user_asset_balance",
+                name="unique_user_asset",
             )
         ]
-
-    def withdrawable_total(self):
-        return (
-            self.principal_unlocked
-            + self.profit_unlocked
-        )
-
-    def __str__(self):
-        return (
-            f"{self.user.wallet_address[:8]}..."
-            f" - {self.asset}"
-        )
 
 class Ledger(models.Model):
     TYPE_CHOICES = [
@@ -365,15 +345,30 @@ class WithdrawRequest(models.Model):
         ("PAID", "Paid"),
     ]
 
+    ASSET_CHOICES = [
+        ("TON","TON"),
+        ("ECG","ECG"),
+        ("EPL","EPL"),
+        ("USDT","USDT"),
+    ]
+    
+
     user = models.ForeignKey(
         AppUser,
         on_delete=models.CASCADE,
         related_name="withdraw_requests"
     )
-
+    
     asset = models.CharField(
         max_length=10,
-        default="USDT"
+        choices=ASSET_CHOICES,
+        default="ECG"
+    )
+
+    source_asset = models.CharField(
+        max_length=10,
+        choices=ASSET_CHOICES,
+        default="ECG"
     )
 
     amount = models.DecimalField(
@@ -407,7 +402,7 @@ class WithdrawRequest(models.Model):
 
 
     def __str__(self):
-        return f"{self.user.wallet_address[:8]} - {self.amount} {self.asset}"
+        return f"{self.user.wallet_address[:8]} - {self.amount} {self.source_asset}"
 
 class ReferralLevel(models.Model):
 

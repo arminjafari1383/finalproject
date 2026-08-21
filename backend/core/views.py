@@ -991,7 +991,7 @@ def request_withdraw(request):
     requested_asset = str(request.data.get("asset", "") or "").strip().upper()
     source_asset = str(request.data.get("source_asset", "ECG") or "ECG").strip().upper()
 
-    if source_asset not in {"ECG", "USDT"}:
+    if source_asset not in {"ECG", "USDT","EPL"}:
         return Response({"error": "Invalid source_asset."}, status=400)
 
     is_ton = requested_asset in {"GRAM", "TON"}
@@ -1002,7 +1002,7 @@ def request_withdraw(request):
     except Exception:
         return Response({"error": "Invalid amount."}, status=400)
 
-    if not wallet_address or asset not in {"TON", "ECG"}:
+    if not wallet_address or asset not in {"TON", "ECG","EPL"}:
         return Response(
             {"error": "wallet_address and asset are required."},
             status=400,
@@ -1010,16 +1010,12 @@ def request_withdraw(request):
 
     if requested_amount <= 0:
         return Response({"error": "Amount must be greater than zero."}, status=400)
-
-    if source_asset == "USDT" and asset != "TON":
-        return Response(
-            {"error": "USDT profit can only be converted to TON."},
-            status=400,
-        )
+    
 
     destination = str(
         request.data.get("destination_wallet", "") or ""
     ).strip()
+
     if not destination:
         return Response(
             {"error": f"destination_wallet is required for {asset} withdrawal."},
@@ -1054,24 +1050,11 @@ def request_withdraw(request):
     release_matured_purchase_profits(user)
 
     if source_asset == "USDT":
-        source_usdt = requested_amount.quantize(Decimal("0.000001"))
+        source_amount = requested_amount.quantize(Decimal("0.000001"))
         ton_amount = (
-            source_usdt / ton_rate
+            source_amount / ton_rate
         ).quantize(Decimal("0.000000001"))
 
-        if ton_amount < Decimal("1"):
-            minimum_usdt = ton_rate.quantize(
-                Decimal("0.000001"),
-                rounding=ROUND_UP,
-            )
-            return Response(
-                {
-                    "error": "Minimum conversion output is 1 TON.",
-                    "minimum_usdt": str(minimum_usdt),
-                    "estimated_ton": str(ton_amount),
-                },
-                status=400,
-            )
 
         with transaction.atomic():
             balance, _ = (
@@ -1081,12 +1064,7 @@ def request_withdraw(request):
             )
             available = Decimal(str(balance.profit_unlocked or 0))
 
-            if source_usdt > available:
-                max_ton = (
-                    (available / ton_rate).quantize(Decimal("0.000000001"))
-                    if available > 0
-                    else Decimal("0")
-                )
+            if source_amount > available:
                 return Response(
                     {
                         "error": "Insufficient unlocked USDT profit.",
@@ -1096,13 +1074,13 @@ def request_withdraw(request):
                     status=400,
                 )
 
-            balance.profit_unlocked = available - source_usdt
+            balance.profit_unlocked = available - source_amount
             balance.save(update_fields=["profit_unlocked", "updated_at"])
 
             req = WithdrawRequest.objects.create(
                 user=user,
                 asset="TON",
-                amount=source_usdt,
+                amount=source_amount,
                 wallet_address=destination,
                 status="PENDING",
             )
@@ -1110,80 +1088,112 @@ def request_withdraw(request):
             Ledger.objects.create(
                 user=user,
                 typ="WITHDRAW",
-                amount=-source_usdt,
+                amount=-source_amount,
                 meta={
                     "withdraw_id": req.id,
                     "source_asset": "USDT",
                     "asset": "TON",
                     "status": "PENDING",
-                    "usdt_debited": str(source_usdt),
-                    "requested_ton": str(ton_amount),
-                    "destination": destination,
-                    "approval_required": True,
+                    "destination": destination
                 },
+            )
+    elif source_asset == "EPL":
+        if is_ton:
+            return Response(
+                {
+                    "error":
+                    "EPL withdrawal to TON is not supported."
+                },
+                status=400
+            )
+        with transaction.atomic():
+            Wallet = (
+                Wallet.objects
+                .select_for_update()
+                .get(user=user)
+            )
+            available = Decimal(
+                str(Wallet.epl_balance or 0)
+            )
+
+            if requested_amount > available:
+                return Response(
+                    {
+                        "error":
+                        "Insufficient EPL balance.",
+                        "available_epl":
+                        str(available)
+                    },
+                    status=400
+                )
+            Wallet.epl_balance = (
+                available - requested_amount
+            )
+
+            Wallet.save(
+                update_fields = [
+                    "epl_balance",
+                    "updated_at"
+                ]
+            )
+            req = WithdrawRequest.objects.create(
+                user=user,
+                asset="EPL",
+                amount = requested_amount,
+                wallet_address=destination,
+                status="PENDING"
+            )
+
+            Ledger.objects.create(
+                user=user,
+                typ="WITHDRAW",
+                amount=-requested_amount,
+                meta={
+                    "withdraw_id":req.id,
+                    "source_asset":"EPL",
+                    "asset":"EPL",
+                    "epl_debited":
+                       str(requested_amount),
+                    "status":"PENDING",
+                    "destination":
+                      destination
+                }
             )
 
     else:
         if is_ton:
-            if requested_amount < Decimal("1"):
-                return Response(
-                    {"error": "Minimum TON withdrawal is 1 TON."},
-                    status=400,
-                )
-
             ecg_amount = (
                 requested_amount * ton_rate * ECG_PER_USD
             ).quantize(Decimal("0.000001"), rounding=ROUND_UP)
-            ton_amount = requested_amount.quantize(Decimal("0.000000001"))
-        else:
-            if requested_amount < Decimal("60"):
-                return Response(
-                    {"error": "Minimum withdrawal is 60 ECG."},
-                    status=400,
-                )
+            ton_amount = requested_amount
 
-            ecg_amount = requested_amount.quantize(Decimal("0.000001"))
+        else:
+
+            ecg_amount = requested_amount
             ton_amount = Decimal("0")
 
         with transaction.atomic():
-            locked_wallet = Wallet.objects.select_for_update().get(user=user)
+            wallet = Wallet.objects.select_for_update().get(user=user)
 
-            self_unlocked = Decimal(str(locked_wallet.ecg_self_unlocked or 0))
-            referral_unlocked = Decimal(str(locked_wallet.ecg_referral_profit or 0))
-            available = self_unlocked + referral_unlocked
+            self_unlocked = Decimal(str(wallet.ecg_self_unlocked or 0))
+            referral_unlocked = Decimal(str(wallet.ecg_referral_profit or 0))
+            available = (self_unlocked + referral_unlocked)
 
             if ecg_amount > available:
-                if is_ton:
-                    max_ton = ecg_to_ton(available) if available > 0 else Decimal("0")
                     return Response(
                         {
-                            "error": "Insufficient unlocked ECG profit for this TON withdrawal.",
-                            "required_ecg": str(ecg_amount),
-                            "available_ecg": str(available),
-                            "available_self_profit_ecg": str(self_unlocked),
-                            "available_referral_profit_ecg": str(referral_unlocked),
-                            "max_ton": str(max_ton),
+                            "error": "Insufficient ECG balance.",
+                            "available":str(available)
                         },
                         status=400,
                     )
 
-                return Response(
-                    {
-                        "error": "Insufficient unlocked ECG profit.",
-                        "available_ecg": str(available),
-                        "available_self_profit_ecg": str(self_unlocked),
-                        "available_referral_profit_ecg": str(referral_unlocked),
-                    },
-                    status=400,
-                )
-
             referral_debit = min(referral_unlocked, ecg_amount)
-            remaining = ecg_amount - referral_debit
-            self_debit = min(self_unlocked, remaining)
+            self_debit = (ecg_amount - referral_debit)
 
-            locked_wallet.ecg_referral_profit = referral_unlocked - referral_debit
-            locked_wallet.ecg_self_unlocked = self_unlocked - self_debit
-            locked_wallet.save(
+            wallet.ecg_referral_profit = referral_unlocked - referral_debit
+            wallet.ecg_self_unlocked = self_unlocked - self_debit
+            wallet.save(
                 update_fields=[
                     "ecg_referral_profit",
                     "ecg_self_unlocked",
@@ -1207,14 +1217,8 @@ def request_withdraw(request):
                     "withdraw_id": req.id,
                     "source_asset": "ECG",
                     "asset": asset,
-                    "status": "PENDING",
-                    "requested_amount": str(ton_amount if is_ton else ecg_amount),
-                    "requested_ton": str(ton_amount) if is_ton else None,
                     "ecg_debited": str(ecg_amount),
-                    "self_profit_debited": str(self_debit),
-                    "referral_profit_debited": str(referral_debit),
-                    "destination": destination,
-                    "approval_required": True,
+                    "destination": destination
                 },
             )
 
