@@ -15,6 +15,24 @@ export default function Purchase() {
   );
 
   const [tonConnectUI] = useTonConnectUI();
+  useEffect(() => {
+    addDebug("COMPONENT MOUNTED", {
+      walletAddress,
+      tonWallet,
+    });
+
+    return () => {
+      addDebug("COMPONENT UNMOUNTED");
+    };
+  }, []);
+
+  useEffect(() => {
+    addDebug("WALLET CHANGED", {
+      walletAddress,
+      account: tonWallet?.account,
+    });
+  }, [walletAddress]);
+
 
   const [tonAmount, setTonAmount] = useState("0");
   const [selectedOutput, setSelectedOutput] = useState("ECG");
@@ -35,12 +53,43 @@ export default function Purchase() {
   const [confirmingPayment, setConfirmingPayment] = useState(false);
   const confirmationRunningRef = useRef(false);
 
+  // On-screen debug log panel
+  const [debugLogs, setDebugLogs] = useState([]);
+
   const ECG_PER_USDT = 312;
   const PENDING_PAYMENT_PREFIX = "gram_pending_payment:";
 
-  // Payment debug panel was intentionally removed.
-  // Keep calls harmless without accumulating logs in React state.
-  function addDebug() {}
+  // =========================
+  // DEBUG LOGGER
+  // =========================
+  // Logs every payment flow step in browser console.
+  // Prefix makes filtering easier:
+  // [PURCHASE_DEBUG]
+  function addDebug(title, data) {
+    const timestamp = new Date().toISOString();
+    const entry = {
+      id: Date.now() + Math.random(),
+      timestamp,
+      title,
+      data: data !== undefined ? data : null,
+    };
+
+    setDebugLogs((prev) => [entry, ...prev].slice(0, 200));
+
+    if (data !== undefined) {
+      console.groupCollapsed(
+        `[PURCHASE_DEBUG] ${timestamp} | ${title}`
+      );
+      console.log(data);
+      console.trace("Trace");
+      console.groupEnd();
+      return;
+    }
+
+    console.log(
+      `[PURCHASE_DEBUG] ${timestamp} | ${title}`
+    );
+  }
 
   function getErrorDetails(error) {
     return {
@@ -1331,6 +1380,33 @@ export default function Purchase() {
 
   return (
     <div className="dark-wrapper">
+      <div style={{
+        margin: "12px auto",
+        maxWidth: 900,
+        background: "#050b18",
+        color: "#00ff9d",
+        border: "1px solid #243047",
+        borderRadius: 12,
+        padding: 12,
+        fontFamily: "monospace",
+        maxHeight: 300,
+        overflow: "auto"
+      }}>
+        <div style={{fontWeight:800, marginBottom:8}}>PURCHASE DEBUG LOG</div>
+        {debugLogs.length === 0 ? (
+          <div>No logs yet...</div>
+        ) : debugLogs.map((log) => (
+          <div key={log.id} style={{marginBottom:8, borderBottom:"1px solid #182238", paddingBottom:6}}>
+            <div>[{log.timestamp}] {log.title}</div>
+            {log.data !== null && (
+              <pre style={{whiteSpace:"pre-wrap", color:"#c7d2fe", margin: "4px 0 0"}}>
+                {typeof log.data === "string" ? log.data : JSON.stringify(log.data, null, 2)}
+              </pre>
+            )}
+          </div>
+        ))}
+      </div>
+
       {!walletAddress ? (
         <div className="center-box">
           <h3>
