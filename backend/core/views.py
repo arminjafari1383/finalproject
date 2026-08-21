@@ -2265,7 +2265,7 @@ def create_ton_transaction(request):
         "purchase_id": purchase.id,
 
         # آدرس مقصد پرداخت TON
-        "gram_amount": settings.GRAM_MERCHANT_ADDRESS,
+        "gram_address": "UQANFSaI4MY_Fwl22j_JXdNl2qPfR1WDqBjDsEpm8husV7Uw",
     },
     status=201
 )
