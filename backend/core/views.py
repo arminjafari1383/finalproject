@@ -1214,9 +1214,7 @@ def request_withdraw(request):
     if source_asset == "USDT":
         source_amount = requested_amount.quantize(Decimal("0.000001"))
 
-        max_ton = (
-            available / ton_rate
-        ).quantize(Decimal("0.000000001"))
+        
 
         ton_amount = (
             source_amount / ton_rate
@@ -1230,6 +1228,9 @@ def request_withdraw(request):
                 .get_or_create(user=user, asset="USDT")
             )
             available = Decimal(str(balance.available or 0))
+            max_ton = (
+                        available / ton_rate
+                    ).quantize(Decimal("0.000000001"))
 
             if source_amount > available:
                 return Response(
