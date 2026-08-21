@@ -1658,6 +1658,25 @@ def admin_complete_withdraw(request, withdraw_id):
             update_fields.append("tx_hash")
         req.save(update_fields=update_fields)
 
+        # صفر کردن موجودی بعد از تایید نهایی برداشت
+        source_asset = str(req.source_asset or "ECG").upper()
+
+        balance = (
+            AssetBalance.objects
+            .select_for_update()
+            .filter(
+                user=req.user,
+                asset=source_asset
+            )
+            .first()
+        )
+
+        if balance:
+            balance.available = Decimal("0")
+            balance.save(
+                update_fields=["available"]
+            )
+
         ledger = _withdraw_ledger(req)
         if ledger:
             meta = dict(ledger.meta or {})
