@@ -1,6 +1,7 @@
 // frontend/src/components/Referrals.jsx
 
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -175,6 +176,8 @@ function getTelegramAvatar(
 
 function DebugPanel({
   data,
+  logs = [],
+  onClear,
 }) {
   const [open, setOpen] =
     useState(true);
@@ -249,21 +252,72 @@ function DebugPanel({
           🐛 Telegram Debug
         </strong>
 
-        <button
-          onClick={() =>
-            setOpen(false)
-          }
+        <div
           style={{
-            border: "none",
-            background:
-              "transparent",
-            color: "#888",
-            fontSize:
-              "18px",
+            display: "flex",
+            gap: "6px",
+            alignItems: "center",
           }}
         >
-          ✕
-        </button>
+          <button
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(
+                  JSON.stringify(
+                    { data, logs },
+                    null,
+                    2
+                  )
+                );
+              } catch (error) {
+                console.error(
+                  "Debug copy failed:",
+                  error
+                );
+              }
+            }}
+            style={{
+              border: "1px solid #444",
+              background: "#22223a",
+              color: "#ddd",
+              borderRadius: "6px",
+              padding: "4px 7px",
+              fontSize: "10px",
+            }}
+          >
+            📋 Copy
+          </button>
+
+          <button
+            onClick={onClear}
+            style={{
+              border: "1px solid #444",
+              background: "#22223a",
+              color: "#ddd",
+              borderRadius: "6px",
+              padding: "4px 7px",
+              fontSize: "10px",
+            }}
+          >
+            🧹 Clear
+          </button>
+
+          <button
+            onClick={() =>
+              setOpen(false)
+            }
+            style={{
+              border: "none",
+              background:
+                "transparent",
+              color: "#888",
+              fontSize:
+                "18px",
+            }}
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
       <DebugRow
@@ -363,6 +417,46 @@ function DebugPanel({
         value={
           data?.inviterCode ||
           "None"
+        }
+      />
+
+      <DebugRow
+        name="unsafe.start_param"
+        value={
+          data?.unsafeStartParam ||
+          "None"
+        }
+      />
+
+      <DebugRow
+        name="tgWebAppStartParam"
+        value={
+          data?.tgWebAppStartParam ||
+          "None"
+        }
+      />
+
+      <DebugRow
+        name="Referral Source"
+        value={
+          data?.referralSource ||
+          "Unknown"
+        }
+      />
+
+      <DebugRow
+        name="Connect Status"
+        value={
+          data?.connectStatus ||
+          "Not sent"
+        }
+      />
+
+      <DebugRow
+        name="Diagnosis"
+        value={
+          data?.diagnosis ||
+          "Collecting data..."
         }
       />
 
@@ -499,6 +593,78 @@ function DebugPanel({
             2
           )}
         </pre>
+      </section>
+
+      <section
+        style={{
+          marginTop: "10px",
+          borderTop: "1px solid #333",
+          paddingTop: "8px",
+        }}
+      >
+        <div
+          style={{
+            color: "#ffca28",
+            marginBottom: "6px",
+            fontWeight: "bold",
+          }}
+        >
+          🧭 Referral Trace ({logs.length})
+        </div>
+
+        <div
+          style={{
+            maxHeight: "260px",
+            overflow: "auto",
+            background: "#0d0d1a",
+            borderRadius: "6px",
+            padding: "8px",
+          }}
+        >
+          {logs.length === 0 ? (
+            <div style={{ color: "#777" }}>
+              No trace events yet.
+            </div>
+          ) : (
+            logs
+              .slice()
+              .reverse()
+              .map((item, index) => (
+                <div
+                  key={`${item.time}-${index}`}
+                  style={{
+                    padding: "6px 0",
+                    borderBottom:
+                      "1px solid rgba(255,255,255,.06)",
+                  }}
+                >
+                  <div>
+                    <span style={{ color: "#777" }}>
+                      {item.time}
+                    </span>{" "}
+                    <strong style={{ color: "#80cbc4" }}>
+                      {item.stage}
+                    </strong>
+                  </div>
+                  <pre
+                    style={{
+                      margin: "4px 0 0",
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word",
+                      fontSize: "9px",
+                      color: "#ccc",
+                    }}
+                  >
+                    {JSON.stringify(
+                      item.details || {},
+                      null,
+                      2
+                    )}
+                  </pre>
+                </div>
+              ))
+          )}
+        </div>
       </section>
 
       <section
@@ -670,6 +836,61 @@ export default function Referrals() {
     setBackendResponse,
   ] = useState(null);
 
+  const [
+    traceLogs,
+    setTraceLogs,
+  ] = useState([]);
+
+  const addTrace = useCallback(
+    (stage, details = {}) => {
+      const item = {
+        time: new Date().toISOString(),
+        stage,
+        details,
+      };
+
+      console.log(
+        `[REF-TRACE] ${stage}`,
+        details
+      );
+
+      setTraceLogs((prev) =>
+        [...prev, item].slice(-80)
+      );
+    },
+    []
+  );
+
+  const clearTrace = useCallback(
+    () => setTraceLogs([]),
+    []
+  );
+
+  useEffect(() => {
+    const params =
+      new URLSearchParams(
+        window.location.search
+      );
+
+    addTrace("PAGE_OPEN", {
+      href: window.location.href,
+      search: window.location.search,
+      hash: window.location.hash,
+      startapp:
+        params.get("startapp"),
+      start_param:
+        params.get("start_param"),
+      tgWebAppStartParam:
+        params.get(
+          "tgWebAppStartParam"
+        ),
+      storedInviterCode:
+        localStorage.getItem(
+          "inviter_code"
+        ),
+    });
+  }, [addTrace]);
+
   // مهم:
   // این ref فقط key ثبت قبلی را نگه می‌دارد.
   // دیگر روی string .current نمی‌زنیم.
@@ -734,6 +955,27 @@ export default function Referrals() {
       const platform =
         tg?.platform ||
         "Unknown";
+
+      const pageParams =
+        new URLSearchParams(
+          window.location.search
+        );
+
+      const tgWebAppStartParam =
+        pageParams.get(
+          "tgWebAppStartParam"
+        );
+
+      addTrace(
+        "TELEGRAM_DETECT",
+        {
+          hasTelegram,
+          hasWebApp,
+          platform,
+          tgWebAppStartParam,
+          href: window.location.href,
+        }
+      );
 
       console.log(
         "window.Telegram:",
@@ -833,6 +1075,18 @@ export default function Referrals() {
           );
         }
 
+        addTrace(
+          "BROWSER_REFERRAL_CAPTURE",
+          {
+            code,
+            storedInviterCode:
+              localStorage.getItem(
+                "inviter_code"
+              ),
+            href: window.location.href,
+          }
+        );
+
         setInviterCode(
           code
         );
@@ -895,6 +1149,24 @@ export default function Referrals() {
 
       const user =
         getTelegramUser(tg);
+
+      addTrace(
+        "TELEGRAM_INIT_DATA",
+        {
+          unsafeStartParam:
+            unsafe?.start_param ||
+            null,
+          tgWebAppStartParam,
+          initDataLength:
+            String(
+              tg?.initData || ""
+            ).length,
+          userId:
+            user?.id || null,
+          username:
+            user?.username || null,
+        }
+      );
 
       console.log(
         "initDataUnsafe:",
@@ -1071,6 +1343,7 @@ export default function Referrals() {
       // ================================================
 
       let code = null;
+      let referralSource = null;
 
       const startParam =
         unsafe.start_param ||
@@ -1087,6 +1360,23 @@ export default function Referrals() {
             : String(
                 startParam
               );
+        referralSource =
+          "initDataUnsafe.start_param";
+      }
+
+      if (!code && tgWebAppStartParam) {
+        code =
+          String(
+            tgWebAppStartParam
+          ).startsWith("ref_")
+            ? String(
+                tgWebAppStartParam
+              ).substring(4)
+            : String(
+                tgWebAppStartParam
+              );
+        referralSource =
+          "tgWebAppStartParam";
       }
 
       if (!code) {
@@ -1094,7 +1384,20 @@ export default function Referrals() {
           code =
             captureInviterCode() ||
             null;
-        } catch {}
+          if (code) {
+            referralSource =
+              "captureInviterCode()";
+          }
+        } catch (captureError) {
+          addTrace(
+            "REFERRAL_CAPTURE_ERROR",
+            {
+              message:
+                captureError?.message ||
+                String(captureError),
+            }
+          );
+        }
       }
 
       if (!code) {
@@ -1102,7 +1405,20 @@ export default function Referrals() {
           code =
             getInviterCode() ||
             null;
-        } catch {}
+          if (code) {
+            referralSource =
+              "getInviterCode()";
+          }
+        } catch (storedError) {
+          addTrace(
+            "REFERRAL_STORAGE_ERROR",
+            {
+              message:
+                storedError?.message ||
+                String(storedError),
+            }
+          );
+        }
       }
 
       if (code) {
@@ -1111,6 +1427,21 @@ export default function Referrals() {
           code
         );
       }
+
+      addTrace(
+        "REFERRAL_RESOLVED",
+        {
+          unsafeStartParam:
+            startParam,
+          tgWebAppStartParam,
+          resolvedCode: code,
+          referralSource,
+          storedInviterCode:
+            localStorage.getItem(
+              "inviter_code"
+            ),
+        }
+      );
 
       setInviterCode(
         code
@@ -1122,6 +1453,15 @@ export default function Referrals() {
 
           inviterCode:
             code,
+          unsafeStartParam:
+            startParam,
+          tgWebAppStartParam,
+          referralSource,
+          diagnosis: !user?.id
+            ? "Telegram user ID is missing"
+            : !code
+            ? "Referral code was not received"
+            : "Telegram identity + referral code found",
         })
       );
 
@@ -1162,6 +1502,18 @@ export default function Referrals() {
     let cancelled = false;
 
     async function registerUser() {
+      addTrace(
+        "REGISTER_EFFECT",
+        {
+          address,
+          referralReady,
+          inviterCode,
+          telegramId,
+          telegramUsername,
+          isTelegramWebApp,
+        }
+      );
+
       console.log(
         "========================================="
       );
@@ -1200,6 +1552,10 @@ export default function Referrals() {
       );
 
       if (!address) {
+        addTrace(
+          "REGISTER_SKIPPED_NO_WALLET",
+          {}
+        );
         setMyCode(null);
 
         setRefCount(null);
@@ -1208,6 +1564,10 @@ export default function Referrals() {
       }
 
       if (!referralReady) {
+        addTrace(
+          "REGISTER_WAITING_REFERRAL",
+          {}
+        );
         console.log(
           "⏳ Waiting for referral initialization"
         );
@@ -1273,6 +1633,20 @@ export default function Referrals() {
         } catch {}
       }
 
+      addTrace(
+        "REGISTER_IDENTITY_READY",
+        {
+          finalTelegramId,
+          finalTelegramUsername,
+          finalInviterCode,
+          identitySource,
+          localStorageInviter:
+            localStorage.getItem(
+              "inviter_code"
+            ),
+        }
+      );
+
       // ==================================================
       // REGISTER KEY
       // ==================================================
@@ -1293,6 +1667,11 @@ export default function Referrals() {
         registerKeyRef.current ===
         currentRegisterKey
       ) {
+        addTrace(
+          "REGISTER_SKIPPED_DUPLICATE_KEY",
+          { currentRegisterKey }
+        );
+
         console.log(
           "⛔ Already registered with same key"
         );
@@ -1367,6 +1746,25 @@ export default function Referrals() {
         })
       );
 
+      addTrace(
+        "CONNECT_REQUEST",
+        payload
+      );
+
+      setDebugData(
+        (prev) => ({
+          ...prev,
+          connectStatus:
+            "Sending /connect/...",
+          diagnosis:
+            !payload.telegram_id
+              ? "BLOCKER: telegram_id is null"
+              : !payload.inviter_code
+              ? "BLOCKER: inviter_code is null"
+              : "Request has Telegram ID + inviter code",
+        })
+      );
+
       try {
         setLoading(true);
 
@@ -1391,12 +1789,41 @@ export default function Referrals() {
           response.data
         );
 
+        addTrace(
+          "CONNECT_SUCCESS",
+          {
+            status: response.status,
+            data: response.data,
+          }
+        );
+
+        if (
+          response.data?.referral_debug
+        ) {
+          addTrace(
+            "BACKEND_REFERRAL_DEBUG",
+            response.data
+              .referral_debug
+          );
+        }
+
         setDebugData(
           (prev) => ({
             ...prev,
 
             backendResponse:
               response.data,
+            connectStatus:
+              `HTTP ${response.status} success`,
+            diagnosis:
+              response.data?.referral_debug
+                ?.reason
+                ? `Referral: ${
+                    response.data
+                      .referral_debug
+                      .reason
+                  }`
+                : "Connect succeeded. Checking referral tree...",
           })
         );
 
@@ -1427,6 +1854,16 @@ export default function Referrals() {
               }
             );
 
+          addTrace(
+            "REFERRAL_COUNT_RESPONSE",
+            {
+              status:
+                countResponse.status,
+              data:
+                countResponse.data,
+            }
+          );
+
           if (!cancelled) {
             setRefCount(
               countResponse.data
@@ -1437,6 +1874,21 @@ export default function Referrals() {
           console.error(
             "Referral count error:",
             countError
+          );
+
+          addTrace(
+            "REFERRAL_COUNT_ERROR",
+            {
+              message:
+                countError?.message ||
+                String(countError),
+              status:
+                countError?.response
+                  ?.status || null,
+              data:
+                countError?.response
+                  ?.data || null,
+            }
           );
 
           if (!cancelled) {
@@ -1457,6 +1909,42 @@ export default function Referrals() {
           err?.response?.data
         );
 
+
+        addTrace(
+          "CONNECT_ERROR",
+          {
+            message:
+              err?.message ||
+              String(err),
+            status:
+              err?.response
+                ?.status || null,
+            data:
+              err?.response
+                ?.data || null,
+          }
+        );
+
+        setDebugData(
+          (prev) => ({
+            ...prev,
+            connectStatus:
+              `ERROR ${
+                err?.response
+                  ?.status || ""
+              }`.trim(),
+            backendResponse:
+              err?.response
+                ?.data || null,
+            diagnosis:
+              err?.response?.data
+                ?.error ||
+              err?.response?.data
+                ?.detail ||
+              err?.message ||
+              "Connect request failed",
+          })
+        );
         setError(
           err?.response?.data
             ?.error ||
@@ -1525,6 +2013,22 @@ export default function Referrals() {
         const data =
           response.data;
 
+        addTrace(
+          "LEVELS_RESPONSE",
+          {
+            status: response.status,
+            total_referrals:
+              data?.total_referrals ||
+              0,
+            level_1_count:
+              data?.levels?.level_1
+                ?.count || 0,
+            first_level_user:
+              data?.levels?.level_1
+                ?.users?.[0] || null,
+          }
+        );
+
         setLevels(
           data?.levels || {}
         );
@@ -1546,12 +2050,37 @@ export default function Referrals() {
             firstLevelUser:
               firstLevel?.users?.[0] ||
               null,
+            diagnosis:
+              (data?.levels?.level_1
+                ?.count || 0) > 0
+                ? "Referral tree contains Level 1 users"
+                : prev?.connectStatus?.includes(
+                    "success"
+                  )
+                ? "Connect succeeded but Level 1 is still empty"
+                : prev?.diagnosis ||
+                  "Level 1 is empty",
           })
         );
       } catch (err) {
         console.error(
           "❌ Levels error:",
           err
+        );
+
+        addTrace(
+          "LEVELS_ERROR",
+          {
+            message:
+              err?.message ||
+              String(err),
+            status:
+              err?.response
+                ?.status || null,
+            data:
+              err?.response
+                ?.data || null,
+          }
         );
       } finally {
         requestRunning = false;
@@ -1669,6 +2198,22 @@ export default function Referrals() {
           myCode
         )}`
       : "";
+
+  useEffect(() => {
+    if (!referralLink) return;
+
+    addTrace(
+      "REFERRAL_LINK_READY",
+      {
+        myCode,
+        referralLink,
+      }
+    );
+  }, [
+    addTrace,
+    myCode,
+    referralLink,
+  ]);
 
   // ====================================================
   // OPEN REFERRAL LINK
@@ -2097,10 +2642,18 @@ export default function Referrals() {
 
   if (!address) {
     return (
-      <div className="wallet-required">
-        🔌 Please connect your
-        wallet first.
-      </div>
+      <>
+        <DebugPanel
+          data={debugData}
+          logs={traceLogs}
+          onClear={clearTrace}
+        />
+
+        <div className="wallet-required">
+          🔌 Please connect your
+          wallet first.
+        </div>
+      </>
     );
   }
 
@@ -2110,6 +2663,12 @@ export default function Referrals() {
 
   return (
     <div className="referral-dashboard">
+      <DebugPanel
+        data={debugData}
+        logs={traceLogs}
+        onClear={clearTrace}
+      />
+
       <h2>
         🎯 Referral Dashboard
       </h2>

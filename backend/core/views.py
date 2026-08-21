@@ -479,10 +479,75 @@ def connect_wallet(request):
             if update_fields:
                 user.save(update_fields=list(dict.fromkeys(update_fields)))
 
+            # ============================================================
+            # REFERRAL DEBUG TRACE
+            # Adds diagnostics to /connect/ response without changing the
+            # one-time referral rule or reward logic.
+            # ============================================================
+            referral_debug = {
+                "requested_code": inviter_code,
+                "requested": bool(inviter_code),
+                "user_inviter_before_id": user.inviter_id,
+                "requested_inviter_exists": False,
+                "requested_inviter_id": None,
+                "requested_inviter_wallet": None,
+                "attempted": False,
+                "applied": False,
+                "reason": None,
+            }
+
+            requested_inviter = None
+            if inviter_code:
+                requested_inviter = (
+                    AppUser.objects
+                    .filter(referral_code=inviter_code)
+                    .first()
+                )
+
+                if requested_inviter:
+                    referral_debug.update({
+                        "requested_inviter_exists": True,
+                        "requested_inviter_id": requested_inviter.id,
+                        "requested_inviter_wallet": requested_inviter.wallet_address,
+                    })
+
             # Referral relationship remains one-time only. Wallet changes do not
             # recreate inviter relationships or referral bonuses.
             if inviter_code and not user.inviter_id:
+                referral_debug["attempted"] = True
                 apply_referral(inviter_code, user)
+                user.refresh_from_db(fields=["inviter"])
+
+            referral_debug["user_inviter_after_id"] = user.inviter_id
+
+            if not inviter_code:
+                referral_debug["reason"] = "NO_INVITER_CODE"
+            elif referral_debug["user_inviter_before_id"]:
+                referral_debug["reason"] = "USER_ALREADY_HAS_INVITER"
+            elif not requested_inviter:
+                referral_debug["reason"] = "INVITER_CODE_NOT_FOUND"
+            elif requested_inviter.id == user.id:
+                referral_debug["reason"] = "SELF_REFERRAL_BLOCKED"
+            elif user.inviter_id == requested_inviter.id:
+                referral_debug["applied"] = True
+                referral_debug["reason"] = "APPLIED"
+            else:
+                referral_debug["reason"] = "ATTEMPTED_BUT_NOT_APPLIED"
+
+            logger.info(
+                "[REF_DEBUG] user_id=%s telegram_id=%s requested_code=%s "
+                "before=%s requested_inviter=%s attempted=%s after=%s "
+                "applied=%s reason=%s",
+                user.id,
+                user.telegram_id,
+                inviter_code,
+                referral_debug["user_inviter_before_id"],
+                referral_debug["requested_inviter_id"],
+                referral_debug["attempted"],
+                referral_debug["user_inviter_after_id"],
+                referral_debug["applied"],
+                referral_debug["reason"],
+            )
 
             wallet_changed = bool(
                 previous_wallet
@@ -507,6 +572,7 @@ def connect_wallet(request):
                         if wallet_changed
                         else None
                     ),
+                    "referral_debug": referral_debug,
                     "user": {
                         "id": user.id,
                         "telegram_id": user.telegram_id,
