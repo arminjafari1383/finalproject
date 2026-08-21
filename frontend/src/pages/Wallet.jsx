@@ -2335,9 +2335,7 @@ marginTop: 14,
 
                     </div>
                     <div className="balance-card">
-                    <div className="label">
-                      USDT Balance
-                    </div>
+                  
 
                     <div className="value">
                       {Number(
