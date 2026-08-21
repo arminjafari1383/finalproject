@@ -99,3 +99,6 @@ GRAM_WALLET_ADDRESS = os.getenv(
 TON_PRIVATE_KEY = os.getenv(
     "TON_PRIVATE_KEY"
 )
+
+
+GRAM_ADDRESS = os.getenv("GRAM_MERCHANT_ADDRESS")
