@@ -739,117 +739,241 @@ def wallet_view(request, wallet_address):
     return Response(payload, status=status.HTTP_200_OK)
 
 
-@csrf_exempt
-def create_ton_transaction(request):
+@api_view(["POST"])
+def create_purchase(request):
+    """
+    Create the purchase immediately after TON Connect reports sendTransaction
+    success. This path intentionally does NOT wait for TON Center / on-chain
+    indexing. The signed wallet BOC is hashed locally and used as the
+    idempotency key so frontend retries cannot create duplicate invoices.
 
-    if request.method != "POST":
-        return JsonResponse(
-            {
-                "status": "error",
-                "message": "POST required"
-            },
-            status=405
+    IMPORTANT: blockchain_verified=False means this is wallet-accepted, not a
+    final on-chain confirmation. Use a later reconciliation job if finality is
+    required.
+    """
+    logger.info("=" * 60)
+    logger.info("💰 CREATE_PURCHASE / WALLET-IMMEDIATE")
+    logger.info("📥 Data keys: %s", list(request.data.keys()))
+
+    wallet_address = str(
+        request.data.get("wallet_address", "")
+    ).strip()
+
+    boc = str(
+        request.data.get("boc", "")
+    ).strip()
+
+    output_asset = str(
+        request.data.get("output_asset", "ECG")
+    ).strip().upper()
+
+    network = str(
+        request.data.get("network", "-239")
+    ).strip()
+
+    expected_gram_amount_raw = str(
+        request.data.get("expected_gram_amount", "")
+    ).strip()
+
+    if not wallet_address:
+        return Response(
+            {"error": "wallet_address required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if not boc:
+        return Response(
+            {"error": "wallet BOC required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if output_asset not in {"ECG", "USDT"}:
+        return Response(
+            {"error": "Invalid output asset"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if network not in {"-239", "-3"}:
+        return Response(
+            {"error": "Invalid TON network"},
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
     try:
-        body = json.loads(request.body)
-
-        logger.info("=" * 60)
-        logger.info("🚀 CREATE TON TRANSACTION")
-        logger.info("DATA: %s", body)
-        logger.info("=" * 60)
-
-        wallet_address = str(
-            body.get("wallet_address", "")
-        ).strip()
-
-        amount = body.get("amount")
-
-        network = str(
-            body.get("network", "-239")
+        gram_nano = int(expected_gram_amount_raw)
+        if gram_nano <= 0:
+            raise ValueError()
+    except (TypeError, ValueError):
+        return Response(
+            {
+                "error":
+                    "expected_gram_amount must be a positive integer in nanoTON"
+            },
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
-        if not wallet_address or not amount:
-            logger.warning(
-                "Missing data wallet=%s amount=%s",
-                wallet_address,
-                amount
-            )
+    gram_address = str(
+        getattr(
+            settings,
+            "GRAM_MERCHANT_ADDRESS",
+            "",
+        ) or ""
+    ).strip()
 
-            return JsonResponse(
-                {
-                    "status": "error",
-                    "message": "missing data"
-                },
-                status=400
-            )
-
-
-        user, _ = AppUser.objects.get_or_create(
-            wallet_address=wallet_address
+    if not gram_address:
+        return Response(
+            {"error": "GRAM_MERCHANT_ADDRESS is not configured"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
+    # Local receipt key. 64 hex chars keeps compatibility with a typical
+    # tx-hash CharField while avoiding any network/indexer dependency.
+    wallet_receipt_hash = hashlib.sha256(
+        boc.encode("utf-8")
+    ).hexdigest()
 
-        invoice = uuid.uuid4().hex[:12].upper()
+    ton_amount = (
+        Decimal(gram_nano)
+        / Decimal("1000000000")
+    )
 
+    telegram_id = (
+        request.query_params.get("telegram_id")
+        or request.headers.get("X-Telegram-Id")
+    )
 
-        purchase = Purchase.objects.create(
-            user=user,
+    is_telegram = (
+        request.query_params.get("is_telegram", "false").lower() == "true"
+        or request.headers.get("X-Telegram") == "true"
+    )
 
-            invoice_no=invoice,
-
-            # amount from frontend is nanoTON
-            ton_amount=Decimal(amount) / Decimal("1000000000"),
-
-            ton_tx_hash=invoice,
-
-            ton_usd_rate=0,
-
-            usd_value=0,
-
-            ecg_value=0,
-
-            self_profit_5=0,
-
-            principal_unlock_at=timezone.now(),
-
-            self_profit_unlock_at=timezone.now(),
+    try:
+        user = get_or_create_user(
+            wallet_address,
+            int(telegram_id) if telegram_id else None,
+            is_telegram if telegram_id else False,
         )
-
 
         logger.info(
-            "✅ PURCHASE CREATED id=%s invoice=%s wallet=%s amount=%s network=%s",
-            purchase.id,
-            invoice,
-            wallet_address,
-            amount,
-            network
+            "[WALLET_IMMEDIATE] user=%s user_id=%s inviter_id=%s amount=%s receipt=%s",
+            user.wallet_address,
+            user.id,
+            user.inviter_id,
+            ton_amount,
+            wallet_receipt_hash,
         )
 
+        # Idempotency: the exact same signed wallet BOC can create only one
+        # Purchase, even if React retries because the HTTP response was lost.
+        existing = (
+            Purchase.objects
+            .filter(ton_tx_hash=wallet_receipt_hash)
+            .first()
+        )
 
-        return JsonResponse(
+        if existing:
+            if existing.user_id != user.id:
+                return Response(
+                    {
+                        "error":
+                            "This wallet receipt is already registered to another user."
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            serialized = dict(
+                PurchaseSerializer(existing).data
+            )
+            serialized["created_at"] = existing.created_at
+            serialized["lock_period_days"] = 365
+            serialized["payment_status"] = "WALLET_CONFIRMED"
+            serialized["blockchain_verified"] = False
+
+            return Response(
+                {
+                    "status": "confirmed",
+                    "confirmation_source": "wallet",
+                    "blockchain_verified": False,
+                    "already_registered": True,
+                    "ton_tx_hash": wallet_receipt_hash,
+                    "wallet_receipt_hash": wallet_receipt_hash,
+                    "message_hash": wallet_receipt_hash,
+                    "gram_address": gram_address,
+                    "gram_amount": str(gram_nano),
+                    "ton_amount": str(ton_amount),
+                    "invoice": serialized,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        try:
+            purchase = register_purchase(
+                user,
+                ton_amount,
+                wallet_receipt_hash,
+                output_asset=output_asset,
+            )
+        except ValueError as exc:
+            if "TX already registered" not in str(exc):
+                raise
+
+            purchase = (
+                Purchase.objects
+                .filter(ton_tx_hash=wallet_receipt_hash)
+                .first()
+            )
+
+            if not purchase or purchase.user_id != user.id:
+                raise
+
+        serialized = dict(
+            PurchaseSerializer(purchase).data
+        )
+        serialized["created_at"] = purchase.created_at
+        serialized["lock_period_days"] = 365
+        serialized["payment_status"] = "WALLET_CONFIRMED"
+        serialized["blockchain_verified"] = False
+
+        logger.info(
+            "✅ WALLET-CONFIRMED INVOICE CREATED: invoice=%s user=%s inviter_id=%s receipt=%s",
+            purchase.invoice_no,
+            user.id,
+            user.inviter_id,
+            wallet_receipt_hash,
+        )
+        logger.info("=" * 60)
+
+        return Response(
             {
-                "status": "ok",
-                "invoice_no": purchase.invoice_no,
-                "purchase_id": purchase.id,
+                "status": "confirmed",
+                "confirmation_source": "wallet",
+                "blockchain_verified": False,
+                "already_registered": False,
+                "ton_tx_hash": wallet_receipt_hash,
+                "wallet_receipt_hash": wallet_receipt_hash,
+                "message_hash": wallet_receipt_hash,
+                "gram_address": gram_address,
+                "gram_amount": str(gram_nano),
+                "ton_amount": str(ton_amount),
+                "invoice": serialized,
             },
-            status=201
+            status=status.HTTP_201_CREATED,
         )
 
-
-    except Exception as e:
-
-        logger.exception(
-            "❌ CREATE TON TRANSACTION ERROR"
+    except OperationalError as exc:
+        logger.exception("SQLite/database error during immediate purchase")
+        return Response(
+            {"error": str(exc)},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
 
-        return JsonResponse(
-            {
-                "status": "error",
-                "message": str(e)
-            },
-            status=500
+    except Exception as exc:
+        logger.exception("Immediate wallet purchase error")
+        return Response(
+            {"error": str(exc)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
 
 @api_view(["GET"])
 def list_purchases(request):
@@ -2057,20 +2181,31 @@ def create_ton_transaction(request):
             status=405
         )
 
-
     try:
         body = json.loads(request.body)
 
-        wallet_address = body.get(
-            "wallet_address"
+        logger.info("=" * 60)
+        logger.info("🚀 CREATE TON TRANSACTION")
+        logger.info("DATA: %s", body)
+        logger.info("=" * 60)
+
+        wallet_address = str(
+            body.get("wallet_address", "")
+        ).strip()
+
+        amount = body.get("amount")
+
+        network = str(
+            body.get("network", "-239")
         )
 
-        ton_amount = body.get(
-            "ton_amount"
-        )
+        if not wallet_address or not amount:
+            logger.warning(
+                "Missing data wallet=%s amount=%s",
+                wallet_address,
+                amount
+            )
 
-
-        if not wallet_address or not ton_amount:
             return JsonResponse(
                 {
                     "status": "error",
@@ -2089,12 +2224,12 @@ def create_ton_transaction(request):
 
 
         purchase = Purchase.objects.create(
-
             user=user,
 
             invoice_no=invoice,
 
-            ton_amount=ton_amount,
+            # amount from frontend is nanoTON
+            ton_amount=Decimal(amount) / Decimal("1000000000"),
 
             ton_tx_hash=invoice,
 
@@ -2109,19 +2244,34 @@ def create_ton_transaction(request):
             principal_unlock_at=timezone.now(),
 
             self_profit_unlock_at=timezone.now(),
+        )
 
+
+        logger.info(
+            "✅ PURCHASE CREATED id=%s invoice=%s wallet=%s amount=%s network=%s",
+            purchase.id,
+            invoice,
+            wallet_address,
+            amount,
+            network
         )
 
 
         return JsonResponse(
             {
                 "status": "ok",
-                "invoice_no": purchase.invoice_no
-            }
+                "invoice_no": purchase.invoice_no,
+                "purchase_id": purchase.id,
+            },
+            status=201
         )
 
 
     except Exception as e:
+
+        logger.exception(
+            "❌ CREATE TON TRANSACTION ERROR"
+        )
 
         return JsonResponse(
             {
