@@ -40,6 +40,7 @@ import re
 import base64
 import hashlib
 import hmac
+from django.conf import settings
 import struct
 
 # =======================
@@ -2257,18 +2258,31 @@ def create_ton_transaction(request):
             network
         )
 
-
         return JsonResponse(
-    {
-        "status": "ok",
-        "invoice_no": purchase.invoice_no,
-        "purchase_id": purchase.id,
+            {
+                "status": "ok",
+                "invoice_no": purchase.invoice_no,
+                "purchase_id": purchase.id,
 
-        # آدرس مقصد پرداخت TON
-        "gram_address": "UQANFSaI4MY_Fwl22j_JXdNl2qPfR1WDqBjDsEpm8husV7Uw",
-    },
-    status=201
-)
+                # مقصد پرداخت TON/GRAM
+                "gram_address": settings.GRAM_MERCHANT_ADDRESS,
+
+                # مقدار nanoTON که کاربر باید ارسال کند
+                "gram_amount": str(amount),
+
+                # برای ساخت SendTransaction در frontend
+                "transaction": {
+                    "validUntil": int(time.time()) + 300,
+                    "messages": [
+                        {
+                            "address": settings.GRAM_MERCHANT_ADDRESS,
+                            "amount": str(amount),
+                        }
+                    ]
+                }
+            },
+            status=201
+        )
 
 
     except Exception as e:
