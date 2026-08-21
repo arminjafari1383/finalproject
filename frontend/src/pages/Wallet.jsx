@@ -1452,7 +1452,7 @@ export default function Wallet() {
   // Total completed withdrawals.
   // Backend updates wallet.total_withdrawn only when admin marks
   // a withdrawal Complete/Success, so Pending requests are not counted.
-  const totalMined =
+  const totalWithdrawEcg =
     useMemo(
       () =>
         Number(
@@ -2328,7 +2328,7 @@ marginTop: 14,
                     <div className="stat-value">
 
                       {Number(
-                        totalMined
+                        totalWithdrawEcg
                       ).toFixed(4)}
 
                       {" ECG"}
