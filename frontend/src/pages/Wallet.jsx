@@ -1449,6 +1449,41 @@ export default function Wallet() {
     uniLevelFivePercentUsdt + uniLevelOnePercentUsdt;
 
 
+  // Backend ledger-backed purchase-profit breakdown.
+  // Fallback to Referral Tree values for compatibility with older API versions.
+  const referralLevel1FivePercentEcg = Number(
+    wallet?.referral_level1_profit_ecg ??
+    uniLevelFivePercentEcg ??
+    0
+  );
+
+  const referralLevels2To5OnePercentEcg = Number(
+    wallet?.referral_levels2_5_profit_ecg ??
+    uniLevelOnePercentEcg ??
+    0
+  );
+
+  const referralLevel1FivePercentUsdt = Number(
+    wallet?.referral_level1_profit_usdt ??
+    uniLevelFivePercentUsdt ??
+    0
+  );
+
+  const referralLevels2To5OnePercentUsdt = Number(
+    wallet?.referral_levels2_5_profit_usdt ??
+    uniLevelOnePercentUsdt ??
+    0
+  );
+
+  const referralBreakdownEcgTotal =
+    referralLevel1FivePercentEcg +
+    referralLevels2To5OnePercentEcg;
+
+  const referralBreakdownUsdtTotal =
+    referralLevel1FivePercentUsdt +
+    referralLevels2To5OnePercentUsdt;
+
+
   // Total completed withdrawals.
   // Backend updates wallet.total_withdrawn only when admin marks
   // a withdrawal Complete/Success, so Pending requests are not counted.
@@ -1928,10 +1963,12 @@ marginTop: 14,
                         ECG • Referral Profit
                       </div>
                       <strong style={{ marginTop: 5, fontSize: 16 }}>
-                        {referralProfitEcgUnlocked.toFixed(4)} ECG
+                        {referralBreakdownEcgTotal.toFixed(4)} ECG
                       </strong>
-                      <div style={{ fontSize: 10, opacity: 0.58, marginTop: 6, lineHeight: 1.5 }}>
-                        5% Level 1 + 1% Levels 2–5
+                      <div style={{ fontSize: 10, opacity: 0.68, marginTop: 6, lineHeight: 1.55 }}>
+                        Level 1 • 5%: {referralLevel1FivePercentEcg.toFixed(4)} ECG
+                        <br />
+                        Levels 2–5 • 1% each: {referralLevels2To5OnePercentEcg.toFixed(4)} ECG
                         <br />
                         Available instantly
                       </div>
@@ -2022,10 +2059,12 @@ marginTop: 14,
                         Tether • Referral Profit
                       </div>
                       <strong style={{ marginTop: 5, fontSize: 16 }}>
-                        {referralProfitUsdtUnlocked.toFixed(4)} USDT
+                        {referralBreakdownUsdtTotal.toFixed(4)} USDT
                       </strong>
-                      <div style={{ fontSize: 10, opacity: 0.58, marginTop: 6, lineHeight: 1.5 }}>
-                        5% Level 1 + 1% Levels 2–5
+                      <div style={{ fontSize: 10, opacity: 0.68, marginTop: 6, lineHeight: 1.55 }}>
+                        Level 1 • 5%: {referralLevel1FivePercentUsdt.toFixed(4)} USDT
+                        <br />
+                        Levels 2–5 • 1% each: {referralLevels2To5OnePercentUsdt.toFixed(4)} USDT
                         <br />
                         Available instantly • converts to TON
                       </div>

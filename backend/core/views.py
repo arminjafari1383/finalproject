@@ -651,7 +651,17 @@ def connect_wallet(request):
 
 @api_view(["GET"])
 def wallet_view(request, wallet_address):
-    """Return a live wallet snapshot using only fields that exist on the current models."""
+    """
+    Return a live wallet snapshot with explicit profit buckets:
+
+    - Own purchase profit: 5% (locked 30 days, then released)
+    - Level 1 referral purchase profit: 5% (available immediately)
+    - Levels 2-5 referral purchase profit: 1% each (available immediately)
+
+    AssetBalance.available remains the authoritative withdrawable balance.
+    Ledger rows are used for the visible 5% / 1% breakdown so principal is
+    never mistaken for profit.
+    """
     user = (
         AppUser.objects
         .select_related("wallet")
@@ -670,37 +680,96 @@ def wallet_view(request, wallet_address):
 
     user.refresh_from_db()
     wallet, _ = Wallet.objects.get_or_create(user=user)
+
     usdt_balance, _ = AssetBalance.objects.get_or_create(
         user=user,
         asset="USDT",
     )
-
-    ecg_balance,_ = AssetBalance.objects.get_or_create(
+    ecg_balance, _ = AssetBalance.objects.get_or_create(
         user=user,
         asset="ECG",
     )
-    epl_balance,_ = AssetBalance.objects.get_or_create(
+    epl_asset_balance, _ = AssetBalance.objects.get_or_create(
         user=user,
         asset="EPL",
     )
 
-
     zero = Decimal("0")
+    now = timezone.now()
 
-    # ECG profit buckets from the current Wallet model.
-    self_profit_locked = Decimal(str(ecg_balance.locked or 0))
-    self_profit_unlocked = Decimal(str(ecg_balance.available or 0))
-    downline_profit_current = Decimal("0")
+    def _ledger_total(ledger_type, asset):
+        total = zero
+        asset = str(asset).upper()
 
-    available_balance = self_profit_unlocked + downline_profit_current
-    withdrawable_ecg_profit = available_balance
+        for row in user.ledgers.filter(typ=ledger_type):
+            meta = dict(row.meta or {})
+            row_asset = str(meta.get("asset") or "ECG").upper()
+
+            if row_asset == asset:
+                total += Decimal(str(row.amount or 0))
+
+        return total
+
+    # --------------------------------------------------------
+    # Own 5% purchase profit
+    # --------------------------------------------------------
+    own_locked_ecg = zero
+    own_locked_usdt = zero
+
+    for purchase in Purchase.objects.filter(user=user):
+        amount = Decimal(str(purchase.self_profit_5 or 0))
+        if amount <= 0:
+            continue
+
+        unlock_at = purchase.self_profit_unlock_at
+        if unlock_at and unlock_at <= now:
+            # Matured rows are represented by SELF_PROFIT_UNLOCK ledger rows.
+            continue
+
+        asset = str(
+            getattr(purchase, "profit_asset", None)
+            or getattr(purchase, "output_asset", None)
+            or "ECG"
+        ).upper()
+
+        if asset == "USDT":
+            own_locked_usdt += amount
+        else:
+            own_locked_ecg += amount
+
+    own_unlocked_ecg = _ledger_total("SELF_PROFIT_UNLOCK", "ECG")
+    own_unlocked_usdt = _ledger_total("SELF_PROFIT_UNLOCK", "USDT")
+
+    # --------------------------------------------------------
+    # Referral purchase profit
+    # --------------------------------------------------------
+    level1_5_ecg = _ledger_total("DIRECT_REFERRAL_BONUS", "ECG")
+    level1_5_usdt = _ledger_total("DIRECT_REFERRAL_BONUS", "USDT")
+
+    levels2_5_1_ecg = _ledger_total("INDIRECT_REFERRAL_BONUS", "ECG")
+    levels2_5_1_usdt = _ledger_total("INDIRECT_REFERRAL_BONUS", "USDT")
+
+    referral_ecg_total = level1_5_ecg + levels2_5_1_ecg
+    referral_usdt_total = level1_5_usdt + levels2_5_1_usdt
+
+    # AssetBalance.available is authoritative for what can currently be withdrawn.
+    withdrawable_ecg_profit = Decimal(str(ecg_balance.available or 0))
+    withdrawable_usdt_profit = Decimal(str(usdt_balance.available or 0))
+
     total_ecg_profit = (
-        self_profit_locked
-        + self_profit_unlocked
-        + downline_profit_current
+        own_locked_ecg
+        + own_unlocked_ecg
+        + referral_ecg_total
+    )
+    total_usdt_profit = (
+        own_locked_usdt
+        + own_unlocked_usdt
+        + referral_usdt_total
     )
 
-    # Timer / EPL statistics are ledger-backed. EPL itself is stored on Wallet.
+    # --------------------------------------------------------
+    # EPL / timer / join-referral values
+    # --------------------------------------------------------
     daily_qs = user.ledgers.filter(typ="DAILY_UNLOCK")
     total_mined = (
         daily_qs.aggregate(total=Sum("amount"))["total"]
@@ -715,18 +784,19 @@ def wallet_view(request, wallet_address):
         or zero
     )
 
-    # EPL is not withdrawable, so the ledger totals are also useful as the
-    # current display breakdown. Wallet.epl_balance remains authoritative total.
     referral_bonus_current = referral_bonus_total
     daily_reward_unlocked = total_mined
-    epl_balance = Decimal(str(epl_balance.available or 0))
+    epl_balance_value = Decimal(str(epl_asset_balance.available or 0))
 
     total_earned = (
         user.ledgers
         .filter(
             typ__in=[
                 "DAILY_UNLOCK",
+                "BUY_SELF_PROFIT",
                 "SELF_PROFIT_UNLOCK",
+                "DIRECT_REFERRAL_BONUS",
+                "INDIRECT_REFERRAL_BONUS",
                 "DOWNLINE_PROFIT",
                 "REF_BONUS",
                 "LEVEL5_BONUS",
@@ -736,18 +806,12 @@ def wallet_view(request, wallet_address):
         or zero
     )
 
-    # Legacy principal fields no longer exist in Wallet. Keep API keys for old
-    # clients without incorrectly mapping purchase profit into principal.
+    # Legacy principal fields.
     principal_locked = zero
     principal_unlocked = zero
     stake_balance = zero
 
-    usdt_profit_locked = Decimal(str(usdt_balance.locked or 0))
-    usdt_profit_unlocked = Decimal(str(usdt_balance.available or 0))
-    usdt_profit_total = usdt_profit_locked + usdt_profit_unlocked
-
-    # Current model has no total_withdrawn field. Rebuild the legacy ECG total
-    # from withdrawal ledger rows instead of reading a non-existent column.
+    # Completed/pending withdrawal ledger total for legacy display.
     total_withdrawn = zero
     for ledger in user.ledgers.filter(typ="WITHDRAW"):
         meta = dict(ledger.meta or {})
@@ -756,34 +820,52 @@ def wallet_view(request, wallet_address):
             total_withdrawn += abs(Decimal(str(ledger.amount or 0)))
 
     payload = {
-        # Current native Wallet fields.
-        "ecg_self_locked": str(self_profit_locked),
-        "ecg_self_unlocked": str(self_profit_unlocked),
-        "ecg_referral_profit": str(downline_profit_current),
-        "usdt_self_locked": str(wallet.usdt_self_locked or zero),
-        "usdt_self_unlocked": str(wallet.usdt_self_unlocked or zero),
-        "usdt_referral_profit": str(wallet.usdt_referral_profit or zero),
-        "epl_balance": str(epl_balance),
-        "epl_total_earned": str(wallet.epl_total_earned or zero),
+        # ----------------------------------------------------
+        # Explicit current profit buckets
+        # ----------------------------------------------------
+        "purchase_profit_ecg": str(own_locked_ecg + own_unlocked_ecg),
+        "purchase_profit_ecg_locked": str(own_locked_ecg),
+        "purchase_profit_ecg_unlocked": str(own_unlocked_ecg),
 
-        # ECG withdrawal / profit API.
-        "withdrawable_total": str(available_balance),
-        "available_balance": str(available_balance),
+        "purchase_profit_usdt": str(own_locked_usdt + own_unlocked_usdt),
+        "purchase_profit_usdt_locked": str(own_locked_usdt),
+        "purchase_profit_usdt_unlocked": str(own_unlocked_usdt),
+
+        "referral_level1_profit_ecg": str(level1_5_ecg),
+        "referral_levels2_5_profit_ecg": str(levels2_5_1_ecg),
+        "referral_profit_ecg_unlocked": str(referral_ecg_total),
+
+        "referral_level1_profit_usdt": str(level1_5_usdt),
+        "referral_levels2_5_profit_usdt": str(levels2_5_1_usdt),
+        "referral_profit_usdt_unlocked": str(referral_usdt_total),
+
+        # ----------------------------------------------------
+        # Withdrawable balances (authoritative AssetBalance)
+        # ----------------------------------------------------
+        "withdrawable_total": str(withdrawable_ecg_profit),
+        "available_balance": str(withdrawable_ecg_profit),
         "ecg_balance": str(withdrawable_ecg_profit),
         "withdrawable_ecg_profit": str(withdrawable_ecg_profit),
+        "withdrawable_usdt_profit": str(withdrawable_usdt_profit),
+
         "total_ecg_profit": str(total_ecg_profit),
-        "purchase_profit_ecg": str(self_profit_locked + self_profit_unlocked),
-        "purchase_profit_ecg_locked": str(self_profit_locked),
-        "purchase_profit_ecg_unlocked": str(self_profit_unlocked),
-        "referral_profit_ecg_unlocked": str(downline_profit_current),
+        "total_usdt_profit": str(total_usdt_profit),
 
-        # USDT profit API.
-        "purchase_profit_usdt": str(usdt_profit_total),
-        "purchase_profit_usdt_locked": str(usdt_profit_locked),
-        "purchase_profit_usdt_unlocked": str(usdt_profit_unlocked),
-        "withdrawable_usdt_profit": str(usdt_profit_unlocked),
+        # ----------------------------------------------------
+        # Current native / compatibility fields
+        # ----------------------------------------------------
+        "ecg_self_locked": str(own_locked_ecg),
+        "ecg_self_unlocked": str(own_unlocked_ecg),
+        "ecg_referral_profit": str(referral_ecg_total),
 
-        # Timer / referral EPL API.
+        "usdt_self_locked": str(own_locked_usdt),
+        "usdt_self_unlocked": str(own_unlocked_usdt),
+        "usdt_referral_profit": str(referral_usdt_total),
+
+        "epl_balance": str(epl_balance_value),
+        "epl_total_earned": str(wallet.epl_total_earned or zero),
+
+        # Timer / join referral EPL.
         "hourly_reward_balance": str(daily_reward_unlocked),
         "hourly_reward_total": str(total_mined),
         "hourly_claims": mining_days,
@@ -792,12 +874,12 @@ def wallet_view(request, wallet_address):
         "referral_bonus_balance": str(referral_bonus_current),
         "referral_bonus_total": str(referral_bonus_total),
 
-        # Legacy aliases retained for frontend compatibility.
+        # Legacy aliases.
         "stake_balance": str(stake_balance),
         "principal_locked": str(principal_locked),
         "principal_unlocked": str(principal_unlocked),
-        "self_profit_locked": str(self_profit_locked),
-        "self_profit_unlocked": str(self_profit_unlocked),
+        "self_profit_locked": str(own_locked_ecg),
+        "self_profit_unlocked": str(own_unlocked_ecg),
         "total_mined": str(total_mined),
         "mining_days": mining_days,
         "total_earned": str(total_earned),
@@ -1154,7 +1236,7 @@ def request_withdraw(request):
                 )
 
             balance.available = available - source_amount
-            balance.save(update_fields=["available", "updated_at"])
+            balance.save(update_fields=["available"])
 
             req = WithdrawRequest.objects.create(
                 user=user,
@@ -1215,9 +1297,8 @@ def request_withdraw(request):
             )
 
             epl_balance.save(
-                update_fields = [
+                update_fields=[
                     "available",
-                    "updated_at"
                 ]
             )
             req = WithdrawRequest.objects.create(
@@ -1284,7 +1365,6 @@ def request_withdraw(request):
             ecg_balance.save(
                 update_fields=[
                     "available",
-                    "updated_at",
                 ]
             )
 
@@ -1810,7 +1890,7 @@ def tick(request):
             )
             epl_balance.save(
                 update_fields=[
-                    "total_earned",
+                    "available",
                     "total_earned",
                 ]
             )

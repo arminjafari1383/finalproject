@@ -394,12 +394,12 @@ export default function Purchase() {
       profit_asset: payment?.output_asset || "ECG",
       created_at: new Date(createdAt).toISOString(),
       lock_period_days: 365,
-      principal_unlock_at: "Waiting for blockchain confirmation",
-      self_profit_unlock_at: "Waiting for blockchain confirmation",
+      principal_unlock_at: "Saving real invoice...",
+      self_profit_unlock_at: "Saving real invoice...",
       ton_tx_hash: "",
       currency: "TON",
       __pending: true,
-      __status: "CONFIRMING",
+      __status: "SAVING",
       __message_hash: String(payment?.message_hash || ""),
     };
   }
@@ -417,7 +417,7 @@ export default function Purchase() {
 
     if (confirmationRunningRef.current) {
       addDebug(
-        "ℹ️ Confirmation is already running"
+        "ℹ️ Invoice registration is already running"
       );
       return null;
     }
@@ -425,246 +425,157 @@ export default function Purchase() {
     confirmationRunningRef.current = true;
     setConfirmingPayment(true);
 
-    let payment = {
+    const payment = {
       ...initialPayment,
     };
 
-    let messageHash = String(
-      payment?.message_hash || ""
-    );
+    const confirmPayload = {
+      wallet_address:
+        payment.wallet_address,
+
+      output_asset:
+        payment.output_asset || "ECG",
+
+      output_amount:
+        String(
+          payment.output_amount ||
+          (
+            payment.output_asset === "USDT"
+              ? (
+                  Number(payment.ton_amount || 0) *
+                  Number(payment.ton_price || 0)
+                )
+              : (
+                  Number(payment.ton_amount || 0) *
+                  Number(payment.ton_price || 0) *
+                  ECG_PER_USDT
+                )
+          )
+        ),
+
+      network:
+        payment.network || "-239",
+
+      expected_gram_amount:
+        String(payment.gram_amount || ""),
+
+      // TON Connect already accepted/signed the payment.
+      // Backend uses this BOC only as a local receipt/idempotency key.
+      // There is no TON Center / blockchain confirmation loop.
+      boc:
+        payment.boc,
+    };
 
     try {
       addDebug(
         resumed
-          ? "🔄 RESUMING SAVED PAYMENT CONFIRMATION"
-          : "💾 START IMMEDIATE BACKEND REGISTRATION"
+          ? "💾 RESTORING WALLET-ACCEPTED PAYMENT + SAVING INVOICE"
+          : "💾 WALLET ACCEPTED PAYMENT — SAVING REAL INVOICE NOW",
+        {
+          ...confirmPayload,
+          boc:
+            confirmPayload.boc
+              ? `<BOC ${confirmPayload.boc.length} chars>`
+              : "",
+        }
       );
 
-      // حدود 30 دقیقه روی همین صفحه تلاش می‌کند.
-      // اگر صفحه بسته/رفرش شود، localStorage باعث ادامه در لود بعدی می‌شود.
-      const maxAttempts = 360;
-
-      for (
-        let attempt = 1;
-        attempt <= maxAttempts;
-        attempt += 1
-      ) {
-        const confirmPayload = {
-          wallet_address:
-            payment.wallet_address,
-
-          output_asset:
-            payment.output_asset || "ECG",
-
-          output_amount:
-            String(
-              payment.output_amount ||
-              (
-                payment.output_asset === "USDT"
-                  ? (
-                      Number(payment.ton_amount || 0) *
-                      Number(payment.ton_price || 0)
-                    )
-                  : (
-                      Number(payment.ton_amount || 0) *
-                      Number(payment.ton_price || 0) *
-                      ECG_PER_USDT
-                    )
-              )
-            ),
-
-          network:
-            payment.network || "-239",
-
-          expected_gram_amount:
-            String(payment.gram_amount || ""),
-
-          boc:
-            messageHash
-              ? ""
-              : payment.boc,
-
-          message_hash:
-            messageHash,
-        };
-
-        addDebug(
-          `Confirmation attempt ${attempt}/${maxAttempts}`,
-          {
-            ...confirmPayload,
-            boc:
-              confirmPayload.boc
-                ? `<BOC ${confirmPayload.boc.length} chars>`
-                : "",
-          }
+      const response =
+        await api.post(
+          "/purchase/create/",
+          confirmPayload
         );
 
-        try {
-          const response =
-            await api.post(
-              "/purchase/create/",
-              confirmPayload
-            );
+      const data =
+        response?.data || {};
 
-          const data =
-            response?.data || {};
+      addDebug(
+        "✅ IMMEDIATE INVOICE RESPONSE",
+        data
+      );
 
-          addDebug(
-            "Confirmation HTTP STATUS",
-            response?.status
-          );
-
-          addDebug(
-            "Confirmation FULL RESPONSE",
-            data
-          );
-
-          if (data?.message_hash) {
-            messageHash =
-              String(data.message_hash);
-
-            payment = {
-              ...payment,
-              message_hash:
-                messageHash,
-            };
-
-            if (payment.pending_invoice) {
-              payment.pending_invoice = {
-                ...payment.pending_invoice,
-                __message_hash:
-                  messageHash,
-              };
-            }
-
-            savePendingPayment(
-              payment
-            );
-
-            setPendingInvoice(
-              (prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      __message_hash:
-                        messageHash,
-                    }
-                  : prev
-            );
-          }
-
-          if (
-            data?.status ===
-            "confirmed"
-          ) {
-            const txHash =
-              String(
-                data?.ton_tx_hash ||
-                ""
-              );
-
-            if (!txHash) {
-              throw new Error(
-                "Backend confirmed payment but did not return ton_tx_hash"
-              );
-            }
-
-            addDebug(
-              "✅ WALLET RECEIPT HASH",
-              txHash
-            );
-
-            addDebug(
-              "✅ REAL INVOICE CREATED",
-              data?.invoice
-            );
-
-            clearPendingPayment(
-              payment.wallet_address
-            );
-
-            setPendingInvoice(
-              null
-            );
-
-            await loadInvoices();
-
-            addDebug(
-              "✅ WALLET CONFIRMED + INVOICE SAVED + LOADED"
-            );
-
-            showSuccess(
-              `✅ Wallet confirmed. Invoice saved immediately! Receipt: ${txHash.slice(0, 12)}...`
-            );
-
-            return data;
-          }
-
-          if (
-            data?.status !==
-            "pending"
-          ) {
-            throw new Error(
-              "Unexpected blockchain confirmation response"
-            );
-          }
-
-          addDebug(
-            "⏳ Payment is sent. Invoice remains CONFIRMING."
-          );
-        } catch (error) {
-          const statusCode =
-            error?.response?.status;
-
-          const retryable =
-            !error?.response ||
-            statusCode === 202 ||
-            statusCode === 408 ||
-            statusCode === 425 ||
-            statusCode === 429 ||
-            statusCode === 500 ||
-            statusCode === 502 ||
-            statusCode === 503 ||
-            statusCode === 504;
-
-          if (!retryable) {
-            addDebug(
-              "❌ NON-RETRYABLE CONFIRMATION ERROR",
-              getErrorDetails(error)
-            );
-            throw error;
-          }
-
-          addDebug(
-            "⚠️ Temporary confirmation/provider error; retrying",
-            getErrorDetails(error)
-          );
-        }
-
-        const waitMs =
-          attempt <= 20
-            ? 2500
-            : attempt <= 80
-              ? 5000
-              : 8000;
-
-        await sleep(
-          waitMs
+      if (
+        data?.status !== "confirmed" ||
+        !data?.invoice
+      ) {
+        throw new Error(
+          data?.error ||
+          "Backend did not create the invoice immediately"
         );
       }
 
-      addDebug(
-        "⏳ Confirmation is taking longer. Payment is saved and will resume automatically."
+      const txHash =
+        String(
+          data?.ton_tx_hash ||
+          data?.wallet_receipt_hash ||
+          ""
+        );
+
+      const realInvoice = {
+        ...data.invoice,
+        ton_tx_hash:
+          data.invoice?.ton_tx_hash ||
+          txHash,
+        currency: "TON",
+        __pending: false,
+        __status: "PAID",
+      };
+
+      clearPendingPayment(
+        payment.wallet_address
       );
 
-      return null;
+      setPendingInvoice(null);
+
+      // Show the real backend invoice immediately, then sync the full list.
+      setInvoices((prev) => {
+        const withoutSame =
+          prev.filter(
+            (item) =>
+              item?.id !== realInvoice?.id &&
+              item?.invoice_no !== realInvoice?.invoice_no
+          );
+
+        return [
+          realInvoice,
+          ...withoutSame,
+        ];
+      });
+
+      addDebug(
+        "✅ REAL INVOICE CREATED WITHOUT BLOCKCHAIN WAIT",
+        realInvoice
+      );
+
+      showSuccess(
+        `✅ Payment accepted by wallet. Invoice #${realInvoice.invoice_no || ""} created immediately.`
+      );
+
+      // Silent authoritative sync. No confirmation polling.
+      loadInvoices().catch((error) => {
+        addDebug(
+          "⚠️ Invoice list sync failed",
+          getErrorDetails(error)
+        );
+      });
+
+      return data;
+    } catch (error) {
+      addDebug(
+        "❌ IMMEDIATE INVOICE SAVE ERROR",
+        getErrorDetails(error)
+      );
+
+      // Keep the wallet-accepted payment locally so a refresh can retry
+      // the database save, but do not poll any blockchain/indexer.
+      savePendingPayment(payment);
+
+      throw error;
     } finally {
       confirmationRunningRef.current =
         false;
 
-      setConfirmingPayment(
-        false
-      );
+      setConfirmingPayment(false);
     }
   }
 
@@ -708,7 +619,7 @@ export default function Purchase() {
     );
 
     addDebug(
-      "🧾 Previous sent payment restored; invoice is visible as CONFIRMING."
+      "🧾 Previous wallet-accepted payment restored; retrying database invoice save only."
     );
 
     confirmPendingPayment(
@@ -1041,11 +952,11 @@ export default function Purchase() {
       );
 
       showSuccess(
-        "✅ Payment sent successfully. Invoice is visible below as CONFIRMING."
+        "✅ Wallet accepted the payment. Creating the real invoice now..."
       );
 
       // Wallet already accepted the transaction. Register the real invoice
-      // in Django immediately; backend no longer waits for chain indexing.
+      // in Django immediately. No TON Center / blockchain confirmation is requested.
       addDebug(
         "💾 Saving wallet-confirmed payment to backend immediately"
       );
@@ -1435,7 +1346,7 @@ export default function Purchase() {
               <div className="loading-text">
                 {loading
                   ? "Processing..."
-                  : "Payment sent — confirming invoice on blockchain..."}
+                  : "Wallet accepted payment — saving invoice..."}
               </div>
             )}
 
@@ -1839,7 +1750,7 @@ export default function Purchase() {
                           <span className="dot" />
 
                           {isPending
-                            ? "CONFIRMING"
+                            ? "SAVING"
                             : isTest
                               ? "TEST"
                               : "PAID"}

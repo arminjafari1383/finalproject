@@ -1201,7 +1201,6 @@ def release_matured_purchase_profits(user: AppUser):
                 update_fields=[
                     "locked",
                     "available",
-                    "updated_at",
                 ]
             )
 
@@ -1224,7 +1223,6 @@ def release_matured_purchase_profits(user: AppUser):
                 update_fields=[
                     "locked",
                     "available",
-                    "updated_at",
                 ]
             )
 
@@ -1252,12 +1250,31 @@ def release_matured_purchase_profits(user: AppUser):
 @transaction.atomic
 def credit_direct_upline_purchase_bonus(
     buyer: AppUser,
-    purchase,
+    bonus: Decimal,
+    invoice_no: str,
+    tx_hash: str,
+    currency: str,
+    is_test: bool = False,
+    asset: str = "ECG",
 ):
+    """
+    Level 1 purchase reward.
+
+    The buyer receives their own 5% through BUY_SELF_PROFIT.
+    The buyer's direct inviter receives 5% of the purchase output amount
+    immediately in the same asset (ECG or USDT).
+    """
 
     if not buyer.inviter:
         return Decimal("0")
 
+    asset = str(asset or "ECG").upper()
+    if asset not in {"ECG", "USDT"}:
+        asset = "ECG"
+
+    reward = Decimal(str(bonus or 0))
+    if reward <= 0:
+        return Decimal("0")
 
     inviter = (
         AppUser.objects
@@ -1265,57 +1282,29 @@ def credit_direct_upline_purchase_bonus(
         .get(id=buyer.inviter.id)
     )
 
-
-    bonus_amount = Decimal(
-        str(purchase.self_profit_5 or 0)
-    )
-
-
-    if bonus_amount <= 0:
-        return Decimal("0")
-
-
-    bonus_percent = Decimal("5")
-
-    reward = (
-        bonus_amount * bonus_percent / Decimal("100")
-    )
-
-
-    if reward <= 0:
-        return Decimal("0")
-
-
-    ecg_balance, _ = (
+    balance, _ = (
         AssetBalance.objects
         .select_for_update()
         .get_or_create(
             user=inviter,
-            asset="ECG"
+            asset=asset,
         )
     )
 
-
-    ecg_balance.available = (
-        Decimal(str(ecg_balance.available or 0))
+    balance.available = (
+        Decimal(str(balance.available or 0))
         + reward
     )
-
-
-    ecg_balance.total_earned = (
-        Decimal(str(ecg_balance.total_earned or 0))
+    balance.total_earned = (
+        Decimal(str(balance.total_earned or 0))
         + reward
     )
-
-
-    ecg_balance.save(
+    balance.save(
         update_fields=[
             "available",
             "total_earned",
-            "updated_at",
         ]
     )
-
 
     Ledger.objects.create(
         user=inviter,
@@ -1323,18 +1312,39 @@ def credit_direct_upline_purchase_bonus(
         amount=reward,
         meta={
             "buyer": buyer.wallet_address,
-            "purchase": str(
-                purchase.invoice_no
-            ),
-            "asset": "ECG",
-        }
+            "invoice": invoice_no,
+            "tx": tx_hash,
+            "currency": currency,
+            "asset": asset,
+            "level": "level_1",
+            "percent": "5",
+            "is_test": is_test,
+        },
     )
 
+    # Keep the Referral Tree row in sync with the real credited amount.
+    update_level_profit(
+        inviter,
+        1,
+        buyer.wallet_address,
+        reward,
+        asset=asset,
+    )
+
+    logger.info(
+        "[UPLINE] level=1 percent=5 buyer=%s inviter=%s amount=%s asset=%s invoice=%s",
+        buyer.wallet_address,
+        inviter.wallet_address,
+        reward,
+        asset,
+        invoice_no,
+    )
 
     return reward
 
+
 # ============================================================
-# Indirect uplines: Level 2 -> Level 5 = 1% each
+# Indirect uplines: Levels 2 -> 5 = 1% each
 # ============================================================
 
 @transaction.atomic
@@ -1347,110 +1357,111 @@ def credit_indirect_upline_purchase_bonuses(
     is_test: bool = False,
     asset: str = "ECG",
 ):
+    """
+    Credit 1% of the buyer's purchase output amount to Levels 2, 3, 4 and 5.
+
+    Level 1 is intentionally skipped here because it is credited separately
+    at 5% by credit_direct_upline_purchase_bonus().
+    """
 
     results = []
 
-    current_user = buyer
+    asset = str(asset or "ECG").upper()
+    if asset not in {"ECG", "USDT"}:
+        asset = "ECG"
 
-    levels = [
-        ("level_1", Decimal("1")),
-        ("level_2", Decimal("1")),
-        ("level_3", Decimal("1")),
-        ("level_4", Decimal("1")),
-        ("level_5", Decimal("1")),
-    ]
+    purchase_value = Decimal(str(purchase_ecg_value or 0))
+    if purchase_value <= 0:
+        return results
 
+    # buyer.inviter is Level 1. Start above it so this function begins at Level 2.
+    current = buyer.inviter
 
-    for level_name, percent in levels:
-
-        if not current_user.inviter:
+    for level in range(2, 6):
+        if not current or not current.inviter:
             break
-
 
         inviter = (
             AppUser.objects
             .select_for_update()
-            .get(
-                id=current_user.inviter.id
-            )
+            .get(id=current.inviter.id)
         )
-
 
         reward = (
-            purchase_ecg_value
-            * percent
-            / Decimal("100")
+            purchase_value
+            * INDIRECT_UPLINE_RATE
         )
 
+        if reward > 0:
+            balance, _ = (
+                AssetBalance.objects
+                .select_for_update()
+                .get_or_create(
+                    user=inviter,
+                    asset=asset,
+                )
+            )
 
-        if reward <= 0:
-            current_user = inviter
-            continue
+            balance.available = (
+                Decimal(str(balance.available or 0))
+                + reward
+            )
+            balance.total_earned = (
+                Decimal(str(balance.total_earned or 0))
+                + reward
+            )
+            balance.save(
+                update_fields=[
+                    "available",
+                    "total_earned",
+                ]
+            )
 
-
-        balance, _ = (
-            AssetBalance.objects
-            .select_for_update()
-            .get_or_create(
+            Ledger.objects.create(
                 user=inviter,
-                asset=asset.upper()
+                typ="INDIRECT_REFERRAL_BONUS",
+                amount=reward,
+                meta={
+                    "buyer": buyer.wallet_address,
+                    "invoice": invoice_no,
+                    "tx": tx_hash,
+                    "currency": currency,
+                    "asset": asset,
+                    "level": f"level_{level}",
+                    "percent": "1",
+                    "is_test": is_test,
+                },
             )
-        )
 
-
-        balance.available = (
-            Decimal(
-                str(balance.available or 0)
+            update_level_profit(
+                inviter,
+                level,
+                buyer.wallet_address,
+                reward,
+                asset=asset,
             )
-            + reward
-        )
 
-
-        balance.total_earned = (
-            Decimal(
-                str(balance.total_earned or 0)
+            results.append(
+                {
+                    "level": f"level_{level}",
+                    "user": inviter.wallet_address,
+                    "amount": str(reward),
+                    "asset": asset,
+                    "percent": "1",
+                }
             )
-            + reward
-        )
 
+            logger.info(
+                "[UPLINE] level=%s percent=1 buyer=%s inviter=%s amount=%s asset=%s invoice=%s",
+                level,
+                buyer.wallet_address,
+                inviter.wallet_address,
+                reward,
+                asset,
+                invoice_no,
+            )
 
-        balance.save(
-            update_fields=[
-                "available",
-                "total_earned",
-                "updated_at",
-            ]
-        )
-
-
-        Ledger.objects.create(
-            user=inviter,
-            typ="INDIRECT_REFERRAL_BONUS",
-            amount=reward,
-            meta={
-                "buyer": buyer.wallet_address,
-                "invoice": invoice_no,
-                "tx": tx_hash,
-                "currency": currency,
-                "asset": asset.upper(),
-                "level": level_name,
-                "is_test": is_test,
-            },
-        )
-
-
-        results.append(
-            {
-                "level": level_name,
-                "user": inviter.wallet_address,
-                "amount": str(reward),
-                "asset": asset.upper(),
-            }
-        )
-
-
-        current_user = inviter
-
+        current = inviter
 
     return results
 
@@ -1723,7 +1734,6 @@ def register_purchase(
         update_fields=[
             "locked",
             "total_earned",
-            "updated_at",
         ]
     )
 
@@ -1980,7 +1990,6 @@ def register_purchase_usdt(
         update_fields=[
             "locked",
             "total_earned",
-            "updated_at",
         ]
     )
 
@@ -2189,7 +2198,6 @@ def register_purchase_bnb(
         update_fields=[
             "locked",
             "total_earned",
-            "updated_at",
         ]
     )
 
@@ -2353,7 +2361,6 @@ def distribute_level_5_purchase(
                 update_fields=[
                     "available",
                     "total_earned",
-                    "updated_at",
                 ]
             )
 
