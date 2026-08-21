@@ -1331,28 +1331,43 @@ body {
 
 .modal {
   width: 100%;
-  max-height: calc(100dvh - 40px);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+  max-width: 460px;
+
+  display: block;
+
+  overflow: visible;
+
+  max-height: none;
 }
 
 .modal-body {
-  flex: 1;
-  overflow-y: auto;
-  max-height: none;
-  padding-bottom: 20px;
+
+  overflow: visible;
+
+  padding: 1rem 1.1rem 20px;
+
 }
 
 .modal-footer {
   flex-shrink: 0;
-  position: sticky;
-  bottom: 0;
-  z-index: 10;
-  background: #081631;
-  padding: 14px;
+
+  position: static !important;
+
+  bottom: auto !important;
+
+  z-index: auto;
+
+  width: 100%;
+
   display: flex;
+
   gap: 12px;
+
+  padding: 14px;
+
+  background: transparent;
+
+  border-top: 1px solid rgba(255,255,255,0.06);
 }
 
 .modal-footer button {
