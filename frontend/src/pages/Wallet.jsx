@@ -2334,6 +2334,21 @@ marginTop: 14,
                       {" ECG"}
 
                     </div>
+                    <div className="balance-card">
+                    <div className="label">
+                      USDT Balance
+                    </div>
+
+                    <div className="value">
+                      {Number(
+                        wallet?.usdt_balance ||
+                        wallet?.usdt_available ||
+                        0
+                      ).toFixed(4)} USDT
+                    </div>
+                  </div>
+
+                    
 
                   </div>
 
