@@ -2,6 +2,7 @@ from django.conf import settings
 import time
 import json
 import logging
+import uuid
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
