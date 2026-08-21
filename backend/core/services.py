@@ -559,7 +559,6 @@ def give_referral_bonus(
                 update_fields=[
                     "available",
                     "total_earned",
-                    "updated_at",
                 ]
             )
 
