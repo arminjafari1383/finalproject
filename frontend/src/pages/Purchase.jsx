@@ -407,6 +407,23 @@ export default function Purchase() {
           output_asset:
             payment.output_asset || "ECG",
 
+          output_amount:
+            String(
+              payment.output_amount ||
+              (
+                payment.output_asset === "USDT"
+                  ? (
+                      Number(payment.ton_amount || 0) *
+                      Number(payment.ton_price || 0)
+                    )
+                  : (
+                      Number(payment.ton_amount || 0) *
+                      Number(payment.ton_price || 0) *
+                      ECG_PER_USDT
+                    )
+              )
+            ),
+
           network:
             payment.network || "-239",
 
@@ -925,6 +942,18 @@ export default function Purchase() {
 
         ton_price:
           tonPrice,
+
+        output_amount:
+          selectedOutput === "USDT"
+            ? (
+                Number(amount) *
+                Number(tonPrice || 0)
+              ).toFixed(8)
+            : (
+                Number(amount) *
+                Number(tonPrice || 0) *
+                ECG_PER_USDT
+              ).toFixed(8),
 
         boc,
 

@@ -657,15 +657,6 @@ export default function Wallet() {
     };
   }
 // kkk
-  if (withdrawAsset === "EPL") {
-    return {
-      ...prev,
-      epl_balance: Math.max(
-        0,
-        Number(prev.epl_balance || 0) - value
-      ),
-    };
-  }
 
   if (withdrawAsset === "USDT") {
     return {
@@ -1295,9 +1286,13 @@ export default function Wallet() {
   // ECG profit has two sources:
   // 1) user's own 5% purchase profit -> locked for 30 days
   // 2) referral 5% / 1% profit -> instantly withdrawable
+  const ecgAsset = wallet?.assets?.ECG || wallet?.balances?.ECG || {};
+  const usdtAsset = wallet?.assets?.USDT || wallet?.balances?.USDT || {};
+
   const referralProfitEcgUnlocked = Number(
     wallet?.referral_profit_ecg_unlocked ??
     wallet?.ecg_referral_profit ??
+    ecgAsset.available ??
     0
   );
 
@@ -1332,7 +1327,9 @@ export default function Wallet() {
   );
 
   const purchaseProfitUsdt = Number(
-    wallet?.purchase_profit_usdt ?? 0
+    wallet?.purchase_profit_usdt ??
+    usdtAsset.available ??
+    0
   );
 
   const purchaseProfitUsdtLocked = Number(
