@@ -1,7 +1,7 @@
 # backend/core/admin.py
 
 from django.contrib import admin
-from .models import AppUser, Wallet, Ledger, Purchase, PurchaseUSDT, PurchaseBNB, WithdrawRequest, ReferralLevel
+from .models import AppUser, Wallet, Ledger, Purchase, PurchaseUSDT, PurchaseBNB, WithdrawRequest, ReferralLevel,AssetBalance
 
 # ==========================================
 # AppUser Admin
@@ -53,79 +53,98 @@ class AppUserAdmin(admin.ModelAdmin):
 # Wallet Admin
 # ==========================================
 
+# ==========================================
+# Wallet Admin (Legacy)
+# ==========================================
+
 @admin.register(Wallet)
 class WalletAdmin(admin.ModelAdmin):
 
     list_display = (
         "id",
         "user",
-
-        "ecg_self_locked",
-        "ecg_self_unlocked",
-        "ecg_referral_profit",
-
-        "usdt_self_locked",
-        "usdt_self_unlocked",
-        "usdt_referral_profit",
-
-        "epl_balance",
-        "epl_total_earned",
-
+        "created_at",
         "updated_at",
     )
-
-
-    list_filter = (
-        "updated_at",
-    )
-
 
     search_fields = (
         "user__wallet_address",
         "user__telegram_id",
     )
 
-
     readonly_fields = (
         "created_at",
         "updated_at",
     )
 
-
     fieldsets = (
-
         ("User", {
             "fields": (
                 "user",
             )
         }),
 
-
-        ("ECG Balance", {
+        ("Legacy Wallet", {
             "fields": (
-                "ecg_self_locked",
-                "ecg_self_unlocked",
-                "ecg_referral_profit",
+                "created_at",
+                "updated_at",
+            )
+        }),
+    )
+
+
+# ==========================================
+# AssetBalance Admin
+# ==========================================
+
+@admin.register(AssetBalance)
+class AssetBalanceAdmin(admin.ModelAdmin):
+
+    list_display = (
+        "id",
+        "user",
+        "asset",
+        "available",
+        "locked",
+        "total_earned",
+        "updated_at",
+    )
+
+    list_filter = (
+        "asset",
+        "updated_at",
+    )
+
+    search_fields = (
+        "user__wallet_address",
+        "user__telegram_id",
+    )
+
+    readonly_fields = (
+        "created_at",
+        "updated_at",
+    )
+
+    fieldsets = (
+        ("User", {
+            "fields": (
+                "user",
             )
         }),
 
-
-        ("USDT Balance", {
+        ("Asset", {
             "fields": (
-                "usdt_self_locked",
-                "usdt_self_unlocked",
-                "usdt_referral_profit",
+                "asset",
             )
         }),
 
-
-        ("EPL Timer", {
+        ("Balance", {
             "fields": (
-                "epl_balance",
-                "epl_total_earned",
+                "available",
+                "locked",
+                "total_earned",
             )
         }),
-
 
         ("Dates", {
             "fields": (
@@ -133,8 +152,8 @@ class WalletAdmin(admin.ModelAdmin):
                 "updated_at",
             )
         }),
-
     )
+
 # ==========================================
 # Ledger Admin
 # ==========================================
@@ -320,6 +339,7 @@ class WithdrawRequestAdmin(admin.ModelAdmin):
     list_display = (
         "id",
         "user",
+        "source_asset",
         "asset",
         "amount",
         "wallet_address",
@@ -329,6 +349,7 @@ class WithdrawRequestAdmin(admin.ModelAdmin):
 
     list_filter = (
         "status",
+        "source_asset",
         "asset",
         "created_at",
     )

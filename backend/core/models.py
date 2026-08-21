@@ -227,33 +227,122 @@ class Ledger(models.Model):
 
 
 class Purchase(models.Model):
-    OUTPUT_ASSETS = [("ECG","ECG"),("USDT","USDT"),]
-    """خرید ECG با TON"""
-    user = models.ForeignKey(AppUser, on_delete=models.CASCADE, related_name="purchases")
-    invoice_no = models.CharField(max_length=32, unique=True)
 
-    ton_amount = models.DecimalField(max_digits=24, decimal_places=6)
-    ton_tx_hash = models.CharField(max_length=256, unique=True)
+    ASSET_CHOICES = (
+        ("ECG", "ECG"),
+        ("USDT", "USDT"),
+    )
 
-    ton_usd_rate = models.DecimalField(max_digits=24, decimal_places=6)
-    usd_value = models.DecimalField(max_digits=24, decimal_places=6)
 
-    ecg_value = models.DecimalField(max_digits=24, decimal_places=6)
-    self_profit_5 = models.DecimalField(max_digits=24, decimal_places=6)
+    user = models.ForeignKey(
+        AppUser,
+        on_delete=models.CASCADE,
+        related_name="purchases"
+    )
 
-    principal_unlock_at = models.DateTimeField()
-    self_profit_unlock_at = models.DateTimeField()
 
-    created_at = models.DateTimeField(auto_now_add=True)
+    invoice_no = models.CharField(
+        max_length=50,
+        unique=True
+    )
 
-    output_asset = models.CharField(max_length=8,choices=OUTPUT_ASSETS,default="ECG")
-    output_amount = models.DecimalField(max_digits=24,decimal_places=6,default=0)
-    profit_asset = models.CharField(max_length=8,choices=OUTPUT_ASSETS,default="ECG")
+
+    # پرداخت ورودی
+    ton_amount = models.DecimalField(
+        max_digits=30,
+        decimal_places=8
+    )
+
+    ton_tx_hash = models.CharField(
+        max_length=255,
+        unique=True
+    )
+
+    ton_usd_rate = models.DecimalField(
+        max_digits=20,
+        decimal_places=8
+    )
+
+
+    # ارزش دلاری خرید
+    usd_value = models.DecimalField(
+        max_digits=30,
+        decimal_places=8
+    )
+
+
+    # مقدار ECG محاسباتی قدیمی (برای سازگاری)
+    ecg_value = models.DecimalField(
+        max_digits=30,
+        decimal_places=8,
+        default=0
+    )
+
+
+    # ============================
+    # Asset Purchased
+    # ============================
+
+    output_asset = models.CharField(
+        max_length=10,
+        choices=ASSET_CHOICES,
+        default="ECG"
+    )
+
+
+    output_amount = models.DecimalField(
+        max_digits=30,
+        decimal_places=8,
+        default=0
+    )
+
+
+    # سود مربوط به همان ارز خریداری شده
+
+    profit_asset = models.CharField(
+        max_length=10,
+        choices=ASSET_CHOICES,
+        default="ECG"
+    )
+
+
+    self_profit_5 = models.DecimalField(
+        max_digits=30,
+        decimal_places=8,
+        default=0
+    )
+
+
+    # زمان‌ها
+
+    principal_unlock_at = models.DateTimeField(
+        null=True,
+        blank=True
+    )
+
+
+    self_profit_unlock_at = models.DateTimeField(
+        null=True,
+        blank=True
+    )
+
+
+    created_at = models.DateTimeField(
+        auto_now_add=True
+    )
+
+
+    updated_at = models.DateTimeField(
+        auto_now=True
+    )
 
 
     def __str__(self):
-        return f"TON: {self.invoice_no} - {self.ton_amount} TON"
-
+        return (
+            f"{self.user.wallet_address} "
+            f"{self.output_asset} "
+            f"{self.output_amount}"
+        )
 
 class PurchaseUSDT(models.Model):
     """خرید ECG با USDT (BEP-20)"""

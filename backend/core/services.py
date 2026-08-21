@@ -536,14 +536,29 @@ def give_referral_bonus(
                 level,
             )
         else:
-            wallet.referral_bonus = (
-                (wallet.referral_bonus or Decimal("0"))
+            epl_balance, _ = (
+                AssetBalance.objects
+                .select_for_update()
+                .get_or_create(
+                    user=current,
+                    asset="EPL"
+                )
+            )
+
+            epl_balance.available = (
+                Decimal(str(epl_balance.available or 0))
                 + reward
             )
 
-            wallet.save(
+            epl_balance.total_earned = (
+                Decimal(str(epl_balance.total_earned or 0))
+                + reward
+            )
+
+            epl_balance.save(
                 update_fields=[
-                    "referral_bonus",
+                    "available",
+                    "total_earned",
                     "updated_at",
                 ]
             )
@@ -1103,10 +1118,6 @@ def update_level_profit(
     level_obj.save(update_fields=[level_field])
 
 
-# ============================================================
-# Release matured 5% self profit after 30 days
-# ============================================================
-
 @transaction.atomic
 def release_matured_purchase_profits(user: AppUser):
 
@@ -1128,10 +1139,23 @@ def release_matured_purchase_profits(user: AppUser):
     )
 
 
-    wallet = (
-        Wallet.objects
+    ecg_balance, _ = (
+        AssetBalance.objects
         .select_for_update()
-        .get(user=user)
+        .get_or_create(
+            user=user,
+            asset="ECG"
+        )
+    )
+
+
+    usdt_balance, _ = (
+        AssetBalance.objects
+        .select_for_update()
+        .get_or_create(
+            user=user,
+            asset="USDT"
+        )
     )
 
 
@@ -1164,16 +1188,46 @@ def release_matured_purchase_profits(user: AppUser):
 
         if asset == "USDT":
 
-            wallet.usdt_self_locked -= amount
-            wallet.usdt_self_unlocked += amount
+            usdt_balance.locked = (
+                Decimal(str(usdt_balance.locked or 0))
+                - amount
+            )
+
+            usdt_balance.available = (
+                Decimal(str(usdt_balance.available or 0))
+                + amount
+            )
+
+            usdt_balance.save(
+                update_fields=[
+                    "locked",
+                    "available",
+                    "updated_at",
+                ]
+            )
 
             released["USDT"] += amount
 
 
         else:
 
-            wallet.ecg_self_locked -= amount
-            wallet.ecg_self_unlocked += amount
+            ecg_balance.locked = (
+                Decimal(str(ecg_balance.locked or 0))
+                - amount
+            )
+
+            ecg_balance.available = (
+                Decimal(str(ecg_balance.available or 0))
+                + amount
+            )
+
+            ecg_balance.save(
+                update_fields=[
+                    "locked",
+                    "available",
+                    "updated_at",
+                ]
+            )
 
             released["ECG"] += amount
 
@@ -1192,103 +1246,93 @@ def release_matured_purchase_profits(user: AppUser):
         )
 
 
-    wallet.save()
-
-
     return {
         "ECG": str(released["ECG"]),
         "USDT": str(released["USDT"])
     }
-# ============================================================
-# Direct upline 5% purchase bonus
-# ============================================================
-
 @transaction.atomic
 def credit_direct_upline_purchase_bonus(
     buyer: AppUser,
-    bonus: Decimal,
-    invoice_no: str,
-    tx_hash: str,
-    currency: str,
-    is_test: bool = False,
-    asset: str = "ECG",
+    purchase,
 ):
-    """Credit Level-1 5% in the SAME asset as the purchase output."""
-    if not buyer.inviter_id:
-        return {"credited": False, "reason": "buyer_has_no_inviter"}
 
-    bonus = Decimal(str(bonus))
-    asset = str(asset or "ECG").upper()
-    if asset not in {"ECG", "USDT"}:
-        asset = "ECG"
-    if bonus <= 0:
-        return {"credited": False, "reason": "invalid_bonus"}
+    if not buyer.inviter:
+        return Decimal("0")
 
-    inviter = AppUser.objects.select_for_update().get(pk=buyer.inviter_id)
-    ensure_user_has_wallet(inviter)
 
-    already_credited = Ledger.objects.filter(
-        user=inviter,
-        typ="DOWNLINE_PROFIT",
-        meta__invoice=invoice_no,
-        meta__level=1,
-    ).exists()
-    if already_credited:
-        return {
-            "credited": False,
-            "reason": "already_credited",
-            "inviter": inviter.wallet_address,
-            "bonus": str(bonus),
-            "asset": asset,
-        }
+    inviter = (
+        AppUser.objects
+        .select_for_update()
+        .get(id=buyer.inviter.id)
+    )
 
-    if asset == "USDT":
-        balance, _ = (
-            AssetBalance.objects
-            .select_for_update()
-            .get_or_create(user=inviter, asset="USDT")
+
+    bonus_amount = Decimal(
+        str(purchase.self_profit_5 or 0)
+    )
+
+
+    if bonus_amount <= 0:
+        return Decimal("0")
+
+
+    bonus_percent = Decimal("5")
+
+    reward = (
+        bonus_amount * bonus_percent / Decimal("100")
+    )
+
+
+    if reward <= 0:
+        return Decimal("0")
+
+
+    ecg_balance, _ = (
+        AssetBalance.objects
+        .select_for_update()
+        .get_or_create(
+            user=inviter,
+            asset="ECG"
         )
-        before = Decimal(str(balance.profit_unlocked or 0))
-        after = before + bonus
-        balance.profit_unlocked = after
-        balance.save(update_fields=["profit_unlocked", "updated_at"])
-    else:
-        wallet = Wallet.objects.select_for_update().get(user=inviter)
-        before = Decimal(str(wallet.downline_profit_instant or 0))
-        after = before + bonus
-        wallet.ecg_referral_profit = after
-        wallet.save(update_fields=["ecg_referral_profit", "updated_at"])
+    )
+
+
+    ecg_balance.available = (
+        Decimal(str(ecg_balance.available or 0))
+        + reward
+    )
+
+
+    ecg_balance.total_earned = (
+        Decimal(str(ecg_balance.total_earned or 0))
+        + reward
+    )
+
+
+    ecg_balance.save(
+        update_fields=[
+            "available",
+            "total_earned",
+            "updated_at",
+        ]
+    )
+
 
     Ledger.objects.create(
         user=inviter,
-        typ="DOWNLINE_PROFIT",
-        amount=bonus,
+        typ="DIRECT_REFERRAL_BONUS",
+        amount=reward,
         meta={
-            "from": buyer.wallet_address,
-            "invoice": invoice_no,
-            "tx": tx_hash,
-            "currency": currency,
-            "level": 1,
-            "rate": "5%",
-            "is_test": is_test,
-            "asset": asset,
-        },
+            "buyer": buyer.wallet_address,
+            "purchase": str(
+                purchase.invoice_no
+            ),
+            "asset": "ECG",
+        }
     )
-    update_level_profit(inviter, 1, buyer.wallet_address, bonus, asset=asset)
 
-    logger.info(
-        "[UPLINE5] CREDITED buyer=%s inviter=%s invoice=%s asset=%s bonus=%s before=%s after=%s",
-        buyer.wallet_address, inviter.wallet_address, invoice_no, asset, bonus, before, after,
-    )
-    return {
-        "credited": True,
-        "inviter": inviter.wallet_address,
-        "bonus": str(bonus),
-        "asset": asset,
-        "balance_before": str(before),
-        "balance_after": str(after),
-    }
 
+    return reward
 
 # ============================================================
 # Indirect uplines: Level 2 -> Level 5 = 1% each
@@ -1304,89 +1348,112 @@ def credit_indirect_upline_purchase_bonuses(
     is_test: bool = False,
     asset: str = "ECG",
 ):
-    """Credit Level 2..5 1% in the SAME asset as the purchase output."""
-    purchase_value = Decimal(str(purchase_ecg_value))
-    asset = str(asset or "ECG").upper()
-    if asset not in {"ECG", "USDT"}:
-        asset = "ECG"
-    if purchase_value <= 0:
-        return []
 
-    direct_inviter = buyer.inviter
-    current = direct_inviter.inviter if direct_inviter else None
-    level = 2
     results = []
 
-    while current and level <= 5:
-        bonus = purchase_value * INDIRECT_UPLINE_RATE
-        ensure_user_has_wallet(current)
+    current_user = buyer
 
-        already_credited = Ledger.objects.filter(
-            user=current,
-            typ="DOWNLINE_PROFIT",
-            meta__invoice=invoice_no,
-            meta__level=level,
-        ).exists()
-        if already_credited:
-            results.append({
-                "level": level,
-                "credited": False,
-                "reason": "already_credited",
-                "upline": current.wallet_address,
-                "asset": asset,
-            })
-            current = current.inviter
-            level += 1
+    levels = [
+        ("level_1", Decimal("1")),
+        ("level_2", Decimal("1")),
+        ("level_3", Decimal("1")),
+        ("level_4", Decimal("1")),
+        ("level_5", Decimal("1")),
+    ]
+
+
+    for level_name, percent in levels:
+
+        if not current_user.inviter:
+            break
+
+
+        inviter = (
+            AppUser.objects
+            .select_for_update()
+            .get(
+                id=current_user.inviter.id
+            )
+        )
+
+
+        reward = (
+            purchase_ecg_value
+            * percent
+            / Decimal("100")
+        )
+
+
+        if reward <= 0:
+            current_user = inviter
             continue
 
-        if asset == "USDT":
-            balance, _ = (
-                AssetBalance.objects
-                .select_for_update()
-                .get_or_create(user=current, asset="USDT")
+
+        balance, _ = (
+            AssetBalance.objects
+            .select_for_update()
+            .get_or_create(
+                user=inviter,
+                asset=asset.upper()
             )
-            before = Decimal(str(balance.profit_unlocked or 0))
-            after = before + bonus
-            balance.profit_unlocked = after
-            balance.save(update_fields=["profit_unlocked", "updated_at"])
-        else:
-            wallet = Wallet.objects.select_for_update().get(user=current)
-            before = Decimal(str(wallet.downline_profit_instant or 0))
-            after = before + bonus
-            wallet.ecg_referral_profit = after
-            wallet.save(update_fields=["ecg_referral_profit", "updated_at"])
+        )
+
+
+        balance.available = (
+            Decimal(
+                str(balance.available or 0)
+            )
+            + reward
+        )
+
+
+        balance.total_earned = (
+            Decimal(
+                str(balance.total_earned or 0)
+            )
+            + reward
+        )
+
+
+        balance.save(
+            update_fields=[
+                "available",
+                "total_earned",
+                "updated_at",
+            ]
+        )
+
 
         Ledger.objects.create(
-            user=current,
-            typ="DOWNLINE_PROFIT",
-            amount=bonus,
+            user=inviter,
+            typ="INDIRECT_REFERRAL_BONUS",
+            amount=reward,
             meta={
-                "from": buyer.wallet_address,
+                "buyer": buyer.wallet_address,
                 "invoice": invoice_no,
                 "tx": tx_hash,
                 "currency": currency,
-                "level": level,
-                "rate": "1%",
+                "asset": asset.upper(),
+                "level": level_name,
                 "is_test": is_test,
-                "asset": asset,
             },
         )
-        update_level_profit(current, level, buyer.wallet_address, bonus, asset=asset)
 
-        results.append({
-            "level": level,
-            "credited": True,
-            "upline": current.wallet_address,
-            "bonus": str(bonus),
-            "asset": asset,
-            "balance_before": str(before),
-            "balance_after": str(after),
-        })
-        current = current.inviter
-        level += 1
+
+        results.append(
+            {
+                "level": level_name,
+                "user": inviter.wallet_address,
+                "amount": str(reward),
+                "asset": asset.upper(),
+            }
+        )
+
+
+        current_user = inviter
+
 
     return results
-
 
 # ============================================================
 # TON price
@@ -1481,14 +1548,14 @@ def register_purchase(
 ) -> Purchase:
 
     logger.info(
-        "[BUY] start user=%s user_id=%s "
-        "inviter_id=%s ton_amount=%s tx=%s",
+        "[BUY] start user=%s user_id=%s inviter_id=%s ton_amount=%s tx=%s",
         user.wallet_address,
         user.id,
         user.inviter_id,
         ton_amount,
         ton_tx_hash,
     )
+
 
     # --------------------------------------------------------
     # Duplicate TX protection
@@ -1501,15 +1568,10 @@ def register_purchase(
         )
         .exists()
     ):
-
-        logger.warning(
-            "[BUY] duplicate tx=%s",
-            ton_tx_hash,
-        )
-
         raise ValueError(
             "TX already registered"
         )
+
 
     # --------------------------------------------------------
     # Calculate
@@ -1526,49 +1588,51 @@ def register_purchase(
         .upper()
     )
 
+
     if output_asset not in {
         "ECG",
         "USDT",
     }:
-
         raise ValueError(
             "Invalid output asset"
         )
+
 
     ecg_value = (
         usd_value * ECG_PER_USD
     )
 
+
     if output_asset == "ECG":
 
-        output_amount = (
-            ecg_value
-        )
+        output_amount = ecg_value
 
     else:
 
-        output_amount = (
-            usd_value
-        )
+        output_amount = usd_value
+
 
     self_bonus = (
         output_amount
         * SELF_BONUS_RATE
     )
 
-    # 5% upline profit follows the selected output asset.
+
     upline_bonus = (
         output_amount
         * UPLINE_RATE
     )
 
+
     now = timezone.now()
+
 
     invoice_no = (
         uuid.uuid4()
         .hex[:12]
         .upper()
     )
+
 
     principal_unlock_at = (
         now
@@ -1577,6 +1641,7 @@ def register_purchase(
         )
     )
 
+
     self_profit_unlock_at = (
         now
         + timezone.timedelta(
@@ -1584,86 +1649,98 @@ def register_purchase(
         )
     )
 
+
     # --------------------------------------------------------
     # Purchase
     # --------------------------------------------------------
 
     purchase = Purchase.objects.create(
+
         user=user,
+
         invoice_no=invoice_no,
+
         ton_amount=ton_amount,
+
         ton_tx_hash=ton_tx_hash,
+
         ton_usd_rate=rate,
+
         usd_value=usd_value,
+
         ecg_value=ecg_value,
+
         output_asset=output_asset,
+
         output_amount=output_amount,
+
         profit_asset=output_asset,
+
         self_profit_5=self_bonus,
+
         principal_unlock_at=principal_unlock_at,
+
         self_profit_unlock_at=self_profit_unlock_at,
     )
 
+
     ensure_user_has_wallet(user)
 
+
     # --------------------------------------------------------
-    # Add principal/profit
+    # Add principal + profit to AssetBalance
     # --------------------------------------------------------
 
-    if output_asset == "ECG":
+    asset_balance, _ = (
+        AssetBalance.objects
+        .select_for_update()
+        .get_or_create(
 
-        (
-            Wallet.objects
-            .select_for_update()
-            .filter(user=user)
-            .update(
-                principal_locked=(
-                    F("principal_locked")
-                    + output_amount
-                ),
-                self_profit_locked=(
-                    F("ecg_self_locked")
-                    + self_bonus
-                ),
-            )
+            user=user,
+
+            asset=output_asset,
         )
+    )
 
-    else:
 
-        asset_balance, _ = (
-            AssetBalance.objects
-            .select_for_update()
-            .get_or_create(
-                user=user,
-                asset="USDT",
-            )
+    asset_balance.locked = (
+        Decimal(
+            str(asset_balance.locked or 0)
         )
+        + output_amount
+        + self_bonus
+    )
 
-        (
-            AssetBalance.objects
-            .filter(
-                pk=asset_balance.pk
-            )
-            .update(
-                principal_locked=(
-                    F("principal_locked")
-                    + output_amount
-                ),
-                profit_locked=(
-                    F("usdt_self_locked")
-                    + self_bonus
-                ),
-            )
+
+    asset_balance.total_earned = (
+        Decimal(
+            str(asset_balance.total_earned or 0)
         )
+        + self_bonus
+    )
+
+
+    asset_balance.save(
+        update_fields=[
+            "locked",
+            "total_earned",
+            "updated_at",
+        ]
+    )
+
 
     # --------------------------------------------------------
     # Ledger
     # --------------------------------------------------------
 
     Ledger.objects.create(
+
         user=user,
+
         typ="BUY_PRINCIPAL",
+
         amount=output_amount,
+
         meta={
             "invoice": invoice_no,
             "tx": ton_tx_hash,
@@ -1672,11 +1749,16 @@ def register_purchase(
             "is_test": is_test,
         },
     )
+
 
     Ledger.objects.create(
+
         user=user,
+
         typ="BUY_SELF_PROFIT",
+
         amount=self_bonus,
+
         meta={
             "invoice": invoice_no,
             "tx": ton_tx_hash,
@@ -1686,49 +1768,75 @@ def register_purchase(
         },
     )
 
+
     # --------------------------------------------------------
-    # Direct upline 5% purchase bonus
+    # Direct upline bonus
     # --------------------------------------------------------
 
     upline_result = credit_direct_upline_purchase_bonus(
+
         buyer=user,
+
         bonus=upline_bonus,
+
         invoice_no=invoice_no,
+
         tx_hash=ton_tx_hash,
+
         currency="TON",
+
         is_test=is_test,
+
         asset=output_asset,
     )
 
+
     logger.info(
-        "[BUY] upline 5%% result: %s",
+        "[BUY] upline result: %s",
         upline_result,
     )
+
 
     update_user_investment(
         user,
         ton_amount,
     )
 
-    indirect_results = credit_indirect_upline_purchase_bonuses(
-        buyer=user,
-        # ECG output -> ECG amount; USDT output -> USDT amount.
-        purchase_ecg_value=output_amount,
-        invoice_no=invoice_no,
-        tx_hash=ton_tx_hash,
-        currency="TON",
-        is_test=is_test,
-        asset=output_asset,
+
+    # --------------------------------------------------------
+    # Indirect referral bonus
+    # --------------------------------------------------------
+
+    indirect_results = (
+        credit_indirect_upline_purchase_bonuses(
+
+            buyer=user,
+
+            purchase_ecg_value=output_amount,
+
+            invoice_no=invoice_no,
+
+            tx_hash=ton_tx_hash,
+
+            currency="TON",
+
+            is_test=is_test,
+
+            asset=output_asset,
+        )
     )
 
+
     logger.info(
-        "[BUY] indirect upline 1%% results: %s",
+        "[BUY] indirect results: %s",
         indirect_results,
     )
+
 
     update_user_total_investment(
         user
     )
+
 
     return purchase
 
@@ -1752,6 +1860,7 @@ def register_purchase_usdt(
         usdt_tx_hash,
     )
 
+
     if (
         PurchaseUSDT.objects
         .filter(
@@ -1759,10 +1868,10 @@ def register_purchase_usdt(
         )
         .exists()
     ):
-
         raise ValueError(
             "TX already registered"
         )
+
 
     rate = Decimal("1")
 
@@ -1770,27 +1879,33 @@ def register_purchase_usdt(
         usdt_amount * rate
     )
 
+
     ecg_value = (
         usd_value * ECG_PER_USD
     )
+
 
     self_bonus = (
         ecg_value
         * SELF_BONUS_RATE
     )
 
+
     upline_bonus = (
         ecg_value
         * UPLINE_RATE
     )
 
+
     now = timezone.now()
+
 
     invoice_no = (
         uuid.uuid4()
         .hex[:12]
         .upper()
     )
+
 
     principal_unlock_at = (
         now
@@ -1799,6 +1914,7 @@ def register_purchase_usdt(
         )
     )
 
+
     self_profit_unlock_at = (
         now
         + timezone.timedelta(
@@ -1806,38 +1922,69 @@ def register_purchase_usdt(
         )
     )
 
-    purchase = (
-        PurchaseUSDT.objects.create(
-            user=user,
-            invoice_no=invoice_no,
-            usdt_amount=usdt_amount,
-            usdt_tx_hash=usdt_tx_hash,
-            usdt_usd_rate=rate,
-            usd_value=usd_value,
-            ecg_value=ecg_value,
-            self_profit_5=self_bonus,
-            principal_unlock_at=principal_unlock_at,
-            self_profit_unlock_at=self_profit_unlock_at,
-        )
+
+    purchase = PurchaseUSDT.objects.create(
+
+        user=user,
+
+        invoice_no=invoice_no,
+
+        usdt_amount=usdt_amount,
+
+        usdt_tx_hash=usdt_tx_hash,
+
+        usdt_usd_rate=rate,
+
+        usd_value=usd_value,
+
+        ecg_value=ecg_value,
+
+        self_profit_5=self_bonus,
+
+        principal_unlock_at=principal_unlock_at,
+
+        self_profit_unlock_at=self_profit_unlock_at,
     )
+
 
     ensure_user_has_wallet(user)
 
-    (
-        Wallet.objects
+
+    # ==========================================
+    # Asset Balance
+    # ==========================================
+
+    asset_balance, _ = (
+        AssetBalance.objects
         .select_for_update()
-        .filter(user=user)
-        .update(
-            principal_locked=(
-                F("principal_locked")
-                + ecg_value
-            ),
-            self_profit_locked=(
-                F("self_profit_locked")
-                + self_bonus
-            ),
+        .get_or_create(
+            user=user,
+            asset="ECG"
         )
     )
+
+
+    asset_balance.locked = (
+        Decimal(str(asset_balance.locked or 0))
+        + ecg_value
+        + self_bonus
+    )
+
+
+    asset_balance.total_earned = (
+        Decimal(str(asset_balance.total_earned or 0))
+        + self_bonus
+    )
+
+
+    asset_balance.save(
+        update_fields=[
+            "locked",
+            "total_earned",
+            "updated_at",
+        ]
+    )
+
 
     Ledger.objects.create(
         user=user,
@@ -1847,9 +1994,11 @@ def register_purchase_usdt(
             "invoice": invoice_no,
             "tx": usdt_tx_hash,
             "currency": "USDT",
+            "asset": "ECG",
             "is_test": is_test,
         },
     )
+
 
     Ledger.objects.create(
         user=user,
@@ -1859,50 +2008,46 @@ def register_purchase_usdt(
             "invoice": invoice_no,
             "tx": usdt_tx_hash,
             "currency": "USDT",
+            "asset": "ECG",
             "is_test": is_test,
         },
     )
 
-    upline_result = credit_direct_upline_purchase_bonus(
+
+    credit_direct_upline_purchase_bonus(
         buyer=user,
         bonus=upline_bonus,
         invoice_no=invoice_no,
         tx_hash=usdt_tx_hash,
         currency="USDT",
         is_test=is_test,
+        asset="ECG",
     )
 
-    logger.info(
-        "[REGISTER_PURCHASE_USDT] upline 5%% result: %s",
-        upline_result,
-    )
 
     update_user_investment(
         user,
         usdt_amount,
     )
 
-    indirect_results = credit_indirect_upline_purchase_bonuses(
+
+    credit_indirect_upline_purchase_bonuses(
         buyer=user,
         purchase_ecg_value=ecg_value,
         invoice_no=invoice_no,
         tx_hash=usdt_tx_hash,
         currency="USDT",
         is_test=is_test,
+        asset="ECG",
     )
 
-    logger.info(
-        "[REGISTER_PURCHASE_USDT] indirect upline 1%% results: %s",
-        indirect_results,
-    )
 
     update_user_total_investment(
         user
     )
 
+
     return purchase
-
-
 # ============================================================
 # Register BNB purchase
 # ============================================================
@@ -1915,12 +2060,14 @@ def register_purchase_bnb(
     is_test: bool = False,
 ) -> PurchaseBNB:
 
+
     logger.info(
         "[BUY_BNB] start user=%s amount=%s tx=%s",
         user.wallet_address,
         bnb_amount,
         bnb_tx_hash,
     )
+
 
     if (
         PurchaseBNB.objects
@@ -1929,38 +2076,45 @@ def register_purchase_bnb(
         )
         .exists()
     ):
-
         raise ValueError(
             "TX already registered"
         )
 
+
     rate = fetch_bnb_usd_rate()
+
 
     usd_value = (
         bnb_amount * rate
     )
 
+
     ecg_value = (
         usd_value * ECG_PER_USD
     )
+
 
     self_bonus = (
         ecg_value
         * SELF_BONUS_RATE
     )
 
+
     upline_bonus = (
         ecg_value
         * UPLINE_RATE
     )
 
+
     now = timezone.now()
+
 
     invoice_no = (
         uuid.uuid4()
         .hex[:12]
         .upper()
     )
+
 
     principal_unlock_at = (
         now
@@ -1969,6 +2123,7 @@ def register_purchase_bnb(
         )
     )
 
+
     self_profit_unlock_at = (
         now
         + timezone.timedelta(
@@ -1976,38 +2131,69 @@ def register_purchase_bnb(
         )
     )
 
-    purchase = (
-        PurchaseBNB.objects.create(
-            user=user,
-            invoice_no=invoice_no,
-            bnb_amount=bnb_amount,
-            bnb_tx_hash=bnb_tx_hash,
-            bnb_usd_rate=rate,
-            usd_value=usd_value,
-            ecg_value=ecg_value,
-            self_profit_5=self_bonus,
-            principal_unlock_at=principal_unlock_at,
-            self_profit_unlock_at=self_profit_unlock_at,
-        )
+
+    purchase = PurchaseBNB.objects.create(
+
+        user=user,
+
+        invoice_no=invoice_no,
+
+        bnb_amount=bnb_amount,
+
+        bnb_tx_hash=bnb_tx_hash,
+
+        bnb_usd_rate=rate,
+
+        usd_value=usd_value,
+
+        ecg_value=ecg_value,
+
+        self_profit_5=self_bonus,
+
+        principal_unlock_at=principal_unlock_at,
+
+        self_profit_unlock_at=self_profit_unlock_at,
     )
+
 
     ensure_user_has_wallet(user)
 
-    (
-        Wallet.objects
+
+    # ==========================================
+    # Asset Balance ECG
+    # ==========================================
+
+    asset_balance, _ = (
+        AssetBalance.objects
         .select_for_update()
-        .filter(user=user)
-        .update(
-            principal_locked=(
-                F("principal_locked")
-                + ecg_value
-            ),
-            self_profit_locked=(
-                F("self_profit_locked")
-                + self_bonus
-            ),
+        .get_or_create(
+            user=user,
+            asset="ECG"
         )
     )
+
+
+    asset_balance.locked = (
+        Decimal(str(asset_balance.locked or 0))
+        + ecg_value
+        + self_bonus
+    )
+
+
+    asset_balance.total_earned = (
+        Decimal(str(asset_balance.total_earned or 0))
+        + self_bonus
+    )
+
+
+    asset_balance.save(
+        update_fields=[
+            "locked",
+            "total_earned",
+            "updated_at",
+        ]
+    )
+
 
     Ledger.objects.create(
         user=user,
@@ -2017,9 +2203,11 @@ def register_purchase_bnb(
             "invoice": invoice_no,
             "tx": bnb_tx_hash,
             "currency": "BNB",
+            "asset": "ECG",
             "is_test": is_test,
         },
     )
+
 
     Ledger.objects.create(
         user=user,
@@ -2029,50 +2217,46 @@ def register_purchase_bnb(
             "invoice": invoice_no,
             "tx": bnb_tx_hash,
             "currency": "BNB",
+            "asset": "ECG",
             "is_test": is_test,
         },
     )
 
-    upline_result = credit_direct_upline_purchase_bonus(
+
+    credit_direct_upline_purchase_bonus(
         buyer=user,
         bonus=upline_bonus,
         invoice_no=invoice_no,
         tx_hash=bnb_tx_hash,
         currency="BNB",
         is_test=is_test,
+        asset="ECG",
     )
 
-    logger.info(
-        "[REGISTER_PURCHASE_BNB] upline 5%% result: %s",
-        upline_result,
-    )
 
     update_user_investment(
         user,
         bnb_amount,
     )
 
-    indirect_results = credit_indirect_upline_purchase_bonuses(
+
+    credit_indirect_upline_purchase_bonuses(
         buyer=user,
         purchase_ecg_value=ecg_value,
         invoice_no=invoice_no,
         tx_hash=bnb_tx_hash,
         currency="BNB",
         is_test=is_test,
+        asset="ECG",
     )
 
-    logger.info(
-        "[REGISTER_PURCHASE_BNB] indirect upline 1%% results: %s",
-        indirect_results,
-    )
 
     update_user_total_investment(
         user
     )
 
+
     return purchase
-
-
 # ============================================================
 # ECG -> TON
 # ============================================================
@@ -2147,13 +2331,31 @@ def distribute_level_5_purchase(
                 current
             )
 
-            Wallet.objects.filter(
-                user=current
-            ).update(
-                referral_bonus=(
-                    F("referral_bonus")
-                    + bonus
+            epl_balance, _ = (
+                AssetBalance.objects
+                .select_for_update()
+                .get_or_create(
+                    user=current,
+                    asset="EPL"
                 )
+            )
+
+            epl_balance.available = (
+                Decimal(str(epl_balance.available or 0))
+                + bonus
+            )
+
+            epl_balance.total_earned = (
+                Decimal(str(epl_balance.total_earned or 0))
+                + bonus
+            )
+
+            epl_balance.save(
+                update_fields=[
+                    "available",
+                    "total_earned",
+                    "updated_at",
+                ]
             )
 
             Ledger.objects.create(

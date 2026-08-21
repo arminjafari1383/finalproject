@@ -606,12 +606,22 @@ def wallet_view(request, wallet_address):
         asset="USDT",
     )
 
+    ecg_balance,_ = AssetBalance.objects.get_or_create(
+        user=user,
+        asset="ECG",
+    )
+    epl_balance,_ = AssetBalance.objects.get_or_create(
+        user=user,
+        asset="EPL",
+    )
+
+
     zero = Decimal("0")
 
     # ECG profit buckets from the current Wallet model.
-    self_profit_locked = Decimal(str(wallet.ecg_self_locked or 0))
-    self_profit_unlocked = Decimal(str(wallet.ecg_self_unlocked or 0))
-    downline_profit_current = Decimal(str(wallet.ecg_referral_profit or 0))
+    self_profit_locked = Decimal(str(ecg_balance.locked or 0))
+    self_profit_unlocked = Decimal(str(ecg_balance.available or 0))
+    downline_profit_current = Decimal("0")
 
     available_balance = self_profit_unlocked + downline_profit_current
     withdrawable_ecg_profit = available_balance
@@ -640,7 +650,7 @@ def wallet_view(request, wallet_address):
     # current display breakdown. Wallet.epl_balance remains authoritative total.
     referral_bonus_current = referral_bonus_total
     daily_reward_unlocked = total_mined
-    epl_balance = Decimal(str(wallet.epl_balance or 0))
+    epl_balance = Decimal(str(epl_balance.available or 0))
 
     total_earned = (
         user.ledgers
@@ -663,8 +673,8 @@ def wallet_view(request, wallet_address):
     principal_unlocked = zero
     stake_balance = zero
 
-    usdt_profit_locked = Decimal(str(usdt_balance.profit_locked or 0))
-    usdt_profit_unlocked = Decimal(str(usdt_balance.profit_unlocked or 0))
+    usdt_profit_locked = Decimal(str(usdt_balance.locked or 0))
+    usdt_profit_unlocked = Decimal(str(usdt_balance.available or 0))
     usdt_profit_total = usdt_profit_locked + usdt_profit_unlocked
 
     # Current model has no total_withdrawn field. Rebuild the legacy ECG total
@@ -1062,7 +1072,7 @@ def request_withdraw(request):
                 .select_for_update()
                 .get_or_create(user=user, asset="USDT")
             )
-            available = Decimal(str(balance.profit_unlocked or 0))
+            available = Decimal(str(balance.available or 0))
 
             if source_amount > available:
                 return Response(
@@ -1074,12 +1084,13 @@ def request_withdraw(request):
                     status=400,
                 )
 
-            balance.profit_unlocked = available - source_amount
-            balance.save(update_fields=["profit_unlocked", "updated_at"])
+            balance.available = available - source_amount
+            balance.save(update_fields=["available", "updated_at"])
 
             req = WithdrawRequest.objects.create(
                 user=user,
                 asset="TON",
+                source_asset="USDT",
                 amount=source_amount,
                 wallet_address=destination,
                 status="PENDING",
@@ -1107,13 +1118,17 @@ def request_withdraw(request):
                 status=400
             )
         with transaction.atomic():
-            Wallet = (
-                Wallet.objects
+            epl_balance,_ = (
+                AssetBalance.objects
                 .select_for_update()
-                .get(user=user)
+                .get_or_create
+                (
+                    user=user,
+                    asset="EPL"
+                 )
             )
             available = Decimal(
-                str(Wallet.epl_balance or 0)
+                str(epl_balance.available or 0)
             )
 
             if requested_amount > available:
@@ -1126,13 +1141,13 @@ def request_withdraw(request):
                     },
                     status=400
                 )
-            Wallet.epl_balance = (
+            epl_balance.available = (
                 available - requested_amount
             )
 
-            Wallet.save(
+            epl_balance.save(
                 update_fields = [
-                    "epl_balance",
+                    "available",
                     "updated_at"
                 ]
             )
@@ -1173,11 +1188,17 @@ def request_withdraw(request):
             ton_amount = Decimal("0")
 
         with transaction.atomic():
-            wallet = Wallet.objects.select_for_update().get(user=user)
-
-            self_unlocked = Decimal(str(wallet.ecg_self_unlocked or 0))
-            referral_unlocked = Decimal(str(wallet.ecg_referral_profit or 0))
-            available = (self_unlocked + referral_unlocked)
+            ecg_balance,_ = (
+                AssetBalance.objects
+                .select_for_update()
+                .get_or_create(
+                    user=user,
+                    asset="ECG"
+                )
+            )
+            available = Decimal(
+                str(ecg_balance.available or 0)
+            )
 
             if ecg_amount > available:
                     return Response(
@@ -1188,15 +1209,12 @@ def request_withdraw(request):
                         status=400,
                     )
 
-            referral_debit = min(referral_unlocked, ecg_amount)
-            self_debit = (ecg_amount - referral_debit)
 
-            wallet.ecg_referral_profit = referral_unlocked - referral_debit
-            wallet.ecg_self_unlocked = self_unlocked - self_debit
-            wallet.save(
+            ecg_balance.available = (available - ecg_amount)
+
+            ecg_balance.save(
                 update_fields=[
-                    "ecg_referral_profit",
-                    "ecg_self_unlocked",
+                    "available",
                     "updated_at",
                 ]
             )
@@ -1204,6 +1222,7 @@ def request_withdraw(request):
             req = WithdrawRequest.objects.create(
                 user=user,
                 asset=asset,
+                source_asset="ECG",
                 amount=ecg_amount,
                 wallet_address=destination,
                 status="PENDING",
@@ -1589,6 +1608,11 @@ def reward_status(request):
         )
 
     wallet, _ = Wallet.objects.get_or_create(user=user)
+    epl_balance,_ = AssetBalance.objects.get_or_create(
+        user=user,
+        asset="EPL"
+    )
+
     now = timezone.now()
     next_at = user.next_daily_claim_at
 
@@ -1612,8 +1636,8 @@ def reward_status(request):
             "reward_amount": str(HOURLY_REWARD),
             "cooldown_seconds": int(COOLDOWN.total_seconds()),
             "hourly_reward_balance": stats["total_rewards"],
-            "epl_balance": str(wallet.epl_balance or Decimal("0")),
-            "epl_total_earned": str(wallet.epl_total_earned or Decimal("0")),
+            "epl_balance": str(epl_balance.available or Decimal("0")),
+            "epl_total_earned": str(epl_balance.total_earned or Decimal("0")),
             "stake_balance": "0",
         },
         status=status.HTTP_200_OK,
@@ -1672,6 +1696,10 @@ def tick(request):
                 user=locked_user
             )
 
+            epl_balance,_ = AssetBalance.objects.select_for_update().get_or_create(
+                user=locked_user,
+                asset = "EPL"
+            )
             now = timezone.now()
             next_at = locked_user.next_daily_claim_at
 
@@ -1703,19 +1731,18 @@ def tick(request):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            locked_wallet.epl_balance = (
-                Decimal(str(locked_wallet.epl_balance or 0))
+            epl_balance.available = (
+                Decimal(str(epl_balance.available or 0))
                 + HOURLY_REWARD
             )
-            locked_wallet.epl_total_earned = (
-                Decimal(str(locked_wallet.epl_total_earned or 0))
+            epl_balance.total_earned = (
+                Decimal(str(epl_balance.total_earned or 0))
                 + HOURLY_REWARD
             )
-            locked_wallet.save(
+            epl_balance.save(
                 update_fields=[
-                    "epl_balance",
-                    "epl_total_earned",
-                    "updated_at",
+                    "total_earned",
+                    "total_earned",
                 ]
             )
 
