@@ -2259,13 +2259,16 @@ def create_ton_transaction(request):
 
 
         return JsonResponse(
-            {
-                "status": "ok",
-                "invoice_no": purchase.invoice_no,
-                "purchase_id": purchase.id,
-            },
-            status=201
-        )
+    {
+        "status": "ok",
+        "invoice_no": purchase.invoice_no,
+        "purchase_id": purchase.id,
+
+        # آدرس مقصد پرداخت TON
+        "gram_address": settings.GRAM_ADDRESS,
+    },
+    status=201
+)
 
 
     except Exception as e:
