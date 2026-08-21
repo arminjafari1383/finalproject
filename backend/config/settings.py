@@ -101,4 +101,3 @@ TON_PRIVATE_KEY = os.getenv(
 )
 
 
-GRAM_ADDRESS = os.getenv("GRAM_MERCHANT_ADDRESS")
