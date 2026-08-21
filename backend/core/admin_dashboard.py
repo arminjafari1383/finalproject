@@ -228,12 +228,16 @@ def admin_system_dashboard(request):
                 break
 
         # پاداش دعوت
+       # پاداش دعوت
         referral_bonus = (
-            wallet.referral_bonus
+            getattr(
+                wallet,
+                "referral_bonus",
+                Decimal("0")
+            )
             if wallet
             else Decimal("0")
         )
-
         # پاداش روزانه قفل‌شده
         daily_locked = (
             wallet.daily_reward_locked
@@ -556,51 +560,36 @@ def admin_system_dashboard(request):
     # -----------------------------------------------------
 
     wallet_totals = Wallet.objects.aggregate(
-        referral_bonus=Sum(
-            "referral_bonus"
-        ),
-
-        daily_locked=Sum(
-            "daily_reward_locked"
-        ),
-
-        daily_unlocked=Sum(
-            "daily_reward_unlocked"
-        ),
-
-        downline_profit=Sum(
-            "downline_profit_instant"
-        ),
-
-        self_profit_locked=Sum(
-            "self_profit_locked"
-        ),
-
-        self_profit_unlocked=Sum(
-            "self_profit_unlocked"
-        ),
-
-        principal_locked=Sum(
-            "principal_locked"
-        ),
-
-        principal_unlocked=Sum(
-            "principal_unlocked"
-        ),
-
-        total_deposited=Sum(
-            "total_deposited"
-        ),
-
-        total_withdrawn=Sum(
-            "total_withdrawn"
-        ),
+    daily_locked=Sum(
+        "daily_reward_locked"
+    ),
+    daily_unlocked=Sum(
+        "daily_reward_unlocked"
+    ),
+    downline_profit=Sum(
+        "downline_profit_instant"
+    ),
+    self_profit_locked=Sum(
+        "self_profit_locked"
+    ),
+    self_profit_unlocked=Sum(
+        "self_profit_unlocked"
+    ),
+    principal_locked=Sum(
+        "principal_locked"
+    ),
+    principal_unlocked=Sum(
+        "principal_unlocked"
+    ),
+    total_deposited=Sum(
+        "total_deposited"
+    ),
+    total_withdrawn=Sum(
+        "total_withdrawn"
+    ),
     )
 
-    total_referral_bonus = (
-        wallet_totals["referral_bonus"]
-        or Decimal("0")
-    )
+    total_referral_bonus = Decimal("0")
 
     total_daily_locked = (
         wallet_totals["daily_locked"]
