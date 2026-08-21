@@ -1209,9 +1209,15 @@ def request_withdraw(request):
     )
 
     release_matured_purchase_profits(user)
+    
 
     if source_asset == "USDT":
         source_amount = requested_amount.quantize(Decimal("0.000001"))
+
+        max_ton = (
+            available / ton_rate
+        ).quantize(Decimal("0.000000001"))
+
         ton_amount = (
             source_amount / ton_rate
         ).quantize(Decimal("0.000000001"))
