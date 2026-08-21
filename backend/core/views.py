@@ -1658,7 +1658,8 @@ def admin_complete_withdraw(request, withdraw_id):
             update_fields.append("tx_hash")
         req.save(update_fields=update_fields)
 
-        # صفر کردن موجودی بعد از تایید نهایی برداشت
+        # کم کردن فقط مقدار برداشت شده از موجودی
+        # موجودی کامل صفر نمی‌شود.
         source_asset = str(req.source_asset or "ECG").upper()
 
         balance = (
@@ -1672,7 +1673,14 @@ def admin_complete_withdraw(request, withdraw_id):
         )
 
         if balance:
-            balance.available = Decimal("0")
+            withdraw_amount = Decimal(str(req.amount or 0))
+            current_available = Decimal(str(balance.available or 0))
+
+            balance.available = max(
+                Decimal("0"),
+                current_available - withdraw_amount
+            )
+
             balance.save(
                 update_fields=["available"]
             )
