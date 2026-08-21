@@ -107,22 +107,15 @@ class AssetBalanceAdmin(admin.ModelAdmin):
         "available",
         "locked",
         "total_earned",
-        "updated_at",
     )
 
     list_filter = (
         "asset",
-        "updated_at",
     )
 
     search_fields = (
         "user__wallet_address",
         "user__telegram_id",
-    )
-
-    readonly_fields = (
-        "created_at",
-        "updated_at",
     )
 
     fieldsets = (
@@ -143,13 +136,6 @@ class AssetBalanceAdmin(admin.ModelAdmin):
                 "available",
                 "locked",
                 "total_earned",
-            )
-        }),
-
-        ("Dates", {
-            "fields": (
-                "created_at",
-                "updated_at",
             )
         }),
     )
