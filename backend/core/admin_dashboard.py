@@ -1,519 +1,953 @@
-# backend/core/models.py
+# backend/core/admin_dashboard.py
+
+import os
+import secrets
 from decimal import Decimal
-from django.db import models
-from django.utils import timezone
-from django.db.models import F
-import uuid
 
-class AppUser(models.Model):
-    telegram_id = models.BigIntegerField(unique=True, null=True, blank=True)
-    telegram_username = models.CharField(max_length=100, null=True, blank=True, help_text="یوزرنیم تلگرام کاربر")
-    telegram_photo_url = models.URLField(
-        max_length=1000,
-        null=True,
-        blank=True,
-        help_text="آدرس آواتار تلگرام کاربر"
-    )
-    wallet_address = models.CharField(max_length=128, unique=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+import requests
 
-    # referral
-    referral_code = models.CharField(max_length=32, unique=True, blank=True)
-    inviter = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL, related_name="invitees")
-    next_daily_claim_at = models.DateTimeField(null=True, blank=True)
+import pyotp
 
-    is_telegram_user = models.BooleanField(default=False)
-    telegram_verified = models.BooleanField(default=False)
-    wallet_locked = models.BooleanField(default=False)
-    
-    # ==========================================
-    # ✅ فیلدهای جدید
-    # ==========================================
-    is_admin = models.BooleanField(default=False, help_text="آیا کاربر ادمین است؟")
-    is_active = models.BooleanField(default=True, help_text="آیا کاربر فعال است؟")
-    last_active = models.DateTimeField(null=True, blank=True, help_text="آخرین فعالیت کاربر")
-    total_investment = models.DecimalField(max_digits=24, decimal_places=6, default=0, help_text="کل سرمایه‌گذاری")
-    total_earned = models.DecimalField(max_digits=24, decimal_places=6, default=0, help_text="کل سود کسب شده")
-    
-    def save(self, *args, **kwargs):
-        if not self.referral_code:
-            self.referral_code = uuid.uuid4().hex[:10].upper()
-        super().save(*args, **kwargs)
+from django.db.models import Count, Sum
 
-    def __str__(self):
-        return f"{self.telegram_id} - {self.wallet_address[:8]}..."
-    
-class Wallet(models.Model):
+from rest_framework import status
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
 
-    user = models.OneToOneField(
-        "AppUser",
-        on_delete=models.CASCADE,
-        related_name="wallet"
+from .models import (
+    AppUser,
+    AssetBalance,
+    Ledger,
+    Purchase,
+    Wallet,
+    WithdrawRequest,
+)
+
+
+# =========================================================
+# ابزارهای کمکی
+# =========================================================
+
+def _money(value):
+    """
+    تبدیل Decimal و مقدار None به رشته مناسب برای JSON.
+    """
+    return str(
+        value
+        if value is not None
+        else Decimal("0")
     )
 
 
-    # ==================================
-    # ECG BALANCE
-    # ==================================
+def _admin_allowed(request):
+    """
+    دسترسی ادمین با Google Authenticator (TOTP) کنترل می‌شود.
+    """
 
-    # سود خرید خود کاربر - قفل 30 روزه
-    ecg_self_locked = models.DecimalField(
-        max_digits=24,
-        decimal_places=8,
-        default=Decimal("0")
-    )
+    otp_code = request.headers.get(
+        "X-Admin-OTP",
+        "",
+    ).strip()
 
-    # سود خرید خود کاربر - آزاد شده
-    ecg_self_unlocked = models.DecimalField(
-        max_digits=24,
-        decimal_places=8,
-        default=Decimal("0")
-    )
-
-    # سود بالاسری ECG (لحظه ای)
-    ecg_referral_profit = models.DecimalField(
-        max_digits=24,
-        decimal_places=8,
-        default=Decimal("0")
-    )
+    secret = os.getenv(
+        "ADMIN_2FA_SECRET",
+        "",
+    ).strip()
 
 
-    # ==================================
-    # USDT BALANCE
-    # ==================================
-
-    # سود خرید خود کاربر - قفل 30 روزه
-    usdt_self_locked = models.DecimalField(
-        max_digits=24,
-        decimal_places=8,
-        default=Decimal("0")
-    )
+    if not secret:
+        return False
 
 
-    # سود خرید خود کاربر - آزاد شده
-    usdt_self_unlocked = models.DecimalField(
-        max_digits=24,
-        decimal_places=8,
-        default=Decimal("0")
-    )
+    if not otp_code:
+        return False
 
 
-    # سود بالاسری USDT
-    usdt_referral_profit = models.DecimalField(
-        max_digits=24,
-        decimal_places=8,
-        default=Decimal("0")
-    )
+    try:
 
+        totp = pyotp.TOTP(secret)
 
-    # ==================================
-    # EPL TIMER ONLY
-    # ==================================
-
-    # موجودی Timer
-    epl_balance = models.DecimalField(
-        max_digits=24,
-        decimal_places=8,
-        default=Decimal("0")
-    )
-
-
-    # کل EPL گرفته شده
-    epl_total_earned = models.DecimalField(
-        max_digits=24,
-        decimal_places=8,
-        default=Decimal("0")
-    )
-
-
-    created_at = models.DateTimeField(
-        auto_now_add=True
-    )
-
-    updated_at = models.DateTimeField(
-        auto_now=True
-    )
-
-
-    def __str__(self):
-        return f"{self.user} wallet"
-
-
-
-    # فقط ECG قابل برداشت
-    def available_ecg(self):
-
-        return (
-            self.ecg_self_unlocked
-            +
-            self.ecg_referral_profit
+        return totp.verify(
+            otp_code,
+            valid_window=1,
         )
 
+    except Exception:
+        return False
 
 
-    # فقط USDT قابل برداشت
-    def available_usdt(self):
 
-        return (
-            self.usdt_self_unlocked
-            +
-            self.usdt_referral_profit
+# =========================================================
+# موجودی کیف پول اصلی TON
+# =========================================================
+
+def _treasury_balance():
+    address = os.getenv(
+        "TREASURY_TON_ADDRESS",
+        "",
+    ).strip()
+
+    if not address:
+        return {
+            "address": "",
+            "balance_ton": None,
+            "minimum_ton": "100",
+            "low_balance": None,
+            "error": (
+                "TREASURY_TON_ADDRESS "
+                "is not configured"
+            ),
+        }
+
+    headers = {}
+
+    api_key = os.getenv(
+        "TONCENTER_API_KEY",
+        "",
+    ).strip()
+
+    if api_key:
+        headers["X-API-Key"] = api_key
+
+    try:
+        response = requests.get(
+            (
+                "https://toncenter.com/api/v2/"
+                "getAddressBalance"
+            ),
+            params={
+                "address": address,
+            },
+            headers=headers,
+            timeout=12,
         )
-class AssetBalance(models.Model):
-    ASSET_CHOICES = [
-        ("ECG","ECG"),
-        ("EPL","EPL"),
-        ("USDT", "USDT"),
-    ]
 
-    user = models.ForeignKey(
-        AppUser,
-        on_delete=models.CASCADE,
-        related_name="asset_balances",
-    )
+        response.raise_for_status()
 
-    asset = models.CharField(
-        max_length=8,
-        choices=ASSET_CHOICES,
-    )
+        result = response.json().get(
+            "result",
+            "0",
+        )
 
-    available = models.DecimalField(
-        max_digits=24,
-        decimal_places=8,
-        default=0
-    )
+        balance = (
+            Decimal(str(result))
+            / Decimal("1000000000")
+        )
 
-    locked = models.DecimalField(
-        max_digits=24,
-        decimal_places=8,
-        default=0
-    )
+        return {
+            "address": address,
+            "balance_ton": str(balance),
+            "minimum_ton": "100",
+            "low_balance": (
+                balance < Decimal("100")
+            ),
+            "error": "",
+        }
 
-    total_earned = models.DecimalField(
-        max_digits=24,
-        decimal_places=8,
-        default=0
-    )
+    except Exception as exc:
+        return {
+            "address": address,
+            "balance_ton": None,
+            "minimum_ton": "100",
+            "low_balance": None,
+            "error": str(exc),
+        }
 
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["user", "asset"],
-                name="unique_user_asset",
+
+# =========================================================
+# صفحه مدیریت کامل سیستم
+# =========================================================
+
+@api_view(["GET"])
+def admin_system_dashboard(request):
+    if not _admin_allowed(request):
+        return Response(
+            {
+                "error": "Admin access denied.",
+            },
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    # -----------------------------------------------------
+    # QuerySets
+    # -----------------------------------------------------
+
+    users_qs = (
+        AppUser.objects
+        .select_related(
+            "wallet",
+            "inviter",
+        )
+        .prefetch_related(
+            "asset_balances",
+        )
+        .annotate(
+            referral_count=Count(
+                "invitees",
+                distinct=True,
             )
-        ]
-
-class Ledger(models.Model):
-    TYPE_CHOICES = [
-        ("REF_BONUS", "Referral bonus"),
-        ("DAILY_ADD", "Daily add locked"),
-        ("DAILY_UNLOCK", "Daily unlock"),
-        ("BUY_PRINCIPAL", "Buy principal locked"),
-        ("BUY_SELF_PROFIT", "Buy self profit locked"),
-        ("SELF_PROFIT_UNLOCK", "Self profit unlock"),
-        ("PRINCIPAL_UNLOCK", "Principal unlock"),
-        ("DOWNLINE_PROFIT", "Downline instant profit"),
-        ("WITHDRAW", "Withdraw"),
-        ("LEVEL5_BONUS", "Level 5 bonus"),
-    ]
-    user = models.ForeignKey(AppUser, on_delete=models.CASCADE, related_name="ledgers")
-    typ = models.CharField(max_length=32, choices=TYPE_CHOICES)
-    amount = models.DecimalField(max_digits=24, decimal_places=6)
-    meta = models.JSONField(default=dict, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"{self.typ} - {self.amount}"
-
-
-class Purchase(models.Model):
-
-    ASSET_CHOICES = (
-        ("ECG", "ECG"),
-        ("USDT", "USDT"),
+        )
+        .order_by("-created_at")
     )
 
-
-    user = models.ForeignKey(
-        AppUser,
-        on_delete=models.CASCADE,
-        related_name="purchases"
+    purchases_qs = (
+        Purchase.objects
+        .select_related("user")
+        .order_by("-created_at")
     )
 
-
-    invoice_no = models.CharField(
-        max_length=50,
-        unique=True
+    withdraws_qs = (
+        WithdrawRequest.objects
+        .select_related("user")
+        .order_by("-created_at")
     )
 
+    # -----------------------------------------------------
+    # اطلاعات کاربران
+    # -----------------------------------------------------
 
-    # پرداخت ورودی
-    ton_amount = models.DecimalField(
-        max_digits=30,
-        decimal_places=8
-    )
+    users = []
 
-    ton_tx_hash = models.CharField(
-        max_length=255,
-        unique=True
-    )
-
-    ton_usd_rate = models.DecimalField(
-        max_digits=20,
-        decimal_places=8
-    )
-
-
-    # ارزش دلاری خرید
-    usd_value = models.DecimalField(
-        max_digits=30,
-        decimal_places=8
-    )
-
-
-    # مقدار ECG محاسباتی قدیمی (برای سازگاری)
-    ecg_value = models.DecimalField(
-        max_digits=30,
-        decimal_places=8,
-        default=0
-    )
-
-
-    # ============================
-    # Asset Purchased
-    # ============================
-
-    output_asset = models.CharField(
-        max_length=10,
-        choices=ASSET_CHOICES,
-        default="ECG"
-    )
-
-
-    output_amount = models.DecimalField(
-        max_digits=30,
-        decimal_places=8,
-        default=0
-    )
-
-
-    # سود مربوط به همان ارز خریداری شده
-
-    profit_asset = models.CharField(
-        max_length=10,
-        choices=ASSET_CHOICES,
-        default="ECG"
-    )
-
-
-    self_profit_5 = models.DecimalField(
-        max_digits=30,
-        decimal_places=8,
-        default=0
-    )
-
-
-    # زمان‌ها
-
-    principal_unlock_at = models.DateTimeField(
-        null=True,
-        blank=True
-    )
-
-
-    self_profit_unlock_at = models.DateTimeField(
-        null=True,
-        blank=True
-    )
-
-
-    created_at = models.DateTimeField(
-        auto_now_add=True
-    )
-
-
-    updated_at = models.DateTimeField(
-        auto_now=True
-    )
-
-
-    def __str__(self):
-        return (
-            f"{self.user.wallet_address} "
-            f"{self.output_asset} "
-            f"{self.output_amount}"
+    for user in users_qs[:500]:
+        wallet = getattr(
+            user,
+            "wallet",
+            None,
         )
 
-class PurchaseUSDT(models.Model):
-    """خرید ECG با USDT (BEP-20)"""
-    user = models.ForeignKey(AppUser, on_delete=models.CASCADE, related_name="purchases_usdt")
-    invoice_no = models.CharField(max_length=32, unique=True)
+        usdt = None
 
-    usdt_amount = models.DecimalField(max_digits=24, decimal_places=6)
-    usdt_tx_hash = models.CharField(max_length=256, unique=True)
+        for asset_balance in (
+            user.asset_balances.all()
+        ):
+            if (
+                asset_balance.asset
+                == "USDT"
+            ):
+                usdt = asset_balance
+                break
 
-    usdt_usd_rate = models.DecimalField(max_digits=24, decimal_places=6, default=1)
-    usd_value = models.DecimalField(max_digits=24, decimal_places=6)
+        # پاداش دعوت
+       # پاداش دعوت
+        referral_bonus = (
+            getattr(
+                wallet,
+                "referral_bonus",
+                Decimal("0")
+            )
+            if wallet
+            else Decimal("0")
+        )
+        # پاداش روزانه قفل‌شده
+        daily_locked = (
+            getattr(wallet, "daily_reward_locked", Decimal("0"))
+            if wallet
+            else Decimal("0")
+        )
 
-    ecg_value = models.DecimalField(max_digits=24, decimal_places=6)
-    self_profit_5 = models.DecimalField(max_digits=24, decimal_places=6)
+        # پاداش روزانه آزادشده
+        daily_unlocked = (
+            getattr(wallet, "daily_reward_unlocked", Decimal("0"))
+            if wallet
+            else Decimal("0")
+        )
 
-    principal_unlock_at = models.DateTimeField()
-    self_profit_unlock_at = models.DateTimeField()
+        # مجموع موجودی پاداش روزانه
+        daily_total = (
+            daily_locked
+            + daily_unlocked
+        )
 
-class PurchaseBNB(models.Model):
-    """
-    خرید با BNB (BEP-20)
-    """
+        # سود شخصی
+        self_profit_locked = (
+            getattr(wallet, "self_profit_locked", Decimal("0"))
+            if wallet
+            else Decimal("0")
+        )
 
-    user = models.ForeignKey(
-        AppUser,
-        on_delete=models.CASCADE,
-        related_name="purchases_bnb"
+        self_profit_unlocked = (
+            getattr(wallet, "self_profit_unlocked", Decimal("0"))
+            if wallet
+            else Decimal("0")
+        )
+
+        # اصل سرمایه
+        principal_locked = (
+            getattr(wallet, "principal_locked", Decimal("0"))
+            if wallet
+            else Decimal("0")
+        )
+
+        principal_unlocked = (
+            getattr(wallet, "principal_unlocked", Decimal("0"))
+            if wallet
+            else Decimal("0")
+        )
+
+        # سود زیرمجموعه
+        downline_profit = (
+            getattr(wallet, "downline_profit_instant", Decimal("0"))
+            if wallet
+            else Decimal("0")
+        )
+
+        # موجودی ECG قفل‌شده
+        locked_ecg = (
+            daily_locked
+            + self_profit_locked
+            + principal_locked
+        )
+
+        users.append({
+            "id": user.id,
+
+            "telegram_id": (
+                user.telegram_id
+            ),
+
+            "username": (
+                user.telegram_username
+            ),
+
+            "photo": (
+                user.telegram_photo_url
+            ),
+
+            "wallet_address": (
+                user.wallet_address
+            ),
+
+            "referral_code": (
+                user.referral_code
+            ),
+
+            "inviter": (
+                user.inviter.telegram_username
+                if user.inviter
+                else None
+            ),
+
+            "inviter_wallet": (
+                user.inviter.wallet_address
+                if user.inviter
+                else None
+            ),
+
+            # تعداد زیرمجموعه مستقیم
+            "referral_count": (
+                user.referral_count
+            ),
+
+            "is_active": user.is_active,
+
+            "last_active": (
+                user.last_active
+            ),
+
+            "created_at": (
+                user.created_at
+            ),
+
+            "total_investment": _money(
+                user.total_investment
+            ),
+
+            "total_earned": _money(
+                user.total_earned
+            ),
+
+            # پاداش ۳ ECG رفرال
+            "referral_bonus": _money(
+                referral_bonus
+            ),
+
+            # پاداش روزانه
+            "daily_reward_locked": _money(
+                daily_locked
+            ),
+
+            "daily_reward_unlocked": _money(
+                daily_unlocked
+            ),
+
+            "daily_reward_total": _money(
+                daily_total
+            ),
+
+            # سود شخصی
+            "self_profit_locked": _money(
+                self_profit_locked
+            ),
+
+            "self_profit_unlocked": _money(
+                self_profit_unlocked
+            ),
+
+            # اصل سرمایه
+            "principal_locked": _money(
+                principal_locked
+            ),
+
+            "principal_unlocked": _money(
+                principal_unlocked
+            ),
+
+            # سود زیرمجموعه
+            "downline_profit": _money(
+                downline_profit
+            ),
+
+            # موجودی ECG
+            "withdrawable_ecg": (
+                _money(
+                    wallet.withdrawable_total() if hasattr(wallet, "withdrawable_total") else Decimal("0")
+                )
+                if wallet
+                else "0"
+            ),
+
+            "locked_ecg": _money(
+                locked_ecg
+            ),
+
+            # موجودی USDT
+            "withdrawable_usdt": (
+                _money(
+                    usdt.withdrawable_total() if hasattr(usdt, "withdrawable_total") else Decimal("0")
+                )
+                if usdt
+                else "0"
+            ),
+
+            "locked_usdt": (
+                _money(
+                    usdt.principal_locked
+                    + usdt.profit_locked
+                )
+                if usdt
+                else "0"
+            ),
+        })
+
+    # -----------------------------------------------------
+    # فهرست خریدها
+    # -----------------------------------------------------
+
+    purchases = []
+
+    for item in purchases_qs[:500]:
+        purchases.append({
+            "id": item.id,
+
+            "invoice_no": (
+                item.invoice_no
+            ),
+
+            "username": (
+                item.user.telegram_username
+            ),
+
+            "wallet_address": (
+                item.user.wallet_address
+            ),
+
+            "ton_amount": _money(
+                item.ton_amount
+            ),
+
+            "ton_usd_rate": _money(
+                item.ton_usd_rate
+            ),
+
+            "usd_value": _money(
+                item.usd_value
+            ),
+
+            "ecg_value": _money(
+                item.ecg_value
+            ),
+
+            "output_asset": (
+                item.output_asset
+            ),
+
+            "output_amount": _money(
+                item.output_amount
+            ),
+
+            "profit_asset": (
+                item.profit_asset
+            ),
+
+            "self_profit_5": _money(
+                item.self_profit_5
+            ),
+
+            "tx_hash": (
+                item.ton_tx_hash
+            ),
+
+            "principal_unlock_at": (
+                item.principal_unlock_at
+            ),
+
+            "self_profit_unlock_at": (
+                item.self_profit_unlock_at
+            ),
+
+            "created_at": (
+                item.created_at
+            ),
+        })
+
+    # -----------------------------------------------------
+    # فهرست برداشت‌ها
+    # -----------------------------------------------------
+
+    withdrawals = []
+
+    for item in withdraws_qs[:500]:
+        withdrawals.append({
+            "id": item.id,
+
+            "username": (
+                item.user.telegram_username
+            ),
+
+            "wallet_address": (
+                item.user.wallet_address
+            ),
+
+            "asset": item.asset,
+
+            "scope": item.scope,
+
+            "amount": _money(
+                item.amount
+            ),
+
+            "ton_amount": _money(
+                item.ton_amount
+            ),
+
+            "destination_wallet": (
+                item.destination_wallet
+            ),
+
+            "status": item.status,
+
+            "tx_hash": item.tx_hash,
+
+            "fail_reason": (
+                item.fail_reason
+            ),
+
+            "balance_breakdown": (
+                item.balance_breakdown
+            ),
+
+            "created_at": (
+                item.created_at
+            ),
+
+            "completed_at": (
+                item.completed_at
+            ),
+        })
+
+    # -----------------------------------------------------
+    # مجموع کیف پول همه کاربران
+    # -----------------------------------------------------
+
+    wallet_totals = Wallet.objects.aggregate(
+    daily_locked=Sum(
+        "daily_reward_locked"
+    ),
+    daily_unlocked=Sum(
+        "daily_reward_unlocked"
+    ),
+    downline_profit=Sum(
+        "downline_profit_instant"
+    ),
+    self_profit_locked=Sum(
+        "self_profit_locked"
+    ),
+    self_profit_unlocked=Sum(
+        "self_profit_unlocked"
+    ),
+    principal_locked=Sum(
+        "principal_locked"
+    ),
+    principal_unlocked=Sum(
+        "principal_unlocked"
+    ),
+    total_deposited=Sum(
+        "total_deposited"
+    ),
+    total_withdrawn=Sum(
+        "total_withdrawn"
+    ),
     )
 
-    invoice_no = models.CharField(
-        max_length=32,
-        unique=True
+    total_referral_bonus = Decimal("0")
+
+    total_daily_locked = (
+        wallet_totals["daily_locked"]
+        or Decimal("0")
     )
 
-    bnb_amount = models.DecimalField(
-        max_digits=24,
-        decimal_places=8
+    total_daily_unlocked = (
+        wallet_totals["daily_unlocked"]
+        or Decimal("0")
     )
 
-    bnb_tx_hash = models.CharField(
-        max_length=256,
-        unique=True
+    total_daily_rewards = (
+        total_daily_locked
+        + total_daily_unlocked
     )
 
-    bnb_usd_rate = models.DecimalField(
-        max_digits=24,
-        decimal_places=6,
-        default=0
+    total_downline_profit = (
+        wallet_totals["downline_profit"]
+        or Decimal("0")
     )
 
-    usd_value = models.DecimalField(
-        max_digits=24,
-        decimal_places=6
+    total_self_profit_locked = (
+        wallet_totals[
+            "self_profit_locked"
+        ]
+        or Decimal("0")
     )
 
-    ecg_value = models.DecimalField(
-        max_digits=24,
-        decimal_places=6,
-        default=0
+    total_self_profit_unlocked = (
+        wallet_totals[
+            "self_profit_unlocked"
+        ]
+        or Decimal("0")
     )
 
-    self_profit_5 = models.DecimalField(
-        max_digits=24,
-        decimal_places=6,
-        default=0
+    total_principal_locked = (
+        wallet_totals[
+            "principal_locked"
+        ]
+        or Decimal("0")
     )
 
-    principal_unlock_at = models.DateTimeField()
-
-    self_profit_unlock_at = models.DateTimeField()
-
-    created_at = models.DateTimeField(
-        auto_now_add=True
+    total_principal_unlocked = (
+        wallet_totals[
+            "principal_unlocked"
+        ]
+        or Decimal("0")
     )
 
-    def __str__(self):
-        return f"BNB: {self.invoice_no} - {self.bnb_amount} BNB"
-
-
-class WithdrawRequest(models.Model):
-    """
-    درخواست برداشت کاربر
-    """
-
-    STATUS_CHOICES = [
-        ("PENDING", "Pending"),
-        ("APPROVED", "Approved"),
-        ("REJECTED", "Rejected"),
-        ("PAID", "Paid"),
-    ]
-
-    ASSET_CHOICES = [
-        ("TON","TON"),
-        ("ECG","ECG"),
-        ("EPL","EPL"),
-        ("USDT","USDT"),
-    ]
-    
-
-    user = models.ForeignKey(
-        AppUser,
-        on_delete=models.CASCADE,
-        related_name="withdraw_requests"
-    )
-    
-    asset = models.CharField(
-        max_length=10,
-        choices=ASSET_CHOICES,
-        default="ECG"
+    total_deposited = (
+        wallet_totals[
+            "total_deposited"
+        ]
+        or Decimal("0")
     )
 
-    source_asset = models.CharField(
-        max_length=10,
-        choices=ASSET_CHOICES,
-        default="ECG"
+    total_withdrawn = (
+        wallet_totals[
+            "total_withdrawn"
+        ]
+        or Decimal("0")
     )
 
-    amount = models.DecimalField(
-        max_digits=24,
-        decimal_places=8
+    # -----------------------------------------------------
+    # مجموع موجودی USDT کاربران
+    # -----------------------------------------------------
+
+    usdt_totals = (
+        AssetBalance.objects
+        .filter(asset="USDT")
+        .aggregate(
+            principal_locked=Sum(
+                "principal_locked"
+            ),
+            principal_unlocked=Sum(
+                "principal_unlocked"
+            ),
+            profit_locked=Sum(
+                "profit_locked"
+            ),
+            profit_unlocked=Sum(
+                "profit_unlocked"
+            ),
+        )
     )
 
-    wallet_address = models.CharField(
-        max_length=128
+    total_usdt_principal_locked = (
+        usdt_totals[
+            "principal_locked"
+        ]
+        or Decimal("0")
     )
 
-    tx_hash = models.CharField(
-        max_length=256,
-        null=True,
-        blank=True
+    total_usdt_principal_unlocked = (
+        usdt_totals[
+            "principal_unlocked"
+        ]
+        or Decimal("0")
     )
 
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default="PENDING"
+    total_usdt_profit_locked = (
+        usdt_totals[
+            "profit_locked"
+        ]
+        or Decimal("0")
     )
 
-    created_at = models.DateTimeField(
-        auto_now_add=True
+    total_usdt_profit_unlocked = (
+        usdt_totals[
+            "profit_unlocked"
+        ]
+        or Decimal("0")
     )
 
-    updated_at = models.DateTimeField(
-        auto_now=True
+    # -----------------------------------------------------
+    # برداشت‌های در انتظار
+    # -----------------------------------------------------
+
+    pending_ecg = (
+        withdraws_qs
+        .filter(
+            status="PENDING",
+            asset="ECG",
+        )
+        .aggregate(
+            total=Sum("amount")
+        )["total"]
+        or Decimal("0")
     )
 
-
-    def __str__(self):
-        return f"{self.user.wallet_address[:8]} - {self.amount} {self.source_asset}"
-
-class ReferralLevel(models.Model):
-
-    user = models.OneToOneField(
-        AppUser,
-        on_delete=models.CASCADE,
-        related_name="referral_level"
+    pending_ton = (
+        withdraws_qs
+        .filter(
+            status="PENDING",
+            asset="TON",
+        )
+        .aggregate(
+            total=Sum("ton_amount")
+        )["total"]
+        or Decimal("0")
     )
 
-    level_1_count = models.PositiveIntegerField(default=0)
-    level_2_count = models.PositiveIntegerField(default=0)
-    level_3_count = models.PositiveIntegerField(default=0)
-    level_4_count = models.PositiveIntegerField(default=0)
-    level_5_count = models.PositiveIntegerField(default=0)
+    # -----------------------------------------------------
+    # سود ۵٪ خریدها براساس ارز
+    # -----------------------------------------------------
 
-    level_1_users = models.JSONField(default=list, blank=True)
-    level_2_users = models.JSONField(default=list, blank=True)
-    level_3_users = models.JSONField(default=list, blank=True)
-    level_4_users = models.JSONField(default=list, blank=True)
-    level_5_users = models.JSONField(default=list, blank=True)
+    profit_ecg = (
+        purchases_qs
+        .filter(
+            profit_asset="ECG"
+        )
+        .aggregate(
+            total=Sum("self_profit_5")
+        )["total"]
+        or Decimal("0")
+    )
 
-    updated_at = models.DateTimeField(auto_now=True)
+    profit_usdt = (
+        purchases_qs
+        .filter(
+            profit_asset="USDT"
+        )
+        .aggregate(
+            total=Sum("self_profit_5")
+        )["total"]
+        or Decimal("0")
+    )
 
-    def __str__(self):
-        return f"{self.user.wallet_address} referral"
+    # -----------------------------------------------------
+    # تعداد و مبلغ رویدادهای Ledger
+    # -----------------------------------------------------
+
+    referral_ledger = (
+        Ledger.objects
+        .filter(typ="REF_BONUS")
+        .aggregate(
+            count=Count("id"),
+            total=Sum("amount"),
+        )
+    )
+
+    daily_add_ledger = (
+        Ledger.objects
+        .filter(typ="DAILY_ADD")
+        .aggregate(
+            count=Count("id"),
+            total=Sum("amount"),
+        )
+    )
+
+    daily_unlock_ledger = (
+        Ledger.objects
+        .filter(typ="DAILY_UNLOCK")
+        .aggregate(
+            count=Count("id"),
+            total=Sum("amount"),
+        )
+    )
+
+    # -----------------------------------------------------
+    # پاسخ نهایی
+    # -----------------------------------------------------
+
+    return Response({
+        "summary": {
+            # کاربران
+            "total_users": (
+                users_qs.count()
+            ),
+
+            "active_users": (
+                users_qs
+                .filter(is_active=True)
+                .count()
+            ),
+
+            # خریدها
+            "total_purchases": (
+                purchases_qs.count()
+            ),
+
+            "total_ton_received": _money(
+                purchases_qs.aggregate(
+                    total=Sum("ton_amount")
+                )["total"]
+            ),
+
+            "total_usd_value": _money(
+                purchases_qs.aggregate(
+                    total=Sum("usd_value")
+                )["total"]
+            ),
+
+            # پاداش رفرال
+            "total_referral_bonus": _money(
+                total_referral_bonus
+            ),
+
+            "referral_reward_events": (
+                referral_ledger["count"]
+                or 0
+            ),
+
+            "referral_reward_ledger_total": (
+                _money(
+                    referral_ledger["total"]
+                )
+            ),
+
+            # پاداش روزانه
+            "total_daily_rewards": _money(
+                total_daily_rewards
+            ),
+
+            "total_daily_locked": _money(
+                total_daily_locked
+            ),
+
+            "total_daily_unlocked": _money(
+                total_daily_unlocked
+            ),
+
+            "daily_reward_events": (
+                daily_add_ledger["count"]
+                or 0
+            ),
+
+            "daily_reward_added_total": (
+                _money(
+                    daily_add_ledger["total"]
+                )
+            ),
+
+            "daily_unlock_events": (
+                daily_unlock_ledger["count"]
+                or 0
+            ),
+
+            "daily_reward_unlocked_total": (
+                _money(
+                    daily_unlock_ledger[
+                        "total"
+                    ]
+                )
+            ),
+
+            # سودها
+            "total_downline_profit": _money(
+                total_downline_profit
+            ),
+
+            "total_self_profit_locked": _money(
+                total_self_profit_locked
+            ),
+
+            "total_self_profit_unlocked": _money(
+                total_self_profit_unlocked
+            ),
+
+            "profit_payable_ecg": _money(
+                profit_ecg
+            ),
+
+            "profit_payable_usdt": _money(
+                profit_usdt
+            ),
+
+            # اصل سرمایه
+            "total_principal_locked": _money(
+                total_principal_locked
+            ),
+
+            "total_principal_unlocked": _money(
+                total_principal_unlocked
+            ),
+
+            # مجموع واریز و برداشت
+            "total_deposited": _money(
+                total_deposited
+            ),
+
+            "total_withdrawn": _money(
+                total_withdrawn
+            ),
+
+            # USDT
+            "usdt_principal_locked": _money(
+                total_usdt_principal_locked
+            ),
+
+            "usdt_principal_unlocked": _money(
+                total_usdt_principal_unlocked
+            ),
+
+            "usdt_profit_locked": _money(
+                total_usdt_profit_locked
+            ),
+
+            "usdt_profit_unlocked": _money(
+                total_usdt_profit_unlocked
+            ),
+
+            # برداشت‌های در انتظار
+            "pending_withdraw_ecg": _money(
+                pending_ecg
+            ),
+
+            "pending_withdraw_ton": _money(
+                pending_ton
+            ),
+
+            # خزانه TON
+            "treasury": (
+                _treasury_balance()
+            ),
+        },
+
+        "users": users,
+        "purchases": purchases,
+        "withdrawals": withdrawals,
+    })
