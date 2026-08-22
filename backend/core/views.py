@@ -1353,27 +1353,59 @@ def request_withdraw(request):
                     asset="ECG"
                 )
             )
-            available = Decimal(
-                str(ecg_balance.available or 0)
-            )
+            withdraw_bucket = str(
+                request.data.get("withdraw_bucket", "")
+                or ""
+            ).upper()
+
+            # Withdraw from the correct profit bucket
+            # Referral and Self profits are calculated from Ledger.
+            if withdraw_bucket == "REFERRAL":
+                available = (
+                    _ledger_total(
+                        "DIRECT_REFERRAL_BONUS",
+                        "ECG"
+                    )
+                    +
+                    _ledger_total(
+                        "INDIRECT_REFERRAL_BONUS",
+                        "ECG"
+                    )
+                )
+
+            elif withdraw_bucket == "SELF":
+                available = _ledger_total(
+                    "SELF_PROFIT_UNLOCK",
+                    "ECG"
+                )
+
+            else:
+                available = Decimal(
+                    str(ecg_balance.available or 0)
+                )
 
             if ecg_amount > available:
-                    return Response(
-                        {
-                            "error": "Insufficient ECG balance.",
-                            "available":str(available)
-                        },
-                        status=400,
-                    )
+                return Response(
+                    {
+                        "error": "Insufficient ECG balance.",
+                        "available": str(available),
+                        "withdraw_bucket": withdraw_bucket,
+                    },
+                    status=400,
+                )
 
+            # Only normal ECG balance is reduced here.
+            # Referral/Self are ledger based.
+            if withdraw_bucket not in {"REFERRAL", "SELF"}:
+                ecg_balance.available = (
+                    available - ecg_amount
+                )
 
-            ecg_balance.available = (available - ecg_amount)
-
-            ecg_balance.save(
-                update_fields=[
-                    "available",
-                ]
-            )
+                ecg_balance.save(
+                    update_fields=[
+                        "available",
+                    ]
+                )
 
             req = WithdrawRequest.objects.create(
                 user=user,
@@ -1393,6 +1425,7 @@ def request_withdraw(request):
                     "source_asset": "ECG",
                     "asset": asset,
                     "ecg_debited": str(ecg_amount),
+                    "withdraw_bucket": withdraw_bucket,
                     "destination": destination
                 },
             )
@@ -2473,7 +2506,6 @@ def create_ton_transaction(request):
 
         return JsonResponse(
             {
-                
                 "status": "error",
                 "message": str(e)
             },
