@@ -2643,11 +2643,6 @@ export default function Referrals() {
   if (!address) {
     return (
       <>
-        <DebugPanel
-          data={debugData}
-          logs={traceLogs}
-          onClear={clearTrace}
-        />
 
         <div className="wallet-required">
           🔌 Please connect your
