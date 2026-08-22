@@ -8,31 +8,12 @@ import usdtLogo from "../assets/usdt-logo.png";
 export default function Purchase() {
   const tonWallet = useTonWallet();
 
-  // آدرس ولت خود کاربر
   const walletAddress = useMemo(
     () => tonWallet?.account?.address,
     [tonWallet]
   );
 
   const [tonConnectUI] = useTonConnectUI();
-  useEffect(() => {
-    addDebug("COMPONENT MOUNTED", {
-      walletAddress,
-      tonWallet,
-    });
-
-    return () => {
-      addDebug("COMPONENT UNMOUNTED");
-    };
-  }, []);
-
-  useEffect(() => {
-    addDebug("WALLET CHANGED", {
-      walletAddress,
-      account: tonWallet?.account,
-    });
-  }, [walletAddress]);
-
 
   const [tonAmount, setTonAmount] = useState("0");
   const [selectedOutput, setSelectedOutput] = useState("ECG");
@@ -42,87 +23,31 @@ export default function Purchase() {
   const [tonPrice, setTonPrice] = useState(null);
   const [priceError, setPriceError] = useState("");
 
-  // GRAM transaction data returned by Backend.
-  // این دو مقدار فقط از Backend می‌آیند
   const [gramAddress, setGramAddress] = useState("");
   const [gramAmount, setGramAmount] = useState("");
 
-  // فاکتور موقت بلافاصله بعد از موفقیت Wallet نمایش داده می‌شود.
-  // فاکتور واقعی فقط بعد از تایید on-chain از Backend می‌آید.
   const [pendingInvoice, setPendingInvoice] = useState(null);
   const [confirmingPayment, setConfirmingPayment] = useState(false);
   const confirmationRunningRef = useRef(false);
 
-  // On-screen debug log panel
-  const [debugLogs, setDebugLogs] = useState([]);
-
   const ECG_PER_USDT = 312;
   const PENDING_PAYMENT_PREFIX = "gram_pending_payment:";
 
-  // =========================
-  // DEBUG LOGGER
-  // =========================
-  // Logs every payment flow step in browser console.
-  // Prefix makes filtering easier:
-  // [PURCHASE_DEBUG]
-  function addDebug(title, data) {
-    const timestamp = new Date().toISOString();
-    const entry = {
-      id: Date.now() + Math.random(),
-      timestamp,
-      title,
-      data: data !== undefined ? data : null,
-    };
-
-    setDebugLogs((prev) => [entry, ...prev].slice(0, 200));
-
-    if (data !== undefined) {
-      console.groupCollapsed(
-        `[PURCHASE_DEBUG] ${timestamp} | ${title}`
-      );
-      console.log(data);
-      console.trace("Trace");
-      console.groupEnd();
-      return;
-    }
-
-    console.log(
-      `[PURCHASE_DEBUG] ${timestamp} | ${title}`
-    );
-  }
-
   function getErrorDetails(error) {
     return {
-      message:
-        error?.message ||
-        String(error),
-
-      name:
-        error?.name,
-
-      code:
-        error?.code,
-
-      status:
-        error?.response?.status,
-
-      responseData:
-        error?.response?.data,
-
-      requestUrl:
-        error?.config?.url,
-
-      requestMethod:
-        error?.config?.method,
-
-      stack:
-        error?.stack,
+      message: error?.message || String(error),
+      name: error?.name,
+      code: error?.code,
+      status: error?.response?.status,
+      responseData: error?.response?.data,
+      requestUrl: error?.config?.url,
+      requestMethod: error?.config?.method,
+      stack: error?.stack,
     };
   }
 
   function showSuccess(msg) {
     setSuccessMessage(msg);
-
     setTimeout(() => {
       setSuccessMessage("");
     }, 4000);
@@ -144,15 +69,11 @@ export default function Purchase() {
         const data = await res.json();
 
         if (!cancelled) {
-          setTonPrice(
-            data?.["the-open-network"]?.usd ?? null
-          );
+          setTonPrice(data?.["the-open-network"]?.usd ?? null);
         }
       } catch (error) {
         if (!cancelled) {
-          setPriceError(
-            "Failed to fetch TON price."
-          );
+          setPriceError("Failed to fetch TON price.");
         }
       }
     }
@@ -176,16 +97,10 @@ export default function Purchase() {
     try {
       setLoading(true);
 
-      const res = await api.get(
-        `/purchase/list/?wallet=${walletAddress}`
-      );
-
+      const res = await api.get(`/purchase/list/?wallet=${walletAddress}`);
       setInvoices(res.data || []);
     } catch (error) {
-      console.error(
-        "load invoices error",
-        error
-      );
+      console.error("load invoices error", error);
     } finally {
       setLoading(false);
     }
@@ -202,106 +117,56 @@ export default function Purchase() {
   const outputValue = useMemo(() => {
     const amt = Number(tonAmount);
 
-    if (
-      !tonPrice ||
-      !amt ||
-      amt <= 0
-    ) {
+    if (!tonPrice || !amt || amt <= 0) {
       return "0.00";
     }
 
-    const usdValue =
-      amt * tonPrice;
+    const usdValue = amt * tonPrice;
+    const ecgValue = usdValue * ECG_PER_USDT;
 
-    const ecgValue =
-      usdValue * ECG_PER_USDT;
-
-    if (
-      selectedOutput === "ECG"
-    ) {
+    if (selectedOutput === "ECG") {
       return ecgValue.toFixed(2);
     }
 
     return usdValue.toFixed(2);
-  }, [
-    tonAmount,
-    tonPrice,
-    selectedOutput,
-  ]);
+  }, [tonAmount, tonPrice, selectedOutput]);
 
   const ecgProfit = useMemo(() => {
-    const amt =
-      Number(tonAmount);
+    const amt = Number(tonAmount);
 
-    if (
-      !tonPrice ||
-      !amt ||
-      amt <= 0
-    ) {
+    if (!tonPrice || !amt || amt <= 0) {
       return "0.00";
     }
 
-    const usdValue =
-      amt * tonPrice;
+    const usdValue = amt * tonPrice;
+    const ecgValue = usdValue * ECG_PER_USDT;
 
-    const ecgValue =
-      usdValue * ECG_PER_USDT;
-
-    return (
-      ecgValue * 0.05
-    ).toFixed(2);
-  }, [
-    tonAmount,
-    tonPrice,
-  ]);
+    return (ecgValue * 0.05).toFixed(2);
+  }, [tonAmount, tonPrice]);
 
   const usdtProfit = useMemo(() => {
-    const amt =
-      Number(tonAmount);
+    const amt = Number(tonAmount);
 
-    if (
-      !tonPrice ||
-      !amt ||
-      amt <= 0
-    ) {
+    if (!tonPrice || !amt || amt <= 0) {
       return "0.00";
     }
 
-    const usdValue =
-      amt * tonPrice;
+    const usdValue = amt * tonPrice;
 
-    return (
-      usdValue * 0.05
-    ).toFixed(2);
-  }, [
-    tonAmount,
-    tonPrice,
-  ]);
+    return (usdValue * 0.05).toFixed(2);
+  }, [tonAmount, tonPrice]);
 
   const usdValue = useMemo(() => {
-    const amt =
-      Number(tonAmount);
+    const amt = Number(tonAmount);
 
-    if (
-      !tonPrice ||
-      !amt ||
-      amt <= 0
-    ) {
+    if (!tonPrice || !amt || amt <= 0) {
       return "0.00";
     }
 
-    return (
-      amt * tonPrice
-    ).toFixed(2);
-  }, [
-    tonAmount,
-    tonPrice,
-  ]);
+    return (amt * tonPrice).toFixed(2);
+  }, [tonAmount, tonPrice]);
 
-  const outputLabel =
-    selectedOutput === "ECG"
-      ? "ECG"
-      : "USDT";
+  const outputLabel = selectedOutput === "ECG" ? "ECG" : "USDT";
 
   // =========================
   // PAYMENT
@@ -315,9 +180,7 @@ export default function Purchase() {
     if (!walletAddress) return null;
 
     try {
-      const raw = localStorage.getItem(
-        pendingPaymentKey(walletAddress)
-      );
+      const raw = localStorage.getItem(pendingPaymentKey(walletAddress));
       return raw ? JSON.parse(raw) : null;
     } catch {
       return null;
@@ -333,10 +196,7 @@ export default function Purchase() {
         JSON.stringify(payment)
       );
     } catch (error) {
-      addDebug(
-        "⚠️ Could not save pending payment",
-        error?.message || String(error)
-      );
+      console.warn("Could not save pending payment:", error);
     }
   }
 
@@ -344,9 +204,7 @@ export default function Purchase() {
     if (!address) return;
 
     try {
-      localStorage.removeItem(
-        pendingPaymentKey(address)
-      );
+      localStorage.removeItem(pendingPaymentKey(address));
     } catch {
       // ignore localStorage cleanup error
     }
@@ -359,30 +217,18 @@ export default function Purchase() {
   }
 
   function makePendingInvoice(payment) {
-    const amount = Number(
-      payment?.ton_amount || 0
-    );
+    const amount = Number(payment?.ton_amount || 0);
+    const savedTonPrice = Number(payment?.ton_price || 0);
 
-    const savedTonPrice = Number(
-      payment?.ton_price || 0
-    );
-
-    const usd =
-      amount > 0 && savedTonPrice > 0
-        ? amount * savedTonPrice
-        : 0;
-
-    const ecg =
-      usd * ECG_PER_USDT;
+    const usd = amount > 0 && savedTonPrice > 0 ? amount * savedTonPrice : 0;
+    const ecg = usd * ECG_PER_USDT;
 
     const profit =
       payment?.output_asset === "USDT"
         ? usd * 0.05
         : ecg * 0.05;
 
-    const createdAt =
-      Number(payment?.created_at) ||
-      Date.now();
+    const createdAt = Number(payment?.created_at) || Date.now();
 
     return {
       id: `pending-${createdAt}`,
@@ -404,21 +250,12 @@ export default function Purchase() {
     };
   }
 
-  async function confirmPendingPayment(
-    initialPayment,
-    { resumed = false } = {}
-  ) {
-    if (
-      !initialPayment?.wallet_address ||
-      !initialPayment?.boc
-    ) {
+  async function confirmPendingPayment(initialPayment, { resumed = false } = {}) {
+    if (!initialPayment?.wallet_address || !initialPayment?.boc) {
       return null;
     }
 
     if (confirmationRunningRef.current) {
-      addDebug(
-        "ℹ️ Invoice registration is already running"
-      );
       return null;
     }
 
@@ -430,272 +267,125 @@ export default function Purchase() {
     };
 
     const confirmPayload = {
-      wallet_address:
-        payment.wallet_address,
-
-      output_asset:
-        payment.output_asset || "ECG",
-
-      output_amount:
-        String(
-          payment.output_amount ||
-          (
-            payment.output_asset === "USDT"
-              ? (
-                  Number(payment.ton_amount || 0) *
-                  Number(payment.ton_price || 0)
-                )
-              : (
-                  Number(payment.ton_amount || 0) *
-                  Number(payment.ton_price || 0) *
-                  ECG_PER_USDT
-                )
-          )
-        ),
-
-      network:
-        payment.network || "-239",
-
-      expected_gram_amount:
-        String(payment.gram_amount || ""),
-
-      // TON Connect already accepted/signed the payment.
-      // Backend uses this BOC only as a local receipt/idempotency key.
-      // There is no TON Center / blockchain confirmation loop.
-      boc:
-        payment.boc,
+      wallet_address: payment.wallet_address,
+      output_asset: payment.output_asset || "ECG",
+      output_amount: String(
+        payment.output_amount ||
+        (payment.output_asset === "USDT"
+          ? (Number(payment.ton_amount || 0) * Number(payment.ton_price || 0))
+          : (Number(payment.ton_amount || 0) * Number(payment.ton_price || 0) * ECG_PER_USDT)
+        )
+      ),
+      network: payment.network || "-239",
+      expected_gram_amount: String(payment.gram_amount || ""),
+      boc: payment.boc,
     };
 
     try {
-      addDebug(
-        resumed
-          ? "💾 RESTORING WALLET-ACCEPTED PAYMENT + SAVING INVOICE"
-          : "💾 WALLET ACCEPTED PAYMENT — SAVING REAL INVOICE NOW",
-        {
-          ...confirmPayload,
-          boc:
-            confirmPayload.boc
-              ? `<BOC ${confirmPayload.boc.length} chars>`
-              : "",
-        }
-      );
+      const response = await api.post("/purchase/create/", confirmPayload);
 
-      const response =
-        await api.post(
-          "/purchase/create/",
-          confirmPayload
-        );
+      const data = response?.data || {};
 
-      const data =
-        response?.data || {};
-
-      addDebug(
-        "✅ IMMEDIATE INVOICE RESPONSE",
-        data
-      );
-
-      if (
-        data?.status !== "confirmed" ||
-        !data?.invoice
-      ) {
-        throw new Error(
-          data?.error ||
-          "Backend did not create the invoice immediately"
-        );
+      if (data?.status !== "confirmed" || !data?.invoice) {
+        throw new Error(data?.error || "Backend did not create the invoice immediately");
       }
 
-      const txHash =
-        String(
-          data?.ton_tx_hash ||
-          data?.wallet_receipt_hash ||
-          ""
-        );
+      const txHash = String(data?.ton_tx_hash || data?.wallet_receipt_hash || "");
 
       const realInvoice = {
         ...data.invoice,
-        ton_tx_hash:
-          data.invoice?.ton_tx_hash ||
-          txHash,
+        ton_tx_hash: data.invoice?.ton_tx_hash || txHash,
         currency: "TON",
         __pending: false,
         __status: "PAID",
       };
 
-      clearPendingPayment(
-        payment.wallet_address
-      );
-
+      clearPendingPayment(payment.wallet_address);
       setPendingInvoice(null);
 
-      // Show the real backend invoice immediately, then sync the full list.
       setInvoices((prev) => {
-        const withoutSame =
-          prev.filter(
-            (item) =>
-              item?.id !== realInvoice?.id &&
-              item?.invoice_no !== realInvoice?.invoice_no
-          );
+        const withoutSame = prev.filter(
+          (item) =>
+            item?.id !== realInvoice?.id &&
+            item?.invoice_no !== realInvoice?.invoice_no
+        );
 
-        return [
-          realInvoice,
-          ...withoutSame,
-        ];
+        return [realInvoice, ...withoutSame];
       });
-
-      addDebug(
-        "✅ REAL INVOICE CREATED WITHOUT BLOCKCHAIN WAIT",
-        realInvoice
-      );
 
       showSuccess(
         `✅ Payment accepted by wallet. Invoice #${realInvoice.invoice_no || ""} created immediately.`
       );
 
-      // Silent authoritative sync. No confirmation polling.
       loadInvoices().catch((error) => {
-        addDebug(
-          "⚠️ Invoice list sync failed",
-          getErrorDetails(error)
-        );
+        console.warn("Invoice list sync failed:", error);
       });
 
       return data;
     } catch (error) {
-      addDebug(
-        "❌ IMMEDIATE INVOICE SAVE ERROR",
-        getErrorDetails(error)
-      );
-
-      // Keep the wallet-accepted payment locally so a refresh can retry
-      // the database save, but do not poll any blockchain/indexer.
+      console.error("Immediate invoice save error:", error);
       savePendingPayment(payment);
-
       throw error;
     } finally {
-      confirmationRunningRef.current =
-        false;
-
+      confirmationRunningRef.current = false;
       setConfirmingPayment(false);
     }
   }
 
-  // بعد از Refresh/باز کردن دوباره صفحه، پرداخت قبلی را ادامه بده.
   useEffect(() => {
     if (!walletAddress) {
       return;
     }
 
-    const saved =
-      readPendingPayment();
+    const saved = readPendingPayment();
 
-    if (
-      !saved ||
-      saved.wallet_address !==
-        walletAddress
-    ) {
+    if (!saved || saved.wallet_address !== walletAddress) {
       return;
     }
 
-    const localInvoice =
-      saved.pending_invoice ||
-      makePendingInvoice(saved);
+    const localInvoice = saved.pending_invoice || makePendingInvoice(saved);
 
-    setPendingInvoice(
-      localInvoice
-    );
-
-    setGramAddress(
-      String(
-        saved.gram_address ||
-        ""
-      )
-    );
-
-    setGramAmount(
-      String(
-        saved.gram_amount ||
-        ""
-      )
-    );
-
-    addDebug(
-      "🧾 Previous wallet-accepted payment restored; retrying database invoice save only."
-    );
+    setPendingInvoice(localInvoice);
+    setGramAddress(String(saved.gram_address || ""));
+    setGramAmount(String(saved.gram_amount || ""));
 
     confirmPendingPayment(
       {
         ...saved,
-        pending_invoice:
-          localInvoice,
+        pending_invoice: localInvoice,
       },
       {
         resumed: true,
       }
     ).catch((error) => {
-      addDebug(
-        "❌ Resume confirmation error",
-        getErrorDetails(error)
-      );
+      console.error("Resume confirmation error:", error);
     });
   }, [walletAddress]);
 
   async function payAndRegister() {
-    addDebug(
-      "===================================="
-    );
-
-    addDebug(
-      "🚀 PAYMENT STARTED"
-    );
-
-    addDebug(
-      "===================================="
-    );
-
     if (!walletAddress) {
-      alert(
-        "Wallet is not connected."
-      );
+      alert("Wallet is not connected.");
       return;
     }
 
-    // اگر پرداخت قبلی هنوز تایید نشده، پرداخت جدید را مسدود کن.
-    const previousPending =
-      readPendingPayment();
+    const previousPending = readPendingPayment();
 
     if (previousPending) {
-      const localInvoice =
-        previousPending.pending_invoice ||
-        makePendingInvoice(
-          previousPending
-        );
+      const localInvoice = previousPending.pending_invoice || makePendingInvoice(previousPending);
 
-      setPendingInvoice(
-        localInvoice
-      );
-
-      showSuccess(
-        "⏳ Previous payment is still confirming. Do not pay again."
-      );
-
-      addDebug(
-        "⚠️ New payment blocked because previous payment is still confirming."
-      );
+      setPendingInvoice(localInvoice);
+      showSuccess("⏳ Previous payment is still confirming. Do not pay again.");
 
       confirmPendingPayment(
         {
           ...previousPending,
-          pending_invoice:
-            localInvoice,
+          pending_invoice: localInvoice,
         },
         {
           resumed: true,
         }
       ).catch((error) => {
-        addDebug(
-          "❌ Resume error",
-          getErrorDetails(error)
-        );
+        console.error("Resume error:", error);
       });
 
       return;
@@ -706,293 +396,99 @@ export default function Purchase() {
     setLoading(true);
 
     try {
-      const amount =
-        Number(tonAmount);
+      const amount = Number(tonAmount);
 
-      if (
-        !Number.isFinite(amount) ||
-        amount <= 0
-      ) {
-        throw new Error(
-          "Invalid TON amount."
-        );
+      if (!Number.isFinite(amount) || amount <= 0) {
+        throw new Error("Invalid TON amount.");
       }
 
-      const walletNetwork =
-        String(
-          tonWallet?.account?.chain ||
-          "-239"
-        );
-
-      const nano =
-        BigInt(
-          Math.floor(
-            amount * 1e9
-          )
-        );
+      const walletNetwork = String(tonWallet?.account?.chain || "-239");
+      const nano = BigInt(Math.floor(amount * 1e9));
 
       const createTxPayload = {
-        amount:
-          nano.toString(),
-
-        wallet_address:
-          walletAddress,
-
-        network:
-          walletNetwork,
+        amount: nano.toString(),
+        wallet_address: walletAddress,
+        network: walletNetwork,
       };
 
-      addDebug(
-        "POST /purchase/create-transaction/",
-        createTxPayload
-      );
+      const txResponse = await api.post("/purchase/create-transaction/", createTxPayload);
 
-      const txResponse =
-        await api.post(
-          "/purchase/create-transaction/",
-          createTxPayload
-        );
+      const backendData = txResponse?.data || {};
+      const backendGramAddress = String(backendData?.gram_address || "");
+      const backendGramAmount = String(backendData?.gram_amount ?? "");
+      const transaction = backendData?.transaction;
 
-      const backendData =
-        txResponse?.data || {};
-
-      const backendGramAddress =
-        String(
-          backendData?.gram_address ||
-          ""
-        );
-
-      const backendGramAmount =
-        String(
-          backendData?.gram_amount ??
-          ""
-        );
-
-      const transaction =
-        backendData?.transaction;
-
-      addDebug(
-        "create-transaction FULL RESPONSE",
-        backendData
-      );
-
-      if (
-        !backendGramAddress
-      ) {
-        throw new Error(
-          "Backend did not return gram_address"
-        );
+      if (!backendGramAddress) {
+        throw new Error("Backend did not return gram_address");
       }
 
-      if (
-        !backendGramAmount
-      ) {
-        throw new Error(
-          "Backend did not return gram_amount"
-        );
+      if (!backendGramAmount) {
+        throw new Error("Backend did not return gram_amount");
       }
 
-      if (
-        !transaction ||
-        !Array.isArray(
-          transaction?.messages
-        ) ||
-        transaction.messages
-          .length === 0
-      ) {
-        throw new Error(
-          "Backend returned invalid transaction"
-        );
+      if (!transaction || !Array.isArray(transaction?.messages) || transaction.messages.length === 0) {
+        throw new Error("Backend returned invalid transaction");
       }
 
-      const firstMessage =
-        transaction.messages[0];
+      const firstMessage = transaction.messages[0];
 
-      if (
-        String(
-          firstMessage?.address ||
-          ""
-        ) !==
-        backendGramAddress
-      ) {
-        throw new Error(
-          "GRAM address mismatch in transaction"
-        );
+      if (String(firstMessage?.address || "") !== backendGramAddress) {
+        throw new Error("GRAM address mismatch in transaction");
       }
 
-      if (
-        String(
-          firstMessage?.amount ||
-          ""
-        ) !==
-        backendGramAmount
-      ) {
-        throw new Error(
-          "GRAM amount mismatch in transaction"
-        );
+      if (String(firstMessage?.amount || "") !== backendGramAmount) {
+        throw new Error("GRAM amount mismatch in transaction");
       }
 
-      setGramAddress(
-        backendGramAddress
-      );
+      setGramAddress(backendGramAddress);
+      setGramAmount(backendGramAmount);
 
-      setGramAmount(
-        backendGramAmount
-      );
+      const sendResult = await tonConnectUI.sendTransaction(transaction);
 
-      addDebug(
-        "✅ GRAM address verified",
-        backendGramAddress
-      );
-
-      addDebug(
-        "✅ GRAM amount verified",
-        backendGramAmount
-      );
-
-      addDebug(
-        "🚀 Calling tonConnectUI.sendTransaction",
-        transaction
-      );
-
-      const sendResult =
-        await tonConnectUI
-          .sendTransaction(
-            transaction
-          );
-
-      addDebug(
-        "✅ sendTransaction SUCCESS",
-        sendResult
-      );
-
-      const boc =
-        String(
-          sendResult?.boc ||
-          ""
-        );
+      const boc = String(sendResult?.boc || "");
 
       if (!boc) {
-        throw new Error(
-          "Wallet did not return transaction BOC"
-        );
+        throw new Error("Wallet did not return transaction BOC");
       }
 
-      // ===================================================
-      // بلافاصله بعد از موفقیت Wallet فاکتور CONFIRMING بساز
-      // ===================================================
       const paymentContext = {
-        wallet_address:
-          walletAddress,
-
-        network:
-          walletNetwork,
-
-        output_asset:
-          selectedOutput,
-
-        gram_address:
-          backendGramAddress,
-
-        gram_amount:
-          backendGramAmount,
-
-        ton_amount:
-          String(amount),
-
-        ton_price:
-          tonPrice,
-
-        output_amount:
-          selectedOutput === "USDT"
-            ? (
-                Number(amount) *
-                Number(tonPrice || 0)
-              ).toFixed(8)
-            : (
-                Number(amount) *
-                Number(tonPrice || 0) *
-                ECG_PER_USDT
-              ).toFixed(8),
-
+        wallet_address: walletAddress,
+        network: walletNetwork,
+        output_asset: selectedOutput,
+        gram_address: backendGramAddress,
+        gram_amount: backendGramAmount,
+        ton_amount: String(amount),
+        ton_price: tonPrice,
+        output_amount: selectedOutput === "USDT"
+          ? (Number(amount) * Number(tonPrice || 0)).toFixed(8)
+          : (Number(amount) * Number(tonPrice || 0) * ECG_PER_USDT).toFixed(8),
         boc,
-
         message_hash: "",
-
-        created_at:
-          Date.now(),
+        created_at: Date.now(),
       };
 
-      const localInvoice =
-        makePendingInvoice(
-          paymentContext
-        );
+      const localInvoice = makePendingInvoice(paymentContext);
 
       const pendingPayment = {
         ...paymentContext,
-        pending_invoice:
-          localInvoice,
+        pending_invoice: localInvoice,
       };
 
-      savePendingPayment(
-        pendingPayment
-      );
+      savePendingPayment(pendingPayment);
+      setPendingInvoice(localInvoice);
+      showSuccess("✅ Wallet accepted the payment. Creating the real invoice now...");
 
-      setPendingInvoice(
-        localInvoice
-      );
-
-      addDebug(
-        "🧾 INVOICE DISPLAYED IMMEDIATELY",
-        localInvoice
-      );
-
-      addDebug(
-        "💾 Payment saved to localStorage. Refresh will resume confirmation."
-      );
-
-      showSuccess(
-        "✅ Wallet accepted the payment. Creating the real invoice now..."
-      );
-
-      // Wallet already accepted the transaction. Register the real invoice
-      // in Django immediately. No TON Center / blockchain confirmation is requested.
-      addDebug(
-        "💾 Saving wallet-confirmed payment to backend immediately"
-      );
-
-      const savedPurchase =
-        await confirmPendingPayment(
-          pendingPayment
-        );
+      const savedPurchase = await confirmPendingPayment(pendingPayment);
 
       if (!savedPurchase) {
-        throw new Error(
-          "Wallet accepted payment but backend did not save the invoice"
-        );
+        throw new Error("Wallet accepted payment but backend did not save the invoice");
       }
-
-      addDebug(
-        "✅ WALLET-CONFIRMED PAYMENT SAVED IN DATABASE",
-        savedPurchase
-      );
     } catch (error) {
-      console.error(
-        "Payment error:",
-        error
-      );
-
-      addDebug(
-        "❌ PAYMENT ERROR",
-        getErrorDetails(error)
-      );
-
+      console.error("Payment error:", error);
       alert(
         `❌ Payment failed: ${
-          error?.response
-            ?.data?.error ||
-          error?.response
-            ?.data?.detail ||
+          error?.response?.data?.error ||
+          error?.response?.data?.detail ||
           error?.message ||
           "Unknown error"
         }`
@@ -1006,29 +502,19 @@ export default function Purchase() {
   // INVOICES
   // =========================
 
-  const allInvoices =
-    useMemo(() => {
-      const confirmed =
-        invoices.map(
-          (invoice) => ({
-            ...invoice,
-            currency: "TON",
-            __pending: false,
-          })
-        );
+  const allInvoices = useMemo(() => {
+    const confirmed = invoices.map((invoice) => ({
+      ...invoice,
+      currency: "TON",
+      __pending: false,
+    }));
 
-      if (!pendingInvoice) {
-        return confirmed;
-      }
+    if (!pendingInvoice) {
+      return confirmed;
+    }
 
-      return [
-        pendingInvoice,
-        ...confirmed,
-      ];
-    }, [
-      invoices,
-      pendingInvoice,
-    ]);
+    return [pendingInvoice, ...confirmed];
+  }, [invoices, pendingInvoice]);
 
   function formatInvoiceDate(value) {
     if (!value) return "-";
@@ -1057,7 +543,6 @@ export default function Purchase() {
       showSuccess("❌ Could not copy TX Hash");
     }
   }
-
 
   function InvestmentCountdown({ unlockAt, createdAt, fallbackDays = 365, completedLabel = "Mining Completed" }) {
     const getTargetTime = () => {
@@ -1112,9 +597,7 @@ export default function Purchase() {
         )
       ).getUTCDate();
 
-      result.setUTCDate(
-        Math.min(originalDay, lastDayOfTargetMonth)
-      );
+      result.setUTCDate(Math.min(originalDay, lastDayOfTargetMonth));
 
       return result;
     };
@@ -1163,8 +646,7 @@ export default function Purchase() {
       };
     };
 
-    const { months, days, hours, minutes, seconds } =
-      getCalendarParts();
+    const { months, days, hours, minutes, seconds } = getCalendarParts();
 
     const pad = (value) => String(value).padStart(2, "0");
 
@@ -1250,37 +732,19 @@ export default function Purchase() {
     );
   }
 
-  function Row({
-    label,
-    value,
-  }) {
+  function Row({ label, value }) {
     return (
       <div
         style={{
           display: "flex",
-          justifyContent:
-            "space-between",
+          justifyContent: "space-between",
           gap: 12,
           paddingBottom: 8,
-          borderBottom:
-            "1px dashed #222",
+          borderBottom: "1px dashed #222",
         }}
       >
-        <div
-          style={{
-            opacity: 0.75,
-          }}
-        >
-          {label}
-        </div>
-
-        <div
-          style={{
-            fontWeight: 700,
-          }}
-        >
-          {value ?? "-"}
-        </div>
+        <div style={{ opacity: 0.75 }}>{label}</div>
+        <div style={{ fontWeight: 700 }}>{value ?? "-"}</div>
       </div>
     );
   }
@@ -1291,55 +755,18 @@ export default function Purchase() {
 
   return (
     <div className="dark-wrapper">
-      <div style={{
-        margin: "12px auto",
-        maxWidth: 900,
-        background: "#050b18",
-        color: "#00ff9d",
-        border: "1px solid #243047",
-        borderRadius: 12,
-        padding: 12,
-        fontFamily: "monospace",
-        maxHeight: 300,
-        overflow: "auto"
-      }}>
-        <div style={{fontWeight:800, marginBottom:8}}>PURCHASE DEBUG LOG</div>
-        {debugLogs.length === 0 ? (
-          <div>No logs yet...</div>
-        ) : debugLogs.map((log) => (
-          <div key={log.id} style={{marginBottom:8, borderBottom:"1px solid #182238", paddingBottom:6}}>
-            <div>[{log.timestamp}] {log.title}</div>
-            {log.data !== null && (
-              <pre style={{whiteSpace:"pre-wrap", color:"#c7d2fe", margin: "4px 0 0"}}>
-                {typeof log.data === "string" ? log.data : JSON.stringify(log.data, null, 2)}
-              </pre>
-            )}
-          </div>
-        ))}
-      </div>
-
       {!walletAddress ? (
         <div className="center-box">
-          <h3>
-            Connect your wallet first
-          </h3>
-
-          <p>
-            Please connect your TON wallet
-            to continue.
-          </p>
+          <h3>Connect your wallet first</h3>
+          <p>Please connect your TON wallet to continue.</p>
         </div>
       ) : (
         <>
           <div className="page-container dark-card">
-            <h2 className="title">
-              Stake
-            </h2>
+            <h2 className="title">Stake</h2>
 
             {successMessage && (
-              <div className="success-box">
-                {successMessage}
-              </div>
+              <div className="success-box">{successMessage}</div>
             )}
 
             {(loading || confirmingPayment) && (
@@ -1357,19 +784,10 @@ export default function Purchase() {
             <div className="live-chart-box">
               <div className="live-chart-header">
                 <div>
-                  <span
-                    className="live-dot"
-                    aria-hidden="true"
-                  />
-
-                  <span className="live-chart-title">
-                    USDT / USD
-                  </span>
+                  <span className="live-dot" aria-hidden="true" />
+                  <span className="live-chart-title">USDT / USD</span>
                 </div>
-
-                <span className="live-chart-badge">
-                  LIVE
-                </span>
+                <span className="live-chart-badge">LIVE</span>
               </div>
 
               <iframe
@@ -1380,10 +798,7 @@ export default function Purchase() {
                 allowFullScreen
               />
 
-              <div className="chart-source">
-                Live market chart by
-                TradingView
-              </div>
+              <div className="chart-source">Live market chart by TradingView</div>
             </div>
 
             {/* =========================
@@ -1392,42 +807,28 @@ export default function Purchase() {
 
             {tonPrice && (
               <div className="price-box dark-subcard">
-                TON Price:{" "}
-                <b>
-                  ${tonPrice}
-                </b>{" "}
-                USD
+                TON Price: <b>${tonPrice}</b> USD
               </div>
             )}
 
             {priceError && (
-              <div className="error-text">
-                {priceError}
-              </div>
+              <div className="error-text">{priceError}</div>
             )}
 
             {/* =========================
                 INPUT
             ========================= */}
 
-            <p className="label-text">
-              You Pay (TON)
-            </p>
+            <p className="label-text">You Pay (TON)</p>
 
             <input
               className="input-box dark-input"
               type="number"
               value={tonAmount}
-              onChange={(e) =>
-                setTonAmount(
-                  e.target.value
-                )
-              }
+              onChange={(e) => setTonAmount(e.target.value)}
               min="0"
               step="0.1"
-              disabled={
-                loading
-              }
+              disabled={loading}
             />
 
             {/* =========================
@@ -1435,27 +836,13 @@ export default function Purchase() {
             ========================= */}
 
             <div className="output-selector">
-              <p className="output-label">
-                💰 Select Output
-                Currency:
-              </p>
+              <p className="output-label">💰 Select Output Currency:</p>
 
               <div className="output-buttons">
                 <button
-                  className={`output-btn ${
-                    selectedOutput ===
-                    "ECG"
-                      ? "active-ecg"
-                      : ""
-                  }`}
-                  onClick={() =>
-                    setSelectedOutput(
-                      "ECG"
-                    )
-                  }
-                  disabled={
-                    loading
-                  }
+                  className={`output-btn ${selectedOutput === "ECG" ? "active-ecg" : ""}`}
+                  onClick={() => setSelectedOutput("ECG")}
+                  disabled={loading}
                 >
                   <img
                     src={ecgLogo}
@@ -1467,20 +854,9 @@ export default function Purchase() {
                 </button>
 
                 <button
-                  className={`output-btn ${
-                    selectedOutput ===
-                    "USDT"
-                      ? "active-usdt"
-                      : ""
-                  }`}
-                  onClick={() =>
-                    setSelectedOutput(
-                      "USDT"
-                    )
-                  }
-                  disabled={
-                    loading
-                  }
+                  className={`output-btn ${selectedOutput === "USDT" ? "active-usdt" : ""}`}
+                  onClick={() => setSelectedOutput("USDT")}
+                  disabled={loading}
                 >
                   <img
                     src={usdtLogo}
@@ -1501,74 +877,35 @@ export default function Purchase() {
               {/* ECG */}
 
               <div
-                className={`output-box ecg-box ${
-                  selectedOutput ===
-                  "ECG"
-                    ? "box-active"
-                    : "box-inactive"
-                }`}
+                className={`output-box ecg-box ${selectedOutput === "ECG" ? "box-active" : "box-inactive"}`}
               >
                 <div className="box-header">
                   <span className="box-icon box-icon--ecg">
-                    <img
-                      src={ecgLogo}
-                      alt="ECG"
-                      className="box-token-logo"
-                    />
+                    <img src={ecgLogo} alt="ECG" className="box-token-logo" />
                   </span>
 
                   <div>
-                    <span className="box-title">
-                      ECG
-                    </span>
-
-                    <span className="box-subtitle">
-                      You Receive
-                    </span>
+                    <span className="box-title">ECG</span>
+                    <span className="box-subtitle">You Receive</span>
                   </div>
                 </div>
 
                 <div className="box-content">
                   <div className="box-row">
-                    <span className="box-label">
-                      Amount:
-                    </span>
-
+                    <span className="box-label">Amount:</span>
                     <span className="box-value">
-                      {(
-                        Number(
-                          tonAmount
-                        ) *
-                        Number(
-                          tonPrice
-                        ) *
-                        ECG_PER_USDT
-                      ).toFixed(
-                        2
-                      )}{" "}
-                      ECG
+                      {(Number(tonAmount) * Number(tonPrice) * ECG_PER_USDT).toFixed(2)} ECG
                     </span>
                   </div>
 
                   <div className="box-row">
-                    <span className="box-label">
-                      ≈ USD:
-                    </span>
-
-                    <span className="box-value">
-                      ${usdValue}
-                    </span>
+                    <span className="box-label">≈ USD:</span>
+                    <span className="box-value">${usdValue}</span>
                   </div>
 
                   <div className="box-row">
-                    <span className="box-label">
-                      5% Profit:
-                    </span>
-
-                    <span className="box-value">
-                      {ecgProfit}{" "}
-                      ECG
-                    </span>
+                    <span className="box-label">5% Profit:</span>
+                    <span className="box-value">{ecgProfit} ECG</span>
                   </div>
                 </div>
               </div>
@@ -1576,73 +913,35 @@ export default function Purchase() {
               {/* USDT */}
 
               <div
-                className={`output-box usdt-box ${
-                  selectedOutput ===
-                  "USDT"
-                    ? "box-active"
-                    : "box-inactive"
-                }`}
+                className={`output-box usdt-box ${selectedOutput === "USDT" ? "box-active" : "box-inactive"}`}
               >
                 <div className="box-header">
                   <span className="box-icon box-icon--usdt">
-                    <img
-                      src={usdtLogo}
-                      alt="USDT"
-                      className="box-token-logo"
-                    />
+                    <img src={usdtLogo} alt="USDT" className="box-token-logo" />
                   </span>
 
                   <div>
-                    <span className="box-title">
-                      USDT
-                    </span>
-
-                    <span className="box-subtitle">
-                      You Receive
-                    </span>
+                    <span className="box-title">USDT</span>
+                    <span className="box-subtitle">You Receive</span>
                   </div>
                 </div>
 
                 <div className="box-content">
                   <div className="box-row">
-                    <span className="box-label">
-                      Amount:
-                    </span>
-
+                    <span className="box-label">Amount:</span>
                     <span className="box-value">
-                      {(
-                        Number(
-                          tonAmount
-                        ) *
-                        Number(
-                          tonPrice
-                        )
-                      ).toFixed(
-                        2
-                      )}{" "}
-                      USDT
+                      {(Number(tonAmount) * Number(tonPrice)).toFixed(2)} USDT
                     </span>
                   </div>
 
                   <div className="box-row">
-                    <span className="box-label">
-                      ≈ USD:
-                    </span>
-
-                    <span className="box-value">
-                      ${usdValue}
-                    </span>
+                    <span className="box-label">≈ USD:</span>
+                    <span className="box-value">${usdValue}</span>
                   </div>
 
                   <div className="box-row">
-                    <span className="box-label">
-                      5% Profit:
-                    </span>
-
-                    <span className="box-value">
-                      {usdtProfit}{" "}
-                      USDT
-                    </span>
+                    <span className="box-label">5% Profit:</span>
+                    <span className="box-value">{usdtProfit} USDT</span>
                   </div>
                 </div>
               </div>
@@ -1653,14 +952,9 @@ export default function Purchase() {
             ========================= */}
 
             <button
-              onClick={
-                payAndRegister
-              }
+              onClick={payAndRegister}
               className="convert-btn"
-              disabled={
-                loading ||
-                confirmingPayment
-              }
+              disabled={loading || confirmingPayment}
             >
               {loading
                 ? "Processing..."
@@ -1676,209 +970,121 @@ export default function Purchase() {
 
           <div className="invoices-section">
             <div className="invoices-header">
-              <h3 className="invoices-title">
-                My Invoices
-              </h3>
-
+              <h3 className="invoices-title">My Invoices</h3>
               <div className="invoices-total">
-                Total:{" "}
-                <b>
-                  {
-                    allInvoices.length
-                  }
-                </b>
+                Total: <b>{allInvoices.length}</b>
               </div>
             </div>
 
             <div className="invoices-grid">
-              {allInvoices.map(
-                (item) => {
-                  const isPending =
-                    item.__pending === true;
+              {allInvoices.map((item) => {
+                const isPending = item.__pending === true;
+                const isTest = !isPending && item.ton_tx_hash?.startsWith("TEST_");
+                const currency = item.currency || "TON";
+                const amount = item.ton_amount || "-";
+                const txHash = item.ton_tx_hash || "-";
 
-                  const isTest =
-                    !isPending &&
-                    item.ton_tx_hash?.startsWith(
-                      "TEST_"
-                    );
-
-                  const currency =
-                    item.currency ||
-                    "TON";
-
-                  const amount =
-                    item.ton_amount ||
-                    "-";
-
-                  const txHash =
-                    item.ton_tx_hash ||
-                    "-";
-
-                  return (
-                    <div
-                      key={
-                        item.id
-                      }
-                      className="invoice-card currency-ton"
-                    >
-                      <div className="invoice-header">
-                        <div className="invoice-number">
-                          <span className="invoice-label">
-                            Invoice{" "}
-                            {
-                              currency
-                            }
-                          </span>
-
-                          <span className="invoice-id">
-                            #
-                            {
-                              item.invoice_no
-                            }
-                          </span>
-                        </div>
-
-                        <div
-                          className={`invoice-status ${
-                            isPending
-                              ? "status-test"
-                              : isTest
-                                ? "status-test"
-                                : "status-paid"
-                          }`}
-                        >
-                          <span className="dot" />
-
-                          {isPending
-                            ? "SAVING"
-                            : isTest
-                              ? "TEST"
-                              : "PAID"}
-                        </div>
-                      </div>
-
-                      <div className="invoice-body">
-                        <Row
-                          label="Invoice Date"
-                          value={formatInvoiceDate(
-                            item.created_at
-                          )}
-                        />
-
-                        <Row
-                          label="TON Amount"
-                          value={
-                            amount
-                          }
-                        />
-
-                        <Row
-                          label="ECG Value"
-                          value={
-                            item.ecg_value
-                          }
-                        />
-
-                        <Row
-                          label="USDT Value"
-                          value={(
-                            Number(
-                              item.ecg_value
-                            ) /
-                            ECG_PER_USDT
-                          ).toFixed(
-                            2
-                          )}
-                        />
-
-                        <Row
-                          label="5% Profit"
-                          value={`${
-                            item.self_profit_5 ?? "-"
-                          } ${
-                            item.profit_asset ||
-                            item.output_asset ||
-                            "ECG"
-                          }`}
-                        />
-
-                        <Row
-                          label="Investment Lock"
-                          value={
-                            <InvestmentCountdown
-                              unlockAt={item.principal_unlock_at}
-                              createdAt={item.created_at}
-                            />
-                          }
-                        />
-
-                        <Row
-                          label="Principal Unlock"
-                          value={formatInvoiceDate(
-                            item.principal_unlock_at
-                          )}
-                        />
-
-                        <Row
-                          label="Profit Unlock"
-                          value={
-                            <InvestmentCountdown
-                              unlockAt={item.self_profit_unlock_at}
-                              createdAt={item.created_at}
-                              fallbackDays={30}
-                              completedLabel="Profit Unlocked"
-                            />
-                          }
-                        />
+                return (
+                  <div key={item.id} className="invoice-card currency-ton">
+                    <div className="invoice-header">
+                      <div className="invoice-number">
+                        <span className="invoice-label">Invoice {currency}</span>
+                        <span className="invoice-id">#{item.invoice_no}</span>
                       </div>
 
                       <div
-                        className="invoice-tx"
-                        title={txHash}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          gap: 10,
-                          flexWrap: "wrap",
-                        }}
+                        className={`invoice-status ${
+                          isPending ? "status-test" : isTest ? "status-test" : "status-paid"
+                        }`}
                       >
-                        <span>
-                          TX:{" "}
-                          <b>
-                            {isPending
-                              ? item.__message_hash
-                                ? `${item.__message_hash.slice(
-                                    0,
-                                    12
-                                  )}... (message)`
-                                : "Waiting for TX hash..."
-                              : typeof txHash === "string"
-                                ? `${txHash.slice(0, 12)}...`
-                                : "-"}
-                          </b>
-                        </span>
-
-                        {!isPending && txHash !== "-" && (
-                          <button
-                            type="button"
-                            onClick={() => copyTxHash(txHash)}
-                            title="Copy full TX Hash"
-                            style={{
-                              cursor: "pointer",
-                              padding: "6px 10px",
-                              borderRadius: 8,
-                              fontSize: 12,
-                            }}
-                          >
-                            Copy TX Hash
-                          </button>
-                        )}
+                        <span className="dot" />
+                        {isPending ? "SAVING" : isTest ? "TEST" : "PAID"}
                       </div>
                     </div>
-                  );
-                }
-              )}
+
+                    <div className="invoice-body">
+                      <Row label="Invoice Date" value={formatInvoiceDate(item.created_at)} />
+                      <Row label="TON Amount" value={amount} />
+                      <Row label="ECG Value" value={item.ecg_value} />
+                      <Row
+                        label="USDT Value"
+                        value={(Number(item.ecg_value) / ECG_PER_USDT).toFixed(2)}
+                      />
+                      <Row
+                        label="5% Profit"
+                        value={`${item.self_profit_5 ?? "-"} ${
+                          item.profit_asset || item.output_asset || "ECG"
+                        }`}
+                      />
+                      <Row
+                        label="Investment Lock"
+                        value={
+                          <InvestmentCountdown
+                            unlockAt={item.principal_unlock_at}
+                            createdAt={item.created_at}
+                          />
+                        }
+                      />
+                      <Row
+                        label="Principal Unlock"
+                        value={formatInvoiceDate(item.principal_unlock_at)}
+                      />
+                      <Row
+                        label="Profit Unlock"
+                        value={
+                          <InvestmentCountdown
+                            unlockAt={item.self_profit_unlock_at}
+                            createdAt={item.created_at}
+                            fallbackDays={30}
+                            completedLabel="Profit Unlocked"
+                          />
+                        }
+                      />
+                    </div>
+
+                    <div
+                      className="invoice-tx"
+                      title={txHash}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 10,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <span>
+                        TX:{" "}
+                        <b>
+                          {isPending
+                            ? item.__message_hash
+                              ? `${item.__message_hash.slice(0, 12)}... (message)`
+                              : "Waiting for TX hash..."
+                            : typeof txHash === "string"
+                              ? `${txHash.slice(0, 12)}...`
+                              : "-"}
+                        </b>
+                      </span>
+
+                      {!isPending && txHash !== "-" && (
+                        <button
+                          type="button"
+                          onClick={() => copyTxHash(txHash)}
+                          title="Copy full TX Hash"
+                          style={{
+                            cursor: "pointer",
+                            padding: "6px 10px",
+                            borderRadius: 8,
+                            fontSize: 12,
+                          }}
+                        >
+                          Copy TX Hash
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </>
