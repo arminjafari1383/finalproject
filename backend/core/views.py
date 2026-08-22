@@ -689,7 +689,7 @@ def connect_wallet(request):
 @api_view(["GET"])
 def wallet_view(request, wallet_address):
     """
-    Return a live wallet snapshot with explicit profit buckets:
+    Return a live wallet snapshot with explicit profit buckets.
 
     - Own purchase profit: 5% (locked 30 days, then released)
     - Level 1 referral purchase profit: 5% (available immediately)
@@ -734,7 +734,7 @@ def wallet_view(request, wallet_address):
     zero = Decimal("0")
     now = timezone.now()
 
-    # Own 5% purchase profit
+    # Own 5% purchase profit (locked)
     own_locked_ecg = zero
     own_locked_usdt = zero
 
@@ -758,12 +758,11 @@ def wallet_view(request, wallet_address):
         else:
             own_locked_ecg += amount
 
+    # Own unlocked profit (from Ledger)
     own_unlocked_ecg = _ledger_total(user, "SELF_PROFIT_UNLOCK", "ECG")
     own_unlocked_usdt = _ledger_total(user, "SELF_PROFIT_UNLOCK", "USDT")
 
-    # --------------------------------------------------------
-    # Referral purchase profit
-    # --------------------------------------------------------
+    # Referral profit (from Ledger)
     level1_5_ecg = _ledger_total(user, "DIRECT_REFERRAL_BONUS", "ECG")
     level1_5_usdt = _ledger_total(user, "DIRECT_REFERRAL_BONUS", "USDT")
 
@@ -773,7 +772,10 @@ def wallet_view(request, wallet_address):
     referral_ecg_total = level1_5_ecg + levels2_5_1_ecg
     referral_usdt_total = level1_5_usdt + levels2_5_1_usdt
 
-    # AssetBalance.available is authoritative for what can currently be withdrawn.
+    # ============================================================
+    # موجودی قابل برداشت = موجودی AssetBalance
+    # این موجودی قبلاً در زمان درخواست برداشت کم شده
+    # ============================================================
     withdrawable_ecg_profit = Decimal(str(ecg_balance.available or 0))
     withdrawable_usdt_profit = Decimal(str(usdt_balance.available or 0))
 
@@ -788,9 +790,7 @@ def wallet_view(request, wallet_address):
         + referral_usdt_total
     )
 
-    # --------------------------------------------------------
     # EPL / timer / join-referral values
-    # --------------------------------------------------------
     daily_qs = user.ledgers.filter(typ="DAILY_UNLOCK")
     total_mined = (
         daily_qs.aggregate(total=Sum("amount"))["total"]
@@ -832,7 +832,7 @@ def wallet_view(request, wallet_address):
     principal_unlocked = zero
     stake_balance = zero
 
-    # Completed/pending withdrawal ledger total for legacy display.
+    # Total withdrawn (from Ledger)
     total_withdrawn = zero
     for ledger in user.ledgers.filter(typ="WITHDRAW"):
         meta = dict(ledger.meta or {})
@@ -841,52 +841,60 @@ def wallet_view(request, wallet_address):
             total_withdrawn += abs(Decimal(str(ledger.amount or 0)))
 
     payload = {
-        # ----------------------------------------------------
-        # Explicit current profit buckets
-        # ----------------------------------------------------
+        # ============================================================
+        # موجودی قابل برداشت (از AssetBalance - قبلاً کم شده)
+        # ============================================================
+        "withdrawable_ecg_profit": str(withdrawable_ecg_profit),
+        "withdrawable_usdt_profit": str(withdrawable_usdt_profit),
+        "ecg_balance": str(withdrawable_ecg_profit),
+        "available_balance": str(withdrawable_ecg_profit),
+        "withdrawable_total": str(withdrawable_ecg_profit),
+
+        # ============================================================
+        # سود خود خرید (قفل شده و آزاد شده)
+        # ============================================================
         "purchase_profit_ecg": str(own_locked_ecg + own_unlocked_ecg),
         "purchase_profit_ecg_locked": str(own_locked_ecg),
         "purchase_profit_ecg_unlocked": str(own_unlocked_ecg),
+        "ecg_self_locked": str(own_locked_ecg),
+        "ecg_self_unlocked": str(own_unlocked_ecg),
+        "self_profit_locked": str(own_locked_ecg),
+        "self_profit_unlocked": str(own_unlocked_ecg),
 
         "purchase_profit_usdt": str(own_locked_usdt + own_unlocked_usdt),
         "purchase_profit_usdt_locked": str(own_locked_usdt),
         "purchase_profit_usdt_unlocked": str(own_unlocked_usdt),
+        "usdt_self_locked": str(own_locked_usdt),
+        "usdt_self_unlocked": str(own_unlocked_usdt),
 
+        # ============================================================
+        # سود referral
+        # ============================================================
         "referral_level1_profit_ecg": str(level1_5_ecg),
         "referral_levels2_5_profit_ecg": str(levels2_5_1_ecg),
-        "referral_profit_ecg_unlocked": str(withdrawable_ecg_profit),
+        "referral_profit_ecg_unlocked": str(referral_ecg_total),
+        "ecg_referral_profit": str(referral_ecg_total),
 
         "referral_level1_profit_usdt": str(level1_5_usdt),
         "referral_levels2_5_profit_usdt": str(levels2_5_1_usdt),
-        "referral_profit_usdt_unlocked": str(withdrawable_usdt_profit),
+        "referral_profit_usdt_unlocked": str(referral_usdt_total),
+        "usdt_referral_profit": str(referral_usdt_total),
 
-        # ----------------------------------------------------
-        # Withdrawable balances (authoritative AssetBalance)
-        # ----------------------------------------------------
-        "withdrawable_total": str(withdrawable_ecg_profit),
-        "available_balance": str(withdrawable_ecg_profit),
-        "ecg_balance": str(withdrawable_ecg_profit),
-        "withdrawable_ecg_profit": str(withdrawable_ecg_profit),
-        "withdrawable_usdt_profit": str(withdrawable_usdt_profit),
-
+        # ============================================================
+        # کل سود
+        # ============================================================
         "total_ecg_profit": str(total_ecg_profit),
         "total_usdt_profit": str(total_usdt_profit),
 
-        # ----------------------------------------------------
-        # Current native / compatibility fields
-        # ----------------------------------------------------
-        "ecg_self_locked": str(own_locked_ecg),
-        "ecg_self_unlocked": str(own_unlocked_ecg),
-        "ecg_referral_profit": str(referral_ecg_total),
-
-        "usdt_self_locked": str(own_locked_usdt),
-        "usdt_self_unlocked": str(own_unlocked_usdt),
-        "usdt_referral_profit": str(referral_usdt_total),
-
+        # ============================================================
+        # EPL
+        # ============================================================
         "epl_balance": str(epl_balance_value),
         "epl_total_earned": str(wallet.epl_total_earned or zero),
 
-        # Timer / join referral EPL.
+        # ============================================================
+        # Timer / referral EPL
+        # ============================================================
         "hourly_reward_balance": str(daily_reward_unlocked),
         "hourly_reward_total": str(total_mined),
         "hourly_claims": mining_days,
@@ -895,12 +903,12 @@ def wallet_view(request, wallet_address):
         "referral_bonus_balance": str(referral_bonus_current),
         "referral_bonus_total": str(referral_bonus_total),
 
-        # Legacy aliases.
+        # ============================================================
+        # Legacy aliases
+        # ============================================================
         "stake_balance": str(stake_balance),
         "principal_locked": str(principal_locked),
         "principal_unlocked": str(principal_unlocked),
-        "self_profit_locked": str(own_locked_ecg),
-        "self_profit_unlocked": str(own_unlocked_ecg),
         "total_mined": str(total_mined),
         "mining_days": mining_days,
         "total_earned": str(total_earned),
@@ -1230,6 +1238,9 @@ def request_withdraw(request):
 
     release_matured_purchase_profits(user)
 
+    # ============================================================
+    # USDT WITHDRAWAL - balance deducted at request time
+    # ============================================================
     if source_asset == "USDT":
         source_amount = requested_amount.quantize(Decimal("0.000001"))
 
@@ -1258,6 +1269,7 @@ def request_withdraw(request):
                     status=400,
                 )
 
+            # Deduct balance immediately
             balance.available = available - source_amount
             balance.save(update_fields=["available"])
 
@@ -1280,9 +1292,14 @@ def request_withdraw(request):
                     "asset": "TON",
                     "status": "PENDING",
                     "destination": destination,
-                    "balance_deducted_at_request": True,  # موجودی در زمان درخواست کم شد
+                    "balance_deducted_at_request": True,
+                    "deducted_amount": str(source_amount),
                 },
             )
+
+    # ============================================================
+    # EPL WITHDRAWAL - balance deducted at request time
+    # ============================================================
     elif source_asset == "EPL":
         if is_ton:
             return Response(
@@ -1316,6 +1333,8 @@ def request_withdraw(request):
                     },
                     status=400
                 )
+            
+            # Deduct balance immediately
             epl_balance.available = (
                 available - requested_amount
             )
@@ -1344,10 +1363,14 @@ def request_withdraw(request):
                     "epl_debited": str(requested_amount),
                     "status": "PENDING",
                     "destination": destination,
-                    "balance_deducted_at_request": True,  # موجودی در زمان درخواست کم شد
+                    "balance_deducted_at_request": True,
+                    "deducted_amount": str(requested_amount),
                 }
             )
 
+    # ============================================================
+    # ECG WITHDRAWAL - balance deducted at request time (same as USDT)
+    # ============================================================
     else:  # source_asset == "ECG"
         if is_ton:
             ecg_amount = (
@@ -1372,8 +1395,7 @@ def request_withdraw(request):
                 or ""
             ).upper()
 
-            # Withdraw from the correct profit bucket
-            # Referral and Self profits are calculated from Ledger.
+            # Calculate available balance from the correct bucket
             if withdraw_bucket == "REFERRAL":
                 available = (
                     _ledger_total(user, "DIRECT_REFERRAL_BONUS", "ECG")
@@ -1400,9 +1422,8 @@ def request_withdraw(request):
                 )
 
             # ============================================================
-            # تغییر مهم: کم کردن موجودی در زمان درخواست (مانند USDT)
+            # Deduct balance immediately (same as USDT)
             # ============================================================
-            # موجودی قابل برداشت را از AssetBalance کم می‌کنیم
             ecg_balance.available = available - ecg_amount
             ecg_balance.save(update_fields=["available"])
 
@@ -1427,7 +1448,8 @@ def request_withdraw(request):
                     "requested_ton": str(ton_amount),
                     "withdraw_bucket": withdraw_bucket,
                     "destination": destination,
-                    "balance_deducted_at_request": True,  # موجودی در زمان درخواست کم شد
+                    "balance_deducted_at_request": True,
+                    "deducted_amount": str(ecg_amount),
                 },
             )
 
@@ -1523,6 +1545,7 @@ def serialize_withdraw(item):
         "tx_hash": item.tx_hash,
         "created_at": item.created_at,
         "completed_at": completed_at,
+        "balance_deducted_at_request": meta.get("balance_deducted_at_request", False),
     }
 
 
@@ -1548,11 +1571,8 @@ def withdraw_history(request):
 def _admin_totp_secret():
     """Use the same Google Authenticator secret for admin-only write actions."""
     candidates = [
-        # Main secret used by your Google Authenticator setup.
         getattr(settings, "ADMIN_2FA_SECRET", None),
         os.getenv("ADMIN_2FA_SECRET"),
-
-        # Backward-compatible names, if an older deployment still uses one.
         getattr(settings, "ADMIN_TOTP_SECRET", None),
         getattr(settings, "ADMIN_OTP_SECRET", None),
         getattr(settings, "GOOGLE_AUTH_SECRET", None),
@@ -1591,9 +1611,6 @@ def _verify_admin_totp(request) -> bool:
         return False
 
 
-# A Google Authenticator code is only used to CREATE an admin session.
-# Write actions use the signed session token, so the 30-second OTP expiring
-# will not break Pending -> Complete actions.
 ADMIN_SESSION_SALT = "core.admin-session.v1"
 
 
@@ -1602,7 +1619,6 @@ def _admin_session_max_age() -> int:
         value = int(os.getenv("ADMIN_SESSION_MAX_AGE", "43200"))
     except (TypeError, ValueError):
         value = 43200
-    # Minimum 5 minutes; default 12 hours.
     return max(300, value)
 
 
@@ -1651,8 +1667,6 @@ def _verify_admin_session(request) -> bool:
 def admin_create_session(request):
     """
     Exchange one fresh Google Authenticator code for a signed admin session.
-    The frontend stores this session for the current browser tab/session and
-    uses it for withdrawal completion.
     """
     if not _verify_admin_totp(request):
         return Response(
@@ -1675,7 +1689,11 @@ def admin_create_session(request):
 
 @api_view(["POST"])
 def admin_complete_withdraw(request, withdraw_id):
-    """Mark a pending withdrawal as paid using the current WithdrawRequest model."""
+    """
+    Mark a pending withdrawal as paid.
+    IMPORTANT: Balance was already deducted at request time (for ECG, USDT, EPL).
+    So here we ONLY update status and metadata, NO balance deduction.
+    """
     if not _verify_admin_session(request):
         return Response(
             {
@@ -1727,50 +1745,17 @@ def admin_complete_withdraw(request, withdraw_id):
         req.save(update_fields=update_fields)
 
         # ============================================================
-        # تغییر مهم: فقط برای برداشت‌هایی که موجودی در زمان درخواست کم نشده
+        # ONLY update ledger metadata
+        # NO balance deduction because it was already deducted at request time
         # ============================================================
         ledger = _withdraw_ledger(req)
-        meta = dict(ledger.meta or {}) if ledger else {}
-        
-        # بررسی اینکه آیا موجودی قبلاً در زمان درخواست کم شده است
-        balance_deducted_at_request = meta.get("balance_deducted_at_request", False)
-        
-        # فقط اگر موجودی قبلاً کم نشده باشد، آن را کم می‌کنیم
-        # (این برای موارد قدیمی یا مواردی است که هنوز این منطق را ندارند)
-        if not balance_deducted_at_request:
-            # کم کردن فقط مقدار برداشت شده از موجودی
-            source_asset = str(req.source_asset or "ECG").upper()
-
-            balance = (
-                AssetBalance.objects
-                .select_for_update()
-                .filter(
-                    user=req.user,
-                    asset=source_asset
-                )
-                .first()
-            )
-
-            if balance:
-                withdraw_amount = Decimal(str(req.amount or 0))
-                current_available = Decimal(str(balance.available or 0))
-
-                balance.available = max(
-                    Decimal("0"),
-                    current_available - withdraw_amount
-                )
-
-                balance.save(
-                    update_fields=["available"]
-                )
-
-        # به‌روزرسانی Ledger
         if ledger:
             meta = dict(ledger.meta or {})
             meta.update({
                 "status": "PAID",
                 "display_status": "COMPLETE",
                 "admin_completed_at": completed_at.isoformat(),
+                "balance_deducted_at_request": True,  # Confirm it was deducted
             })
             if tx_hash:
                 meta["tx_hash"] = tx_hash
@@ -2089,8 +2074,6 @@ def get_referral_levels(request):
             status=status.HTTP_404_NOT_FOUND
         )
 
-    # Lazy one-time reconciliation makes referrals already present in the tree
-    # immediately follow the new 1000/500 ECG join-bonus rules.
     reconcile_existing_referral_join_rewards(user)
 
     level_obj = ReferralLevel.objects.filter(user=user).first()
@@ -2180,8 +2163,6 @@ def get_referral_levels(request):
                     or telegram_id
                 )
 
-            # Referral purchase profit is stored per asset in ReferralLevel JSON.
-            # Older rows may only have the legacy ``profit`` field, which was ECG.
             legacy_profit = item.get("profit", 0) or 0
             profit_asset = str(item.get("profit_asset", "ECG") or "ECG").upper()
 
@@ -2199,9 +2180,7 @@ def get_referral_levels(request):
                 "telegram_photo_url": photo_url,
                 "wallet": wallet,
                 "investment": item.get("investment", 0),
-                # Keep legacy field for older frontends.
                 "profit": legacy_profit,
-                # IMPORTANT: expose both real asset fields to Referral Tree UI.
                 "profit_ecg": profit_ecg,
                 "profit_usdt": profit_usdt,
                 "profit_asset": profit_asset,
