@@ -1141,25 +1141,8 @@ export default function Wallet() {
   // WITHDRAW
   // ====================================================
 
-  const addDebugLog = (title, data = null) => {
-    setDebugLogs((prev) => [
-      ...prev,
-      {
-        time: new Date().toLocaleTimeString(),
-        title,
-        data,
-      },
-    ]);
-  };
 
   const onWithdraw = async () => {
-    addDebugLog("CLICK WITHDRAW", {
-      amount,
-      withdrawSource,
-      withdrawBucket,
-      withdrawAsset,
-      address,
-    });
 
     setWithdrawError("");
     setWithdrawNotice("");
@@ -1201,7 +1184,6 @@ export default function Wallet() {
     };
 
     try {
-      addDebugLog("PAYLOAD SENT", payload);
 
       setIsWithdrawing(true);
 
