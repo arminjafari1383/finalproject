@@ -264,6 +264,8 @@ export default function Wallet() {
     withdrawHistory,
     setWithdrawHistory,
   ] = useState([]);
+  const [debugLog, setDebugLog] = useState([]);
+
 
   const [
     withdrawHistoryLoading,
@@ -1141,7 +1143,27 @@ export default function Wallet() {
   // WITHDRAW
   // ====================================================
 
+
+  const addDebug = (msg, data = null) => {
+    setDebugLog((prev) => [
+      ...prev,
+      {
+        time: new Date().toLocaleTimeString(),
+        msg,
+        data,
+      },
+    ]);
+  };
+
   const onWithdraw = async () => {
+    addDebug("🔥 Withdraw clicked", {
+      amount,
+      withdrawSource,
+      withdrawBucket,
+      withdrawAsset,
+      address,
+    });
+
     setWithdrawError("");
     setWithdrawNotice("");
 
@@ -1182,12 +1204,16 @@ export default function Wallet() {
     };
 
     try {
+      addDebug("📦 Sending withdraw payload", payload);
+
       setIsWithdrawing(true);
 
       const withdrawResponse = await api.post(
         "/withdraw/request/",
         payload
       );
+
+      addDebug("✅ Withdraw API success", withdrawResponse.data);
 
       const walletResponse = await api.get(
         `/wallet/${address}/`
@@ -1209,6 +1235,12 @@ export default function Wallet() {
       setAmount("");
       setDestinationWallet("");
     } catch (error) {
+      addDebug("❌ Withdraw API failed", {
+        message: error?.message,
+        status: error?.response?.status,
+        response: error?.response?.data,
+      });
+
       console.error("[WITHDRAW] request error", error);
 
       const backendMessage =
@@ -1278,43 +1310,6 @@ export default function Wallet() {
       window.clearInterval(timer);
   }, [address, loadReferralLevels]);
 
-
-
-  // ====================================================
-  // WITHDRAW HISTORY DEDUCTION
-  // Remove already requested withdrawals from each bucket
-  // ====================================================
-
-  const getAlreadyWithdrawn = (asset, bucket) => {
-    if (!Array.isArray(withdrawHistory)) return 0;
-
-    return withdrawHistory
-      .filter((item) => {
-        const itemAsset = String(
-          item.source_asset || item.asset || ""
-        ).toUpperCase();
-
-        const itemBucket = String(
-          item.withdraw_bucket || ""
-        ).toUpperCase();
-
-        const status = String(
-          item.status || item.display_status || ""
-        ).toUpperCase();
-
-        return (
-          itemAsset === asset &&
-          itemBucket === bucket &&
-          status !== "FAILED" &&
-          status !== "REJECTED"
-        );
-      })
-      .reduce(
-        (sum, item) =>
-          sum + Number(item.amount || 0),
-        0
-      );
-  };
 
   // ====================================================
   // CALCULATIONS
@@ -1956,7 +1951,7 @@ marginTop: 14,
                         {ownEcgProfitTotal.toFixed(4)} ECG
                       </strong>
                       <div style={{ fontSize: 10, opacity: 0.58, marginTop: 6, lineHeight: 1.5 }}>
-                        Available: {Math.max(0, selfProfitUnlocked - getAlreadyWithdrawn("ECG", "SELF")).toFixed(4)} ECG
+                        Available: {selfProfitUnlocked.toFixed(4)} ECG
                         <br />
                         Locked 30d: {purchaseProfitLocked.toFixed(4)} ECG
                       </div>
@@ -2000,7 +1995,7 @@ marginTop: 14,
                         ECG • Referral Profit
                       </div>
                       <strong style={{ marginTop: 5, fontSize: 16 }}>
-                        {Math.max(0, referralBreakdownEcgTotal - getAlreadyWithdrawn("ECG", "REFERRAL")).toFixed(4)} ECG
+                        {referralBreakdownEcgTotal.toFixed(4)} ECG
                       </strong>
                       <div style={{ fontSize: 10, opacity: 0.68, marginTop: 6, lineHeight: 1.55 }}>
                         Level 1 • 5%: {referralLevel1FivePercentEcg.toFixed(4)} ECG
@@ -2052,7 +2047,7 @@ marginTop: 14,
                         {ownUsdtProfitTotal.toFixed(4)} USDT
                       </strong>
                       <div style={{ fontSize: 10, opacity: 0.58, marginTop: 6, lineHeight: 1.5 }}>
-                        Available: {Math.max(0, selfProfitUsdtUnlocked - getAlreadyWithdrawn("USDT", "SELF")).toFixed(4)} USDT
+                        Available: {selfProfitUsdtUnlocked.toFixed(4)} USDT
                         <br />
                         Locked 30d: {purchaseProfitUsdtLocked.toFixed(4)} USDT
                       </div>
@@ -2096,7 +2091,7 @@ marginTop: 14,
                         Tether • Referral Profit
                       </div>
                       <strong style={{ marginTop: 5, fontSize: 16 }}>
-                        {Math.max(0, referralBreakdownUsdtTotal - getAlreadyWithdrawn("USDT", "REFERRAL")).toFixed(4)} USDT
+                        {referralBreakdownUsdtTotal.toFixed(4)} USDT
                       </strong>
                       <div style={{ fontSize: 10, opacity: 0.68, marginTop: 6, lineHeight: 1.55 }}>
                         Level 1 • 5%: {referralLevel1FivePercentUsdt.toFixed(4)} USDT
@@ -2638,7 +2633,7 @@ marginTop: 14,
                   </div>
                   <div>
                     Own matured profit:{" "}
-                    <b>{Math.max(0, selfProfitUnlocked - getAlreadyWithdrawn("ECG", "SELF")).toFixed(4)} ECG</b>
+                    <b>{selfProfitUnlocked.toFixed(4)} ECG</b>
                   </div>
                 </div>
               ) : (
@@ -2717,4 +2712,37 @@ marginTop: 14,
 
     </div>
   );
+        <section
+          style={{
+            marginTop:20,
+            padding:15,
+            background:"#111",
+            borderRadius:12,
+            color:"#00ff99",
+            fontSize:12,
+            maxHeight:300,
+            overflow:"auto"
+          }}
+        >
+          <h3 style={{color:"white"}}>
+            Withdraw Debug
+          </h3>
+
+          {debugLog.map((log,index)=>(
+            <div key={index} style={{marginBottom:10}}>
+              <div>
+                [{log.time}] {log.msg}
+              </div>
+              {log.data && (
+                <pre style={{
+                  whiteSpace:"pre-wrap",
+                  color:"#aaa"
+                }}>
+                  {JSON.stringify(log.data,null,2)}
+                </pre>
+              )}
+            </div>
+          ))}
+        </section>
+
 }
