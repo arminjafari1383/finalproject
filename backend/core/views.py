@@ -1463,7 +1463,36 @@ def serialize_withdraw(item):
     is_usdt_source = source_asset == "USDT"
     is_ton = str(item.asset or "").upper() == "TON"
 
-    requested_ton = str(meta.get("requested_ton") or "0")
+    requested_ton = meta.get("requested_ton")
+
+    if not requested_ton and str(item.asset).upper() == "TON":
+        try:
+            source_asset = str(item.source_asset or "").upper()
+
+            if source_asset == "ECG":
+                ton_rate = fetch_ton_usd_rate()
+
+                usd_value = (
+                    Decimal(str(item.amount))
+                    / Decimal(str(ECG_PER_USD))
+                )
+
+                requested_ton = (
+                    usd_value / Decimal(str(ton_rate))
+                ).quantize(Decimal("0.000000001"))
+
+            elif source_asset == "USDT":
+                ton_rate = fetch_ton_usd_rate()
+
+                requested_ton = (
+                    Decimal(str(item.amount))
+                    / Decimal(str(ton_rate))
+                ).quantize(Decimal("0.000000001"))
+
+        except Exception:
+            requested_ton = "0"
+
+    requested_ton = str(requested_ton or "0")
     requested_amount = (
         requested_ton
         if is_ton
