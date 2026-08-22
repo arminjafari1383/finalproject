@@ -264,8 +264,6 @@ export default function Wallet() {
     withdrawHistory,
     setWithdrawHistory,
   ] = useState([]);
-  const [debugLog, setDebugLog] = useState([]);
-
 
   const [
     withdrawHistoryLoading,
@@ -318,6 +316,8 @@ export default function Wallet() {
     getTonPrice();
   }, []);
 
+
+  const [debugLogs, setDebugLogs] = useState([]);
 
   // ====================================================
   // REFERRAL
@@ -1143,20 +1143,19 @@ export default function Wallet() {
   // WITHDRAW
   // ====================================================
 
-
-  const addDebug = (msg, data = null) => {
-    setDebugLog((prev) => [
+  const addDebugLog = (title, data = null) => {
+    setDebugLogs((prev) => [
       ...prev,
       {
         time: new Date().toLocaleTimeString(),
-        msg,
+        title,
         data,
       },
     ]);
   };
 
   const onWithdraw = async () => {
-    addDebug("🔥 Withdraw clicked", {
+    addDebugLog("CLICK WITHDRAW", {
       amount,
       withdrawSource,
       withdrawBucket,
@@ -1204,7 +1203,7 @@ export default function Wallet() {
     };
 
     try {
-      addDebug("📦 Sending withdraw payload", payload);
+      addDebugLog("PAYLOAD SENT", payload);
 
       setIsWithdrawing(true);
 
@@ -1213,7 +1212,7 @@ export default function Wallet() {
         payload
       );
 
-      addDebug("✅ Withdraw API success", withdrawResponse.data);
+      addDebugLog("API SUCCESS", withdrawResponse.data);
 
       const walletResponse = await api.get(
         `/wallet/${address}/`
@@ -1235,7 +1234,7 @@ export default function Wallet() {
       setAmount("");
       setDestinationWallet("");
     } catch (error) {
-      addDebug("❌ Withdraw API failed", {
+      addDebugLog("API ERROR", {
         message: error?.message,
         status: error?.response?.status,
         response: error?.response?.data,
@@ -2710,39 +2709,38 @@ marginTop: 14,
 
       )}
 
-    </div>
-  );
+    
         <section
           style={{
             marginTop:20,
             padding:15,
-            background:"#111",
+            background:"#050505",
+            border:"1px solid #333",
             borderRadius:12,
-            color:"#00ff99",
-            fontSize:12,
-            maxHeight:300,
-            overflow:"auto"
+            color:"#00ff88",
+            maxHeight:350,
+            overflow:"auto",
+            fontSize:12
           }}
         >
-          <h3 style={{color:"white"}}>
-            Withdraw Debug
-          </h3>
-
-          {debugLog.map((log,index)=>(
-            <div key={index} style={{marginBottom:10}}>
-              <div>
-                [{log.time}] {log.msg}
+          <h3 style={{color:"white"}}>🛠 Withdraw Debug Console</h3>
+          {debugLogs.length === 0 ? (
+            <div>No logs yet...</div>
+          ) : (
+            debugLogs.map((log,index)=>(
+              <div key={index} style={{marginBottom:15}}>
+                <div>
+                  [{log.time}] {log.title}
+                </div>
+                {log.data && (
+                  <pre style={{whiteSpace:"pre-wrap",color:"#aaa"}}>
+                    {JSON.stringify(log.data,null,2)}
+                  </pre>
+                )}
               </div>
-              {log.data && (
-                <pre style={{
-                  whiteSpace:"pre-wrap",
-                  color:"#aaa"
-                }}>
-                  {JSON.stringify(log.data,null,2)}
-                </pre>
-              )}
-            </div>
-          ))}
+            ))
+          )}
         </section>
-
+</div>
+  );
 }
