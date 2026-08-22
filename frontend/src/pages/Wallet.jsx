@@ -1279,6 +1279,43 @@ export default function Wallet() {
   }, [address, loadReferralLevels]);
 
 
+
+  // ====================================================
+  // WITHDRAW HISTORY DEDUCTION
+  // Remove already requested withdrawals from each bucket
+  // ====================================================
+
+  const getAlreadyWithdrawn = (asset, bucket) => {
+    if (!Array.isArray(withdrawHistory)) return 0;
+
+    return withdrawHistory
+      .filter((item) => {
+        const itemAsset = String(
+          item.source_asset || item.asset || ""
+        ).toUpperCase();
+
+        const itemBucket = String(
+          item.withdraw_bucket || ""
+        ).toUpperCase();
+
+        const status = String(
+          item.status || item.display_status || ""
+        ).toUpperCase();
+
+        return (
+          itemAsset === asset &&
+          itemBucket === bucket &&
+          status !== "FAILED" &&
+          status !== "REJECTED"
+        );
+      })
+      .reduce(
+        (sum, item) =>
+          sum + Number(item.amount || 0),
+        0
+      );
+  };
+
   // ====================================================
   // CALCULATIONS
   // ====================================================
@@ -1919,7 +1956,7 @@ marginTop: 14,
                         {ownEcgProfitTotal.toFixed(4)} ECG
                       </strong>
                       <div style={{ fontSize: 10, opacity: 0.58, marginTop: 6, lineHeight: 1.5 }}>
-                        Available: {selfProfitUnlocked.toFixed(4)} ECG
+                        Available: {Math.max(0, selfProfitUnlocked - getAlreadyWithdrawn("ECG", "SELF")).toFixed(4)} ECG
                         <br />
                         Locked 30d: {purchaseProfitLocked.toFixed(4)} ECG
                       </div>
@@ -1963,7 +2000,7 @@ marginTop: 14,
                         ECG • Referral Profit
                       </div>
                       <strong style={{ marginTop: 5, fontSize: 16 }}>
-                        {referralBreakdownEcgTotal.toFixed(4)} ECG
+                        {Math.max(0, referralBreakdownEcgTotal - getAlreadyWithdrawn("ECG", "REFERRAL")).toFixed(4)} ECG
                       </strong>
                       <div style={{ fontSize: 10, opacity: 0.68, marginTop: 6, lineHeight: 1.55 }}>
                         Level 1 • 5%: {referralLevel1FivePercentEcg.toFixed(4)} ECG
@@ -2015,7 +2052,7 @@ marginTop: 14,
                         {ownUsdtProfitTotal.toFixed(4)} USDT
                       </strong>
                       <div style={{ fontSize: 10, opacity: 0.58, marginTop: 6, lineHeight: 1.5 }}>
-                        Available: {selfProfitUsdtUnlocked.toFixed(4)} USDT
+                        Available: {Math.max(0, selfProfitUsdtUnlocked - getAlreadyWithdrawn("USDT", "SELF")).toFixed(4)} USDT
                         <br />
                         Locked 30d: {purchaseProfitUsdtLocked.toFixed(4)} USDT
                       </div>
@@ -2059,7 +2096,7 @@ marginTop: 14,
                         Tether • Referral Profit
                       </div>
                       <strong style={{ marginTop: 5, fontSize: 16 }}>
-                        {referralBreakdownUsdtTotal.toFixed(4)} USDT
+                        {Math.max(0, referralBreakdownUsdtTotal - getAlreadyWithdrawn("USDT", "REFERRAL")).toFixed(4)} USDT
                       </strong>
                       <div style={{ fontSize: 10, opacity: 0.68, marginTop: 6, lineHeight: 1.55 }}>
                         Level 1 • 5%: {referralLevel1FivePercentUsdt.toFixed(4)} USDT
@@ -2601,7 +2638,7 @@ marginTop: 14,
                   </div>
                   <div>
                     Own matured profit:{" "}
-                    <b>{selfProfitUnlocked.toFixed(4)} ECG</b>
+                    <b>{Math.max(0, selfProfitUnlocked - getAlreadyWithdrawn("ECG", "SELF")).toFixed(4)} ECG</b>
                   </div>
                 </div>
               ) : (
