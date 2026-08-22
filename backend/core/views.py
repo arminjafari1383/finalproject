@@ -1425,6 +1425,7 @@ def request_withdraw(request):
                     "source_asset": "ECG",
                     "asset": asset,
                     "ecg_debited": str(ecg_amount),
+                    "requested_ton": str(ton_amount),
                     "withdraw_bucket": withdraw_bucket,
                     "destination": destination
                 },
