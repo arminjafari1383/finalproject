@@ -58,6 +58,43 @@ service_url = TON_SERVICE_URL
 
 
 # ============================================================
+# HELPER FUNCTIONS
+# ============================================================
+
+def _ledger_total(user, ledger_type, asset="ECG"):
+    """
+    محاسبه مجموع یک نوع خاص از Ledger برای یک کاربر و دارایی مشخص.
+    
+    Args:
+        user: شیء AppUser
+        ledger_type: نوع Ledger (مانند DIRECT_REFERRAL_BONUS, SELF_PROFIT_UNLOCK و ...)
+        asset: نام دارایی (ECG, USDT, EPL) - پیش‌فرض ECG
+    
+    Returns:
+        Decimal: مجموع مقادیر
+    """
+    zero = Decimal("0")
+    asset = str(asset).upper()
+    total = zero
+
+    for row in user.ledgers.filter(typ=ledger_type):
+        meta = dict(row.meta or {})
+        row_asset = str(meta.get("asset") or "ECG").upper()
+
+        if row_asset == asset:
+            total += Decimal(str(row.amount or 0))
+
+    return total
+
+
+def _ledger_total_for_asset(user, ledger_type, asset="ECG"):
+    """
+    نسخه جایگزین با نام واضح‌تر - دقیقاً همان کار را انجام می‌دهد.
+    """
+    return _ledger_total(user, ledger_type, asset)
+
+
+# ============================================================
 # TON / GRAM on-chain confirmation helpers
 # ============================================================
 
@@ -697,22 +734,7 @@ def wallet_view(request, wallet_address):
     zero = Decimal("0")
     now = timezone.now()
 
-    def _ledger_total(ledger_type, asset):
-        total = zero
-        asset = str(asset).upper()
-
-        for row in user.ledgers.filter(typ=ledger_type):
-            meta = dict(row.meta or {})
-            row_asset = str(meta.get("asset") or "ECG").upper()
-
-            if row_asset == asset:
-                total += Decimal(str(row.amount or 0))
-
-        return total
-
-    # --------------------------------------------------------
     # Own 5% purchase profit
-    # --------------------------------------------------------
     own_locked_ecg = zero
     own_locked_usdt = zero
 
@@ -723,7 +745,6 @@ def wallet_view(request, wallet_address):
 
         unlock_at = purchase.self_profit_unlock_at
         if unlock_at and unlock_at <= now:
-            # Matured rows are represented by SELF_PROFIT_UNLOCK ledger rows.
             continue
 
         asset = str(
@@ -737,17 +758,17 @@ def wallet_view(request, wallet_address):
         else:
             own_locked_ecg += amount
 
-    own_unlocked_ecg = _ledger_total("SELF_PROFIT_UNLOCK", "ECG")
-    own_unlocked_usdt = _ledger_total("SELF_PROFIT_UNLOCK", "USDT")
+    own_unlocked_ecg = _ledger_total(user, "SELF_PROFIT_UNLOCK", "ECG")
+    own_unlocked_usdt = _ledger_total(user, "SELF_PROFIT_UNLOCK", "USDT")
 
     # --------------------------------------------------------
     # Referral purchase profit
     # --------------------------------------------------------
-    level1_5_ecg = _ledger_total("DIRECT_REFERRAL_BONUS", "ECG")
-    level1_5_usdt = _ledger_total("DIRECT_REFERRAL_BONUS", "USDT")
+    level1_5_ecg = _ledger_total(user, "DIRECT_REFERRAL_BONUS", "ECG")
+    level1_5_usdt = _ledger_total(user, "DIRECT_REFERRAL_BONUS", "USDT")
 
-    levels2_5_1_ecg = _ledger_total("INDIRECT_REFERRAL_BONUS", "ECG")
-    levels2_5_1_usdt = _ledger_total("INDIRECT_REFERRAL_BONUS", "USDT")
+    levels2_5_1_ecg = _ledger_total(user, "INDIRECT_REFERRAL_BONUS", "ECG")
+    levels2_5_1_usdt = _ledger_total(user, "INDIRECT_REFERRAL_BONUS", "USDT")
 
     referral_ecg_total = level1_5_ecg + levels2_5_1_ecg
     referral_usdt_total = level1_5_usdt + levels2_5_1_usdt
@@ -1152,7 +1173,7 @@ def request_withdraw(request):
     requested_asset = str(request.data.get("asset", "") or "").strip().upper()
     source_asset = str(request.data.get("source_asset", "ECG") or "ECG").strip().upper()
 
-    if source_asset not in {"ECG", "USDT","EPL"}:
+    if source_asset not in {"ECG", "USDT", "EPL"}:
         return Response({"error": "Invalid source_asset."}, status=400)
 
     is_ton = requested_asset in {"GRAM", "TON"}
@@ -1163,7 +1184,7 @@ def request_withdraw(request):
     except Exception:
         return Response({"error": "Invalid amount."}, status=400)
 
-    if not wallet_address or asset not in {"TON", "ECG","EPL"}:
+    if not wallet_address or asset not in {"TON", "ECG", "EPL"}:
         return Response(
             {"error": "wallet_address and asset are required."},
             status=400,
@@ -1171,7 +1192,6 @@ def request_withdraw(request):
 
     if requested_amount <= 0:
         return Response({"error": "Amount must be greater than zero."}, status=400)
-    
 
     destination = str(
         request.data.get("destination_wallet", "") or ""
@@ -1209,17 +1229,13 @@ def request_withdraw(request):
     )
 
     release_matured_purchase_profits(user)
-    
 
     if source_asset == "USDT":
         source_amount = requested_amount.quantize(Decimal("0.000001"))
 
-        
-
         ton_amount = (
             source_amount / ton_rate
         ).quantize(Decimal("0.000000001"))
-
 
         with transaction.atomic():
             balance, _ = (
@@ -1276,7 +1292,7 @@ def request_withdraw(request):
                 status=400
             )
         with transaction.atomic():
-            epl_balance,_ = (
+            epl_balance, _ = (
                 AssetBalance.objects
                 .select_for_update()
                 .get_or_create
@@ -1311,7 +1327,7 @@ def request_withdraw(request):
             req = WithdrawRequest.objects.create(
                 user=user,
                 asset="EPL",
-                amount = requested_amount,
+                amount=requested_amount,
                 wallet_address=destination,
                 status="PENDING"
             )
@@ -1321,14 +1337,12 @@ def request_withdraw(request):
                 typ="WITHDRAW",
                 amount=-requested_amount,
                 meta={
-                    "withdraw_id":req.id,
-                    "source_asset":"EPL",
-                    "asset":"EPL",
-                    "epl_debited":
-                       str(requested_amount),
-                    "status":"PENDING",
-                    "destination":
-                      destination
+                    "withdraw_id": req.id,
+                    "source_asset": "EPL",
+                    "asset": "EPL",
+                    "epl_debited": str(requested_amount),
+                    "status": "PENDING",
+                    "destination": destination
                 }
             )
 
@@ -1340,12 +1354,11 @@ def request_withdraw(request):
             ton_amount = requested_amount
 
         else:
-
             ecg_amount = requested_amount
             ton_amount = Decimal("0")
 
         with transaction.atomic():
-            ecg_balance,_ = (
+            ecg_balance, _ = (
                 AssetBalance.objects
                 .select_for_update()
                 .get_or_create(
@@ -1362,22 +1375,13 @@ def request_withdraw(request):
             # Referral and Self profits are calculated from Ledger.
             if withdraw_bucket == "REFERRAL":
                 available = (
-                    _ledger_total(
-                        "DIRECT_REFERRAL_BONUS",
-                        "ECG"
-                    )
+                    _ledger_total(user, "DIRECT_REFERRAL_BONUS", "ECG")
                     +
-                    _ledger_total(
-                        "INDIRECT_REFERRAL_BONUS",
-                        "ECG"
-                    )
+                    _ledger_total(user, "INDIRECT_REFERRAL_BONUS", "ECG")
                 )
 
             elif withdraw_bucket == "SELF":
-                available = _ledger_total(
-                    "SELF_PROFIT_UNLOCK",
-                    "ECG"
-                )
+                available = _ledger_total(user, "SELF_PROFIT_UNLOCK", "ECG")
 
             else:
                 available = Decimal(
@@ -1589,8 +1593,6 @@ def _verify_admin_totp(request) -> bool:
     except Exception:
         logger.exception("Could not verify admin TOTP")
         return False
-
-
 
 
 # A Google Authenticator code is only used to CREATE an admin session.
@@ -1854,7 +1856,7 @@ def reward_status(request):
         )
 
     wallet, _ = Wallet.objects.get_or_create(user=user)
-    epl_balance,_ = AssetBalance.objects.get_or_create(
+    epl_balance, _ = AssetBalance.objects.get_or_create(
         user=user,
         asset="EPL"
     )
@@ -1942,9 +1944,9 @@ def tick(request):
                 user=locked_user
             )
 
-            epl_balance,_ = AssetBalance.objects.select_for_update().get_or_create(
+            epl_balance, _ = AssetBalance.objects.select_for_update().get_or_create(
                 user=locked_user,
-                asset = "EPL"
+                asset="EPL"
             )
             now = timezone.now()
             next_at = locked_user.next_daily_claim_at
@@ -2031,11 +2033,6 @@ def tick(request):
             {"error": str(exc)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
-
-
-# =======================
-# Test Endpoint
-# =======================
 
 
 # =======================
@@ -2390,28 +2387,49 @@ def create_purchase_bnb(request):
 
     user = get_or_create_user(wallet_address, None, False)
 
+    try:
+        p = register_purchase_bnb(user, bnb_amount, str(bnb_tx_hash))
+        logger.info(f"✅ BNB Purchase created: {p.invoice_no}")
+    except Exception as e:
+        logger.error(f"❌ Error: {e}")
+        return Response({"error": str(e)}, status=400)
 
+    return Response({
+        "id": p.id,
+        "invoice_no": p.invoice_no,
+        "bnb_amount": str(p.bnb_amount),
+        "usd_value": str(p.usd_value),
+        "ecg_value": str(p.ecg_value),
+        "self_profit_5": str(p.self_profit_5),
+        "principal_unlock_at": p.principal_unlock_at,
+        "self_profit_unlock_at": p.self_profit_unlock_at,
+    }, status=201)
+
+
+@api_view(["GET"])
 def list_purchases_bnb(request):
+    wallet_address = request.query_params.get("wallet")
 
-    purchases = PurchaseBNB.objects.all().order_by("-created_at")
+    if not wallet_address:
+        return Response({"error": "wallet param required"}, status=400)
 
-    data = []
+    user = AppUser.objects.filter(wallet_address=wallet_address).first()
+    if not user:
+        return Response([], status=status.HTTP_200_OK)
 
-    for item in purchases:
-        data.append({
-            "invoice_no": item.invoice_no,
-            "wallet": item.user.wallet_address,
-            "bnb_amount": str(item.bnb_amount),
-            "usd_value": str(item.usd_value),
-            "ecg_value": str(item.ecg_value),
-            "tx_hash": item.bnb_tx_hash,
-            "created_at": item.created_at,
-        })
+    qs = user.purchases_bnb.all().order_by("-created_at")
 
-    return JsonResponse({
-        "status": "ok",
-        "purchases": data
-    })
+    return Response([{
+        "id": p.id,
+        "invoice_no": p.invoice_no,
+        "bnb_amount": str(p.bnb_amount),
+        "usd_value": str(p.usd_value),
+        "ecg_value": str(p.ecg_value),
+        "self_profit_5": str(p.self_profit_5),
+        "principal_unlock_at": p.principal_unlock_at,
+        "self_profit_unlock_at": p.self_profit_unlock_at,
+        "bnb_tx_hash": p.bnb_tx_hash,
+    } for p in qs])
 
 
 @csrf_exempt
@@ -2459,38 +2477,24 @@ def create_ton_transaction(request):
                 status=400
             )
 
-
         user, _ = AppUser.objects.get_or_create(
             wallet_address=wallet_address
         )
 
-
         invoice = uuid.uuid4().hex[:12].upper()
-
 
         purchase = Purchase.objects.create(
             user=user,
-
             invoice_no=invoice,
-
-            # amount from frontend is nanoTON
             ton_amount=Decimal(amount) / Decimal("1000000000"),
-
             ton_tx_hash=invoice,
-
             ton_usd_rate=0,
-
             usd_value=0,
-
             ecg_value=0,
-
             self_profit_5=0,
-
             principal_unlock_at=timezone.now(),
-
             self_profit_unlock_at=timezone.now(),
         )
-
 
         logger.info(
             "✅ PURCHASE CREATED id=%s invoice=%s wallet=%s amount=%s network=%s",
@@ -2506,14 +2510,8 @@ def create_ton_transaction(request):
                 "status": "ok",
                 "invoice_no": purchase.invoice_no,
                 "purchase_id": purchase.id,
-
-                # مقصد پرداخت TON/GRAM
                 "gram_address": settings.GRAM_MERCHANT_ADDRESS,
-
-                # مقدار nanoTON که کاربر باید ارسال کند
                 "gram_amount": str(amount),
-
-                # برای ساخت SendTransaction در frontend
                 "transaction": {
                     "validUntil": int(time.time()) + 300,
                     "messages": [
@@ -2527,13 +2525,8 @@ def create_ton_transaction(request):
             status=201
         )
 
-
     except Exception as e:
-
-        logger.exception(
-            "❌ CREATE TON TRANSACTION ERROR"
-        )
-
+        logger.exception("❌ CREATE TON TRANSACTION ERROR")
         return JsonResponse(
             {
                 "status": "error",
