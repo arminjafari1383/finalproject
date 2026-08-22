@@ -1577,6 +1577,34 @@ export default function Wallet() {
                 </section>
 
 
+                {/* ================================================= */}
+                {/* TEST BUTTON - REMOVE AFTER TESTING */}
+                {/* ================================================= */}
+
+                <button
+                  className="wallet-disconnect-btn"
+                  onClick={() => {
+                    setWithdrawError("");
+                    setWithdrawNotice("");
+                    setAmount("0.5");
+                    setWithdrawSource("ECG");
+                    setWithdrawBucket("SELF");
+                    setWithdrawAsset("TON");
+                    setDestinationWallet("UQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+                    setIsWithdrawOpen(true);
+                  }}
+                  style={{
+                    borderColor: "rgba(255, 200, 50, 0.5)",
+                    color: "#ffd700",
+                    marginBottom: "10px",
+                    background: "rgba(255, 200, 50, 0.08)",
+                    borderWidth: "2px",
+                  }}
+                >
+                  🧪 Test Withdraw Modal (No Balance Required)
+                </button>
+
+
                 {/* REPLACE WALLET */}
 
                 <button
