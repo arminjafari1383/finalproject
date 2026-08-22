@@ -1269,7 +1269,7 @@ def request_withdraw(request):
                     status=400,
                 )
 
-            # Deduct balance immediately
+            # ✅ Deduct balance immediately
             balance.available = available - source_amount
             balance.save(update_fields=["available"])
 
@@ -1313,8 +1313,7 @@ def request_withdraw(request):
             epl_balance, _ = (
                 AssetBalance.objects
                 .select_for_update()
-                .get_or_create
-                (
+                .get_or_create(
                     user=user,
                     asset="EPL"
                  )
@@ -1334,16 +1333,10 @@ def request_withdraw(request):
                     status=400
                 )
             
-            # Deduct balance immediately
-            epl_balance.available = (
-                available - requested_amount
-            )
+            # ✅ Deduct balance immediately
+            epl_balance.available = available - requested_amount
+            epl_balance.save(update_fields=["available"])
 
-            epl_balance.save(
-                update_fields=[
-                    "available",
-                ]
-            )
             req = WithdrawRequest.objects.create(
                 user=user,
                 asset="EPL",
@@ -1369,7 +1362,7 @@ def request_withdraw(request):
             )
 
     # ============================================================
-    # ECG WITHDRAWAL - balance deducted at request time (same as USDT)
+    # ECG WITHDRAWAL - balance deducted at request time
     # ============================================================
     else:  # source_asset == "ECG"
         if is_ton:
@@ -1421,9 +1414,7 @@ def request_withdraw(request):
                     status=400,
                 )
 
-            # ============================================================
-            # Deduct balance immediately (same as USDT)
-            # ============================================================
+            # ✅ Deduct balance immediately
             ecg_balance.available = available - ecg_amount
             ecg_balance.save(update_fields=["available"])
 
@@ -1755,7 +1746,7 @@ def admin_complete_withdraw(request, withdraw_id):
                 "status": "PAID",
                 "display_status": "COMPLETE",
                 "admin_completed_at": completed_at.isoformat(),
-                "balance_deducted_at_request": True,  # Confirm it was deducted
+                "balance_deducted_at_request": True,
             })
             if tx_hash:
                 meta["tx_hash"] = tx_hash
