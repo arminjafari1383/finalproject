@@ -2212,7 +2212,13 @@ marginTop: 14,
                         ).toUpperCase();
 
                         const requestedValue = isTon
-                          ? `${Number(item.ton_amount || 0).toLocaleString(undefined, {
+                          ? `${Number(
+                                      item.ton_amount ??
+                                      item.ton_received ??
+                                      item.converted_amount ??
+                                      item.output_amount ??
+                                      0
+                                    ).toLocaleString(undefined, {
                               maximumFractionDigits: 9,
                             })} TON`
                           : `${Number(item.amount || 0).toLocaleString(undefined, {
