@@ -24,18 +24,10 @@ const ECG_CONTRACT_LINK =
 
 const loadUserDataFromStorage = () => {
   try {
-    const data =
-      localStorage.getItem(USER_DATA_KEY);
-
-    return data
-      ? JSON.parse(data)
-      : null;
+    const data = localStorage.getItem(USER_DATA_KEY);
+    return data ? JSON.parse(data) : null;
   } catch (e) {
-    console.error(
-      "Error parsing localStorage data:",
-      e
-    );
-
+    console.error("Error parsing localStorage data:", e);
     return null;
   }
 };
@@ -43,77 +35,38 @@ const loadUserDataFromStorage = () => {
 
 const saveUserDataToStorage = (newData) => {
   try {
-    const currentData =
-      loadUserDataFromStorage() || {};
-
-    const mergedData = {
-      ...currentData,
-      ...newData,
-    };
-
-    localStorage.setItem(
-      USER_DATA_KEY,
-      JSON.stringify(mergedData)
-    );
+    const currentData = loadUserDataFromStorage() || {};
+    const mergedData = { ...currentData, ...newData };
+    localStorage.setItem(USER_DATA_KEY, JSON.stringify(mergedData));
   } catch (e) {
-    console.error(
-      "Error saving to localStorage:",
-      e
-    );
+    console.error("Error saving to localStorage:", e);
   }
 };
 
 
 const removeStoredWalletOnly = () => {
   try {
-    const current =
-      loadUserDataFromStorage();
-
+    const current = loadUserDataFromStorage();
     if (!current) return;
 
-    const {
-      walletAddress,
-      ...telegramData
-    } = current;
-
-    localStorage.setItem(
-      USER_DATA_KEY,
-      JSON.stringify(telegramData)
-    );
+    const { walletAddress, ...telegramData } = current;
+    localStorage.setItem(USER_DATA_KEY, JSON.stringify(telegramData));
   } catch (error) {
-    console.error(
-      "Could not remove stored wallet:",
-      error
-    );
+    console.error("Could not remove stored wallet:", error);
   }
 };
 
 
-const shortenMiddle = (
-  value,
-  start = 6,
-  end = 6
-) => {
+const shortenMiddle = (value, start = 6, end = 6) => {
   if (!value) return "-";
-
-  if (
-    value.length <=
-    start + end + 3
-  ) {
+  if (value.length <= start + end + 3) {
     return value;
   }
-
-  return `${value.slice(
-    0,
-    start
-  )}...${value.slice(-end)}`;
+  return `${value.slice(0, start)}...${value.slice(-end)}`;
 };
 
 
-const CopyIcon = ({
-  size = 22,
-  className = "",
-}) => (
+const CopyIcon = ({ size = 22, className = "" }) => (
   <svg
     className={`copy-icon-svg ${className}`.trim()}
     width={size}
@@ -149,170 +102,63 @@ const CopyIcon = ({
 // ======================================================
 
 export default function Wallet() {
-  const tonWallet =
-    useTonWallet();
-
-  const [tonConnectUI] =
-    useTonConnectUI();
-
-  const address =
-    useMemo(
-      () =>
-        tonWallet
-          ?.account
-          ?.address,
-      [tonWallet]
-    );
-
-  // TON Connect account.address is raw (0:...).
-  // useTonAddress() returns the user-friendly wallet address (UQ... / 0Q...)
-  // that matches what users normally see inside their TON wallet.
-  const displayAddress =
-    useTonAddress();
-
-  const hasConnected =
-    useRef(false);
+  const tonWallet = useTonWallet();
+  const [tonConnectUI] = useTonConnectUI();
+  const address = useMemo(
+    () => tonWallet?.account?.address,
+    [tonWallet]
+  );
+  const displayAddress = useTonAddress();
+  const hasConnected = useRef(false);
 
 
   // ====================================================
   // STATES
   // ====================================================
 
-  const [
-    wallet,
-    setWallet,
-  ] = useState(null);
-
-  const [
-    walletLocked,
-    setWalletLocked,
-  ] = useState(false);
-
-  const [
-    connectError,
-    setConnectError,
-  ] = useState("");
-
-  const [
-    errorType,
-    setErrorType,
-  ] = useState("none");
-
-  const [
-    copiedText,
-    setCopiedText,
-  ] = useState("");
-
-  const [
-    isReplacingWallet,
-    setIsReplacingWallet,
-  ] = useState(false);
+  const [wallet, setWallet] = useState(null);
+  const [walletLocked, setWalletLocked] = useState(false);
+  const [connectError, setConnectError] = useState("");
+  const [errorType, setErrorType] = useState("none");
+  const [copiedText, setCopiedText] = useState("");
+  const [isReplacingWallet, setIsReplacingWallet] = useState(false);
 
 
   // ====================================================
   // WITHDRAW STATES
   // ====================================================
 
-  const [
-    isWithdrawOpen,
-    setIsWithdrawOpen,
-  ] = useState(false);
-
-  const [
-    amount,
-    setAmount,
-  ] = useState("");
-
-  const [
-    tonPrice,
-    setTonPrice,
-  ] = useState(null);
-
-  const [
-    withdrawAsset,
-    setWithdrawAsset,
-  ] = useState("ECG");
-
-  // ECG keeps the old ECG/TON choices. USDT has one path only: USDT -> TON.
-  const [
-    withdrawSource,
-    setWithdrawSource,
-  ] = useState("ECG");
-
-  // Which profit bucket opened the modal:
-  // SELF = user's own 5% after the 30-day lock
-  // REFERRAL = instant 5% / 1% upline profit
+  const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
+  const [amount, setAmount] = useState("");
+  const [tonPrice, setTonPrice] = useState(null);
+  const [withdrawAsset, setWithdrawAsset] = useState("ECG");
+  const [withdrawSource, setWithdrawSource] = useState("ECG");
   const [withdrawBucket, setWithdrawBucket] = useState("ECG_SELF");
+  const [destinationWallet, setDestinationWallet] = useState("");
+  const [withdrawError, setWithdrawError] = useState("");
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [withdrawHistory, setWithdrawHistory] = useState([]);
+  const [withdrawHistoryLoading, setWithdrawHistoryLoading] = useState(false);
+  const [withdrawNotice, setWithdrawNotice] = useState("");
+  const [referralLevels, setReferralLevels] = useState({});
+  const [referralLevelsLoading, setReferralLevelsLoading] = useState(false);
 
-  const [
-    destinationWallet,
-    setDestinationWallet,
-  ] = useState("");
-
-  const [
-    withdrawError,
-    setWithdrawError,
-  ] = useState("");
-
-  const [
-    isWithdrawing,
-    setIsWithdrawing,
-  ] = useState(false);
-
-
-  const [
-    withdrawHistory,
-    setWithdrawHistory,
-  ] = useState([]);
-
-  const [
-    withdrawHistoryLoading,
-    setWithdrawHistoryLoading,
-  ] = useState(false);
-
-  const [
-    withdrawNotice,
-    setWithdrawNotice,
-  ] = useState("");
-
-
-  const [
-    referralLevels,
-    setReferralLevels,
-  ] = useState({});
-
-  const [
-    referralLevelsLoading,
-    setReferralLevelsLoading,
-  ] = useState(false);
-// ====================================================
+  // ====================================================
   // TON PRICE
   // ====================================================
 
   useEffect(() => {
     async function getTonPrice() {
       try {
-        const res =
-          await fetch(
-            "https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd"
-          );
-
-        const data =
-          await res.json();
-
-        setTonPrice(
-          data?.[
-            "the-open-network"
-          ]?.usd || null
+        const res = await fetch(
+          "https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd"
         );
+        const data = await res.json();
+        setTonPrice(data?.["the-open-network"]?.usd || null);
       } catch (err) {
-        console.log(
-          "TON price error",
-          err
-        );
+        console.log("TON price error", err);
       }
     }
-
     getTonPrice();
   }, []);
 
@@ -322,44 +168,17 @@ export default function Wallet() {
   // ====================================================
 
   useEffect(() => {
-    const inviterCode =
-      captureInviterCode();
-
+    const inviterCode = captureInviterCode();
     if (inviterCode) {
-      localStorage.setItem(
-        "inviter_code",
-        inviterCode
-      );
+      localStorage.setItem("inviter_code", inviterCode);
     }
 
-    const tg =
-      window.Telegram?.WebApp;
-
-    if (
-      tg
-        ?.initDataUnsafe
-        ?.start_param
-    ) {
-      const startParamValue =
-        tg.initDataUnsafe
-          .start_param;
-
-      if (
-        startParamValue &&
-        startParamValue.startsWith(
-          "ref_"
-        )
-      ) {
-        const refCode =
-          startParamValue.replace(
-            "ref_",
-            ""
-          );
-
-        localStorage.setItem(
-          "inviter_code",
-          refCode
-        );
+    const tg = window.Telegram?.WebApp;
+    if (tg?.initDataUnsafe?.start_param) {
+      const startParamValue = tg.initDataUnsafe.start_param;
+      if (startParamValue && startParamValue.startsWith("ref_")) {
+        const refCode = startParamValue.replace("ref_", "");
+        localStorage.setItem("inviter_code", refCode);
       }
     }
   }, []);
@@ -371,14 +190,10 @@ export default function Wallet() {
 
   useEffect(() => {
     if (address) {
-      const currentData =
-        loadUserDataFromStorage() ||
-        {};
-
+      const currentData = loadUserDataFromStorage() || {};
       saveUserDataToStorage({
         ...currentData,
-        walletAddress:
-          address,
+        walletAddress: address,
       });
     }
   }, [address]);
@@ -388,437 +203,174 @@ export default function Wallet() {
   // CONNECT + LOAD WALLET
   // ====================================================
 
-  const connectAndLoadWallet =
-    useCallback(
-      async () => {
-        if (
-          hasConnected.current ||
-          !address
-        ) {
-          return;
+  const connectAndLoadWallet = useCallback(
+    async () => {
+      if (hasConnected.current || !address) {
+        return;
+      }
+
+      hasConnected.current = true;
+      setConnectError("");
+      setErrorType("none");
+
+      let inviter_code = localStorage.getItem("inviter_code");
+
+      if (!inviter_code) {
+        inviter_code = captureInviterCode();
+        if (inviter_code) {
+          localStorage.setItem("inviter_code", inviter_code);
         }
+      }
 
-        hasConnected.current =
-          true;
+      let telegramId = null;
+      let telegramUsername = null;
+      let isTelegram = false;
+      let telegramPhotoUrl = null;
 
-        setConnectError("");
-        setErrorType("none");
+      const savedData = loadUserDataFromStorage();
 
-        let inviter_code =
-          localStorage.getItem(
-            "inviter_code"
-          );
-
-        if (!inviter_code) {
-          inviter_code =
-            captureInviterCode();
-
-          if (inviter_code) {
-            localStorage.setItem(
-              "inviter_code",
-              inviter_code
-            );
-          }
-        }
-
-
-        let telegramId =
-          null;
-
-        let telegramUsername =
-          null;
-
-        let isTelegram =
-          false;
-
-        let telegramPhotoUrl =
-          null;
-
-
-        const savedData =
-          loadUserDataFromStorage();
-
-
-        if (
-          savedData
-            ?.telegramId &&
-          Number.isInteger(
-            Number(
-              savedData.telegramId
-            )
-          ) &&
-          Number(
-            savedData.telegramId
-          ) > 0
-        ) {
-          telegramId =
-            Number(
-              savedData.telegramId
-            );
-
-          telegramUsername =
-            savedData
-              .telegramUsername ||
-            null;
-
-          isTelegram =
-            savedData
-              .isTelegram ||
-            false;
-        } else {
-          const tg =
-            window.Telegram
-              ?.WebApp;
-
-          if (
-            tg
-              ?.initDataUnsafe
-              ?.user
-          ) {
-            const user =
-              tg.initDataUnsafe
-                .user;
-
-            telegramId =
-              Number(user.id);
-
-            telegramUsername =
-              user.username ||
-              null;
-
-            telegramPhotoUrl =
-              user.photo_url ||
-              null;
-
-            isTelegram =
-              true;
-
-            saveUserDataToStorage({
-              telegramId,
-
-              telegramUsername,
-
-              telegramPhotoUrl,
-
-              isTelegram:
-                true,
-            });
-          } else if (
-            address
-          ) {
-            let hash = 0;
-
-            for (
-              let i = 0;
-              i <
-              address.length;
-              i++
-            ) {
-              const char =
-                address.charCodeAt(
-                  i
-                );
-
-              hash =
-                (
-                  hash <<
-                  5
-                ) -
-                hash +
-                char;
-
-              hash =
-                hash &
-                hash;
-            }
-
-            telegramId =
-              Number(
-                Math.abs(
-                  hash
-                ) +
-                  1000000000000
-              );
-
-            telegramUsername =
-              `browser_${address.slice(
-                0,
-                8
-              )}`;
-
-            isTelegram =
-              false;
-
-            saveUserDataToStorage({
-              telegramId,
-
-              telegramUsername,
-
-              isTelegram:
-                false,
-
-              walletAddress:
-                address,
-            });
-          }
-        }
-
-
-        if (!telegramId) {
-          telegramId =
-            Number(
-              Math.floor(
-                Math.random() *
-                  1000000000
-              ) +
-                100000000
-            );
-        }
-
-        const payload = {
-          wallet_address:
-            address,
-
-          inviter_code:
-            inviter_code ||
-            null,
-
-          telegram_id:
+      if (savedData?.telegramId && Number.isInteger(Number(savedData.telegramId)) && Number(savedData.telegramId) > 0) {
+        telegramId = Number(savedData.telegramId);
+        telegramUsername = savedData.telegramUsername || null;
+        isTelegram = savedData.isTelegram || false;
+      } else {
+        const tg = window.Telegram?.WebApp;
+        if (tg?.initDataUnsafe?.user) {
+          const user = tg.initDataUnsafe.user;
+          telegramId = Number(user.id);
+          telegramUsername = user.username || null;
+          telegramPhotoUrl = user.photo_url || null;
+          isTelegram = true;
+          saveUserDataToStorage({
             telegramId,
-
-          telegram_username:
             telegramUsername,
-
-          telegram_photo_url:
             telegramPhotoUrl,
-
-          is_telegram:
-            isTelegram,
-        };
-
-        console.log(
-          "[CONNECT PAYLOAD]",
-          payload
-        );
-
-
-        try {
-          const response =
-            await api.post(
-              "/connect/",
-              payload
-            );
-
-
-          setWalletLocked(
-            Boolean(response.data?.user?.wallet_locked)
-          );
-
-
-          if (
-            response.data
-              ?.user
-          ) {
-            const user =
-              response.data
-                .user;
-
-            saveUserDataToStorage({
-              telegramId:
-                user.telegram_id ||
-                telegramId,
-
-              telegramUsername:
-                user.telegram_username ||
-                telegramUsername,
-
-              isTelegram:
-                user.is_telegram ||
-                isTelegram,
-
-              walletAddress:
-                address,
-            });
+            isTelegram: true,
+          });
+        } else if (address) {
+          let hash = 0;
+          for (let i = 0; i < address.length; i++) {
+            const char = address.charCodeAt(i);
+            hash = (hash << 5) - hash + char;
+            hash = hash & hash;
           }
+          telegramId = Number(Math.abs(hash) + 1000000000000);
+          telegramUsername = `browser_${address.slice(0, 8)}`;
+          isTelegram = false;
+          saveUserDataToStorage({
+            telegramId,
+            telegramUsername,
+            isTelegram: false,
+            walletAddress: address,
+          });
+        }
+      }
 
+      if (!telegramId) {
+        telegramId = Number(Math.floor(Math.random() * 1000000000) + 100000000);
+      }
 
-          setWallet((prev) => {
-  if (!prev) return prev;
+      const payload = {
+        wallet_address: address,
+        inviter_code: inviter_code || null,
+        telegram_id: telegramId,
+        telegram_username: telegramUsername,
+        telegram_photo_url: telegramPhotoUrl,
+        is_telegram: isTelegram,
+      };
 
-  const value = Number(amount);
+      console.log("[CONNECT PAYLOAD]", payload);
 
-  if (withdrawAsset === "ECG") {
-    return {
-      ...prev,
-      ecg_balance: Math.max(
-        0,
-        Number(prev.ecg_balance || 0) - value
-      ),
-    };
-  }
-// kkk
+      try {
+        const response = await api.post("/connect/", payload);
 
-  if (withdrawAsset === "USDT") {
-    return {
-      ...prev,
-      usdt_balance: Math.max(
-        0,
-        Number(prev.usdt_balance || 0) - value
-      ),
-    };
-  }
+        setWalletLocked(Boolean(response.data?.user?.wallet_locked));
 
-  return prev;
-});
+        if (response.data?.user) {
+          const user = response.data.user;
+          saveUserDataToStorage({
+            telegramId: user.telegram_id || telegramId,
+            telegramUsername: user.telegram_username || telegramUsername,
+            isTelegram: user.is_telegram || isTelegram,
+            walletAddress: address,
+          });
+        }
 
-          setErrorType(
-            "none"
-          );
-        } catch (e) {
-          const errorData =
-            e?.response
-              ?.data;
-
-          const statusCode =
-            e?.response
-              ?.status;
-
-          const isNetworkError =
-            e.message ===
-              "Network Error" ||
-            e.code ===
-              "ERR_NETWORK" ||
-            !e.response;
-
-
-          if (
-            isNetworkError
-          ) {
-            setErrorType(
-              "network_error"
-            );
-
-            setConnectError(
-              "Network Error! Please check your internet connection."
-            );
-          } else if (
-            errorData
-              ?.error
-              ?.includes(
-                "already linked"
-              ) ||
-            errorData
-              ?.error
-              ?.includes(
-                "locked"
-              ) ||
-            errorData
-              ?.detail
-              ?.includes(
-                "already linked"
-              )
-          ) {
-            setErrorType(
-              "locked"
-            );
-
-            setConnectError(
-              "This wallet is already linked to another Telegram account."
-            );
-          } else if (
-            statusCode ===
-            400
-          ) {
-            setErrorType(
-              "bad_request"
-            );
-
-            const msg =
-              errorData
-                ?.error ||
-              errorData
-                ?.detail ||
-              "Invalid wallet address format.";
-
-            setConnectError(
-              `Bad Request: ${msg}`
-            );
-          } else {
-            setErrorType(
-              "server_error"
-            );
-
-            const errorMessage =
-              errorData
-                ?.error ||
-              errorData
-                ?.detail ||
-              e?.message ||
-              "Server error.";
-
-            setConnectError(
-              `Server Error: ${errorMessage}`
-            );
+        setWallet((prev) => {
+          if (!prev) return prev;
+          const value = Number(amount);
+          if (withdrawAsset === "ECG") {
+            return {
+              ...prev,
+              ecg_balance: Math.max(0, Number(prev.ecg_balance || 0) - value),
+            };
           }
+          if (withdrawAsset === "USDT") {
+            return {
+              ...prev,
+              usdt_balance: Math.max(0, Number(prev.usdt_balance || 0) - value),
+            };
+          }
+          return prev;
+        });
 
+        setErrorType("none");
+      } catch (e) {
+        const errorData = e?.response?.data;
+        const statusCode = e?.response?.status;
+        const isNetworkError = e.message === "Network Error" || e.code === "ERR_NETWORK" || !e.response;
 
-          if (
-            statusCode !==
-              400 &&
-            !isNetworkError
-          ) {
-            try {
-              const r =
-                await api.get(
-                  `/wallet/${address}/`
-                );
+        if (isNetworkError) {
+          setErrorType("network_error");
+          setConnectError("Network Error! Please check your internet connection.");
+        } else if (errorData?.error?.includes("already linked") || errorData?.error?.includes("locked") || errorData?.detail?.includes("already linked")) {
+          setErrorType("locked");
+          setConnectError("This wallet is already linked to another Telegram account.");
+        } else if (statusCode === 400) {
+          setErrorType("bad_request");
+          const msg = errorData?.error || errorData?.detail || "Invalid wallet address format.";
+          setConnectError(`Bad Request: ${msg}`);
+        } else {
+          setErrorType("server_error");
+          const errorMessage = errorData?.error || errorData?.detail || e?.message || "Server error.";
+          setConnectError(`Server Error: ${errorMessage}`);
+        }
 
-              setWallet(
-                r.data
-              );
-            } catch {
-              // ignore fallback error
-            }
+        if (statusCode !== 400 && !isNetworkError) {
+          try {
+            const r = await api.get(`/wallet/${address}/`);
+            setWallet(r.data);
+          } catch {
+            // ignore fallback error
           }
         }
-      },
-      [address]
-    );
+      }
+    },
+    [address, amount, withdrawAsset]
+  );
 
 
   useEffect(() => {
     connectAndLoadWallet();
-  }, [
-    connectAndLoadWallet,
-  ]);
+  }, [connectAndLoadWallet]);
 
 
   // ====================================================
   // LIVE WALLET VALUES
   // ====================================================
 
-  const refreshWalletValues =
-    useCallback(async () => {
-      if (!address) {
-        return;
-      }
+  const refreshWalletValues = useCallback(async () => {
+    if (!address) {
+      return;
+    }
 
-      try {
-        const response =
-          await api.get(
-            `/wallet/${address}/`
-          );
-
-        setWallet(
-          response.data
-        );
-      } catch (error) {
-        console.error(
-          "[WALLET VALUES] refresh error",
-          error
-        );
-      }
-    }, [address]);
+    try {
+      const response = await api.get(`/wallet/${address}/`);
+      setWallet(response.data);
+    } catch (error) {
+      console.error("[WALLET VALUES] refresh error", error);
+    }
+  }, [address]);
 
 
   useEffect(() => {
@@ -826,21 +378,12 @@ export default function Wallet() {
       return undefined;
     }
 
-    // Refresh immediately when this page is mounted.
     refreshWalletValues();
 
-    // Keep values fresh while the user stays on Wallet.
-    const timer =
-      window.setInterval(
-        refreshWalletValues,
-        15000
-      );
+    const timer = window.setInterval(refreshWalletValues, 15000);
 
     const onVisible = () => {
-      if (
-        document.visibilityState ===
-        "visible"
-      ) {
+      if (document.visibilityState === "visible") {
         refreshWalletValues();
       }
     };
@@ -849,204 +392,106 @@ export default function Wallet() {
       refreshWalletValues();
     };
 
-    document.addEventListener(
-      "visibilitychange",
-      onVisible
-    );
-
-    window.addEventListener(
-      "focus",
-      onFocus
-    );
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onFocus);
 
     return () => {
       window.clearInterval(timer);
-
-      document.removeEventListener(
-        "visibilitychange",
-        onVisible
-      );
-
-      window.removeEventListener(
-        "focus",
-        onFocus
-      );
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onFocus);
     };
-  }, [
-    address,
-    refreshWalletValues,
-  ]);
+  }, [address, refreshWalletValues]);
 
 
   // ====================================================
   // DISCONNECT / REPLACE WALLET
   // ====================================================
 
-  const disconnectWallet =
-    async () => {
-      try {
-        await tonConnectUI.disconnect();
-      } catch (error) {
-        console.error(
-          "TonConnect disconnect error:",
-          error
-        );
-      }
+  const disconnectWallet = async () => {
+    try {
+      await tonConnectUI.disconnect();
+    } catch (error) {
+      console.error("TonConnect disconnect error:", error);
+    }
 
-      localStorage.removeItem(
-        "telegram_id"
-      );
+    localStorage.removeItem("telegram_id");
+    localStorage.removeItem("inviter_code");
+    localStorage.removeItem(INVITER_CODE_KEY);
+    clearInviterCode();
+    localStorage.removeItem(USER_DATA_KEY);
 
-      localStorage.removeItem(
-        "inviter_code"
-      );
+    setWallet(null);
+    setWalletLocked(false);
+    setConnectError("");
+    setErrorType("none");
+    setWithdrawError("");
+    setIsWithdrawOpen(false);
 
-      localStorage.removeItem(
-        INVITER_CODE_KEY
-      );
+    hasConnected.current = false;
 
-      clearInviterCode();
+    window.location.reload();
+  };
 
-      localStorage.removeItem(
-        USER_DATA_KEY
-      );
 
+  const replaceWallet = async () => {
+    if (isReplacingWallet || isWithdrawing || !address) {
+      return;
+    }
+
+    setIsReplacingWallet(true);
+    setConnectError("");
+    setErrorType("none");
+
+    try {
+      console.log("[WALLET_CHANGE] disconnecting current wallet", address);
+      await tonConnectUI.disconnect();
+      removeStoredWalletOnly();
       setWallet(null);
       setWalletLocked(false);
-      setConnectError("");
-      setErrorType("none");
       setWithdrawError("");
       setIsWithdrawOpen(false);
-
       hasConnected.current = false;
 
-      window.location.reload();
-    };
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await tonConnectUI.openModal();
+    } catch (error) {
+      console.error("[WALLET_REPLACE] error", error);
+      setConnectError(error?.message || "Could not replace wallet.");
+      setErrorType("server_error");
+    } finally {
+      setIsReplacingWallet(false);
+    }
+  };
 
-
-  const replaceWallet =
-    async () => {
-      if (
-        isReplacingWallet ||
-        isWithdrawing ||
-        !address
-      ) {
-        return;
-      }
-
-      setIsReplacingWallet(true);
-      setConnectError("");
-      setErrorType("none");
-
-      try {
-
-        console.log(
-          "[WALLET_CHANGE] disconnecting current wallet",
-          address
-        );
-
-        await tonConnectUI.disconnect();
-
-        // Preserve Telegram identity/referral information locally.
-        removeStoredWalletOnly();
-
-        setWallet(null);
-        setWalletLocked(false);
-        setWithdrawError("");
-        setIsWithdrawOpen(false);
-
-        hasConnected.current = false;
-
-        await new Promise(
-          (resolve) => setTimeout(resolve, 300)
-        );
-
-        await tonConnectUI.openModal();
-      } catch (error) {
-        console.error(
-          "[WALLET_REPLACE] error",
-          error
-        );
-
-        setConnectError(
-          error?.message ||
-          "Could not replace wallet."
-        );
-
-        setErrorType(
-          "server_error"
-        );
-      } finally {
-        setIsReplacingWallet(false);
-      }
-    };
-
-  const handleRetry =
-    () => {
-      setConnectError("");
-
-      setErrorType("none");
-
-      hasConnected.current =
-        false;
-
-      window.location.reload();
-    };
+  const handleRetry = () => {
+    setConnectError("");
+    setErrorType("none");
+    hasConnected.current = false;
+    window.location.reload();
+  };
 
 
   // ====================================================
   // COPY
   // ====================================================
 
-  const copyText =
-    async (
-      label,
-      value
-    ) => {
-      if (!value) return;
+  const copyText = async (label, value) => {
+    if (!value) return;
 
-      try {
-        await navigator
-          .clipboard
-          .writeText(
-            String(value)
-          );
-
-        setCopiedText(
-          `${label} copied`
-        );
-
-        window.setTimeout(
-          () =>
-            setCopiedText(
-              ""
-            ),
-          1800
-        );
-      } catch {
-        setCopiedText(
-          `Could not copy ${label.toLowerCase()}`
-        );
-
-        window.setTimeout(
-          () =>
-            setCopiedText(
-              ""
-            ),
-          1800
-        );
-      }
-    };
+    try {
+      await navigator.clipboard.writeText(String(value));
+      setCopiedText(`${label} copied`);
+      window.setTimeout(() => setCopiedText(""), 1800);
+    } catch {
+      setCopiedText(`Could not copy ${label.toLowerCase()}`);
+      window.setTimeout(() => setCopiedText(""), 1800);
+    }
+  };
 
 
-  const openContractLink =
-    () => {
-      window.open(
-        ECG_CONTRACT_LINK,
-        "_blank",
-        "noopener,noreferrer"
-      );
-    };
+  const openContractLink = () => {
+    window.open(ECG_CONTRACT_LINK, "_blank", "noopener,noreferrer");
+  };
 
 
   // ====================================================
@@ -1070,7 +515,6 @@ export default function Wallet() {
     setAmount("");
     setWithdrawSource("USDT");
     setWithdrawBucket(bucket);
-    // Tether has exactly one output option.
     setWithdrawAsset("TON");
     setDestinationWallet("");
     setIsWithdrawOpen(true);
@@ -1086,39 +530,24 @@ export default function Wallet() {
   // WITHDRAW HISTORY
   // ====================================================
 
-  const loadWithdrawHistory =
-    useCallback(async () => {
-      if (!address) {
-        setWithdrawHistory([]);
-        return;
-      }
+  const loadWithdrawHistory = useCallback(async () => {
+    if (!address) {
+      setWithdrawHistory([]);
+      return;
+    }
 
-      try {
-        setWithdrawHistoryLoading(true);
-
-        const response = await api.get(
-          "/withdraw/history/",
-          {
-            params: {
-              wallet_address: address,
-            },
-          }
-        );
-
-        setWithdrawHistory(
-          Array.isArray(response.data)
-            ? response.data
-            : []
-        );
-      } catch (error) {
-        console.error(
-          "[WITHDRAW HISTORY] load error",
-          error
-        );
-      } finally {
-        setWithdrawHistoryLoading(false);
-      }
-    }, [address]);
+    try {
+      setWithdrawHistoryLoading(true);
+      const response = await api.get("/withdraw/history/", {
+        params: { wallet_address: address },
+      });
+      setWithdrawHistory(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.error("[WITHDRAW HISTORY] load error", error);
+    } finally {
+      setWithdrawHistoryLoading(false);
+    }
+  }, [address]);
 
 
   useEffect(() => {
@@ -1126,14 +555,9 @@ export default function Wallet() {
 
     loadWithdrawHistory();
 
-    // Keep Pending -> Complete in sync while the user stays on this page.
-    const timer = window.setInterval(
-      loadWithdrawHistory,
-      10000
-    );
+    const timer = window.setInterval(loadWithdrawHistory, 10000);
 
-    return () =>
-      window.clearInterval(timer);
+    return () => window.clearInterval(timer);
   }, [address, loadWithdrawHistory]);
 
 
@@ -1141,9 +565,7 @@ export default function Wallet() {
   // WITHDRAW
   // ====================================================
 
-
   const onWithdraw = async () => {
-
     setWithdrawError("");
     setWithdrawNotice("");
 
@@ -1176,28 +598,17 @@ export default function Wallet() {
       destination_wallet: destinationWallet.trim(),
       source_asset: withdrawSource,
       asset: withdrawSource === "USDT" ? "TON" : withdrawAsset,
-      scope: withdrawSource === "USDT"
-        ? "USDT_PROFIT_ONLY"
-        : "ALL_WITHDRAWABLE",
+      scope: withdrawSource === "USDT" ? "USDT_PROFIT_ONLY" : "ALL_WITHDRAWABLE",
       withdraw_bucket: withdrawBucket,
       amount: n,
     };
 
     try {
-
       setIsWithdrawing(true);
 
-      const withdrawResponse = await api.post(
-        "/withdraw/request/",
-        payload
-      );
+      const withdrawResponse = await api.post("/withdraw/request/", payload);
 
-      addDebugLog("API SUCCESS", withdrawResponse.data);
-
-      const walletResponse = await api.get(
-        `/wallet/${address}/`
-      );
-
+      const walletResponse = await api.get(`/wallet/${address}/`);
       setWallet(walletResponse.data);
 
       const createdRequest = withdrawResponse?.data || {};
@@ -1214,12 +625,6 @@ export default function Wallet() {
       setAmount("");
       setDestinationWallet("");
     } catch (error) {
-      addDebugLog("API ERROR", {
-        message: error?.message,
-        status: error?.response?.status,
-        response: error?.response?.data,
-      });
-
       console.error("[WITHDRAW] request error", error);
 
       const backendMessage =
@@ -1240,37 +645,25 @@ export default function Wallet() {
   // UNI-LEVEL REFERRAL VALUES (ECG)
   // ====================================================
 
-  const loadReferralLevels =
-    useCallback(async () => {
-      if (!address) {
-        setReferralLevels({});
-        return;
-      }
+  const loadReferralLevels = useCallback(async () => {
+    if (!address) {
+      setReferralLevels({});
+      return;
+    }
 
-      setReferralLevelsLoading(true);
+    setReferralLevelsLoading(true);
 
-      try {
-        const response = await axios.get(
-          "/api/referral/levels/",
-          {
-            params: {
-              wallet_address: address,
-            },
-          }
-        );
-
-        setReferralLevels(
-          response?.data?.levels || {}
-        );
-      } catch (error) {
-        console.error(
-          "[Wallet] referral levels load error:",
-          error
-        );
-      } finally {
-        setReferralLevelsLoading(false);
-      }
-    }, [address]);
+    try {
+      const response = await axios.get("/api/referral/levels/", {
+        params: { wallet_address: address },
+      });
+      setReferralLevels(response?.data?.levels || {});
+    } catch (error) {
+      console.error("[Wallet] referral levels load error:", error);
+    } finally {
+      setReferralLevelsLoading(false);
+    }
+  }, [address]);
 
   useEffect(() => {
     if (!address) {
@@ -1280,13 +673,9 @@ export default function Wallet() {
 
     loadReferralLevels();
 
-    const timer = window.setInterval(
-      loadReferralLevels,
-      15000
-    );
+    const timer = window.setInterval(loadReferralLevels, 15000);
 
-    return () =>
-      window.clearInterval(timer);
+    return () => window.clearInterval(timer);
   }, [address, loadReferralLevels]);
 
 
@@ -1294,14 +683,9 @@ export default function Wallet() {
   // CALCULATIONS
   // ====================================================
 
-  // ECG profit has two sources:
-  // 1) user's own 5% purchase profit -> locked for 30 days
-  // 2) referral 5% / 1% profit -> instantly withdrawable
   const ecgAsset = wallet?.assets?.ECG || wallet?.balances?.ECG || {};
   const usdtAsset = wallet?.assets?.USDT || wallet?.balances?.USDT || {};
 
-  // Referral ECG balance must come from the real backend withdrawable referral balance.
-  // Supports both new and old backend field names.
   const referralProfitEcgUnlocked = Number(
     wallet?.referral_profit_ecg_unlocked ??
     wallet?.referral_available_ecg ??
@@ -1328,11 +712,9 @@ export default function Wallet() {
     () =>
       Number(
         wallet?.total_ecg_profit ??
-        (
-          Number(wallet?.self_profit_locked || 0) +
-          Number(wallet?.ecg_self_unlocked || 0) +
-          Number(wallet?.ecg_referral_profit || 0)
-        )
+        (Number(wallet?.self_profit_locked || 0) +
+        Number(wallet?.ecg_self_unlocked || 0) +
+        Number(wallet?.ecg_referral_profit || 0))
       ),
     [wallet]
   );
@@ -1367,11 +749,8 @@ export default function Wallet() {
     Math.max(withdrawableUsdt - selfProfitUsdtUnlocked, 0)
   );
 
-  const ownEcgProfitTotal =
-    purchaseProfitLocked + selfProfitUnlocked;
-
-  const ownUsdtProfitTotal =
-    purchaseProfitUsdtLocked + selfProfitUsdtUnlocked;
+  const ownEcgProfitTotal = purchaseProfitLocked + selfProfitUnlocked;
+  const ownUsdtProfitTotal = purchaseProfitUsdtLocked + selfProfitUsdtUnlocked;
 
   const selectedEcgAvailable =
     withdrawBucket === "SELF"
@@ -1389,24 +768,17 @@ export default function Wallet() {
 
   const withdrawableTon = useMemo(() => {
     const ecg = selectedEcgAvailable;
-
     if (!tonPrice || !ecg) {
       return "0.0000";
     }
-
-    return (
-      ecg / (tonPrice * ECG_PER_USDT)
-    ).toFixed(4);
+    return (ecg / (tonPrice * ECG_PER_USDT)).toFixed(4);
   }, [selectedEcgAvailable, tonPrice]);
 
   const withdrawableUsdtTon = useMemo(() => {
     if (!tonPrice || !selectedUsdtAvailable) {
       return "0.0000";
     }
-
-    return (
-      selectedUsdtAvailable / tonPrice
-    ).toFixed(4);
+    return (selectedUsdtAvailable / tonPrice).toFixed(4);
   }, [selectedUsdtAvailable, tonPrice]);
 
   const sumReferralProfit = (users = [], asset = "ECG") =>
@@ -1414,11 +786,7 @@ export default function Wallet() {
       if (asset === "USDT") {
         return sum + Number(user?.profit_usdt || 0);
       }
-
-      // Existing rows only had ``profit`` and that value was ECG.
-      return sum + Number(
-        user?.profit_ecg ?? user?.profit ?? 0
-      );
+      return sum + Number(user?.profit_ecg ?? user?.profit ?? 0);
     }, 0);
 
   const uniLevelFivePercentEcg = sumReferralProfit(
@@ -1432,90 +800,35 @@ export default function Wallet() {
 
   const uniLevelOnePercentEcg = [2, 3, 4, 5].reduce(
     (sum, level) =>
-      sum + sumReferralProfit(
-        referralLevels?.[`level_${level}`]?.users || [],
-        "ECG"
-      ),
+      sum + sumReferralProfit(referralLevels?.[`level_${level}`]?.users || [], "ECG"),
     0
   );
   const uniLevelOnePercentUsdt = [2, 3, 4, 5].reduce(
     (sum, level) =>
-      sum + sumReferralProfit(
-        referralLevels?.[`level_${level}`]?.users || [],
-        "USDT"
-      ),
+      sum + sumReferralProfit(referralLevels?.[`level_${level}`]?.users || [], "USDT"),
     0
   );
 
-  const uniLevelDirectUsers = Number(
-    referralLevels?.level_1?.count || 0
-  );
-
-  const uniLevelIndirectUsers = [2, 3, 4, 5].reduce(
-    (sum, level) =>
-      sum + Number(
-        referralLevels?.[`level_${level}`]?.count || 0
-      ),
-    0
-  );
-
-  const uniLevelTotalEcg =
-    uniLevelFivePercentEcg + uniLevelOnePercentEcg;
-  const uniLevelTotalUsdt =
-    uniLevelFivePercentUsdt + uniLevelOnePercentUsdt;
-
-
-  // Backend ledger-backed purchase-profit breakdown.
-  // Fallback to Referral Tree values for compatibility with older API versions.
   const referralLevel1FivePercentEcg = Number(
-    wallet?.referral_level1_profit_ecg ??
-    uniLevelFivePercentEcg ??
-    0
+    wallet?.referral_level1_profit_ecg ?? uniLevelFivePercentEcg ?? 0
   );
 
   const referralLevels2To5OnePercentEcg = Number(
-    wallet?.referral_levels2_5_profit_ecg ??
-    uniLevelOnePercentEcg ??
-    0
+    wallet?.referral_levels2_5_profit_ecg ?? uniLevelOnePercentEcg ?? 0
   );
 
   const referralLevel1FivePercentUsdt = Number(
-    wallet?.referral_level1_profit_usdt ??
-    uniLevelFivePercentUsdt ??
-    0
+    wallet?.referral_level1_profit_usdt ?? uniLevelFivePercentUsdt ?? 0
   );
 
   const referralLevels2To5OnePercentUsdt = Number(
-    wallet?.referral_levels2_5_profit_usdt ??
-    uniLevelOnePercentUsdt ??
-    0
+    wallet?.referral_levels2_5_profit_usdt ?? uniLevelOnePercentUsdt ?? 0
   );
 
-  const referralBreakdownEcgTotal =
-    referralLevel1FivePercentEcg +
-    referralLevels2To5OnePercentEcg;
-
-  const referralBreakdownUsdtTotal =
-    referralLevel1FivePercentUsdt +
-    referralLevels2To5OnePercentUsdt;
-
-
-  // Total completed withdrawals.
-  // Backend updates wallet.total_withdrawn only when admin marks
-  // a withdrawal Complete/Success, so Pending requests are not counted.
-  const totalWithdrawEcg =
-    useMemo(
-      () =>
-        Number(
-          wallet
-            ?.total_withdrawn ??
-          0
-        ),
-      [wallet]
-    );
-
-
-
+  const totalWithdrawEcg = useMemo(
+    () => Number(wallet?.total_withdrawn ?? 0),
+    [wallet]
+  );
 
   const canWithdrawEcgSelf = selfProfitUnlocked > 0;
   const canWithdrawEcgReferral = referralProfitEcgUnlocked > 0;
@@ -1626,11 +939,7 @@ export default function Wallet() {
                   </div>
 
                   <div className="wallet-address-main">
-                    {shortenMiddle(
-                      displayAddress || address,
-                      6,
-                      6
-                    )}
+                    {shortenMiddle(displayAddress || address, 6, 6)}
                   </div>
 
                 </div>
@@ -1639,12 +948,7 @@ export default function Wallet() {
                 <button
                   type="button"
                   className="icon-action-btn"
-                  onClick={() =>
-                    copyText(
-                      "Wallet address",
-                      displayAddress || address
-                    )
-                  }
+                  onClick={() => copyText("Wallet address", displayAddress || address)}
                   aria-label="Copy wallet address"
                   title="Copy wallet address"
                 >
@@ -1727,11 +1031,7 @@ export default function Wallet() {
                   </div>
 
                   <div className="contract-address">
-                    {shortenMiddle(
-                      ECG_CONTRACT_ADDRESS,
-                      6,
-                      8
-                    )}
+                    {shortenMiddle(ECG_CONTRACT_ADDRESS, 6, 8)}
                   </div>
 
                   <div className="contract-note">
@@ -1748,12 +1048,7 @@ export default function Wallet() {
                 <button
                   type="button"
                   className="small-outline-btn"
-                  onClick={() =>
-                    copyText(
-                      "Contract address",
-                      ECG_CONTRACT_ADDRESS
-                    )
-                  }
+                  onClick={() => copyText("Contract address", ECG_CONTRACT_ADDRESS)}
                 >
                   <CopyIcon size={18} />
                   <span>Copy</span>
@@ -1763,9 +1058,7 @@ export default function Wallet() {
                 <button
                   type="button"
                   className="small-outline-btn"
-                  onClick={
-                    openContractLink
-                  }
+                  onClick={openContractLink}
                 >
                   View
                 </button>
@@ -1794,18 +1087,14 @@ export default function Wallet() {
 
                 <div className="error-icon">
 
-                  {errorType ===
-                  "locked"
-                    ? "🔒"
-                    : "⚠️"}
+                  {errorType === "locked" ? "🔒" : "⚠️"}
 
                 </div>
 
 
                 <div className="error-title">
 
-                  {errorType ===
-                  "locked"
+                  {errorType === "locked"
                     ? "Wallet already linked"
                     : "Connection issue"}
 
@@ -1817,21 +1106,15 @@ export default function Wallet() {
                 </div>
 
 
-                {(errorType ===
-                  "locked" ||
-                  errorType ===
-                    "network_error") && (
+                {(errorType === "locked" || errorType === "network_error") && (
 
                   <div className="wallet-error-actions">
 
-                    {errorType ===
-                      "locked" && (
+                    {errorType === "locked" && (
 
                       <button
                         className="wallet-inline-btn danger"
-                        onClick={
-                          disconnectWallet
-                        }
+                        onClick={disconnectWallet}
                       >
                         Disconnect & Try Again
                       </button>
@@ -1839,14 +1122,11 @@ export default function Wallet() {
                     )}
 
 
-                    {errorType ===
-                      "network_error" && (
+                    {errorType === "network_error" && (
 
                       <button
                         className="wallet-inline-btn"
-                        onClick={
-                          handleRetry
-                        }
+                        onClick={handleRetry}
                       >
                         Retry Connection
                       </button>
@@ -1880,7 +1160,7 @@ export default function Wallet() {
                     maxHeight: "520px",
                     overflowY: "auto",
                     paddingRight: "6px",
-marginTop: 14,
+                    marginTop: 14,
                     padding: 16,
                     borderRadius: 18,
                     border: "1px solid rgba(255,255,255,0.10)",
@@ -1949,9 +1229,7 @@ marginTop: 14,
                           padding: "6px 11px",
                           borderRadius: 8,
                           border: "1px solid rgba(255,255,255,0.12)",
-                          background: canWithdrawEcgSelf
-                            ? "rgba(35,211,238,0.12)"
-                            : "rgba(255,255,255,0.04)",
+                          background: canWithdrawEcgSelf ? "rgba(35,211,238,0.12)" : "rgba(255,255,255,0.04)",
                           color: "inherit",
                           fontSize: 10,
                           fontWeight: 800,
@@ -1998,9 +1276,7 @@ marginTop: 14,
                           padding: "6px 11px",
                           borderRadius: 8,
                           border: "1px solid rgba(255,255,255,0.12)",
-                          background: canWithdrawEcgReferral
-                            ? "rgba(35,211,238,0.12)"
-                            : "rgba(255,255,255,0.04)",
+                          background: canWithdrawEcgReferral ? "rgba(35,211,238,0.12)" : "rgba(255,255,255,0.04)",
                           color: "inherit",
                           fontSize: 10,
                           fontWeight: 800,
@@ -2045,9 +1321,7 @@ marginTop: 14,
                           padding: "6px 11px",
                           borderRadius: 8,
                           border: "1px solid rgba(255,255,255,0.12)",
-                          background: canWithdrawUsdtSelf
-                            ? "rgba(35,211,238,0.12)"
-                            : "rgba(255,255,255,0.04)",
+                          background: canWithdrawUsdtSelf ? "rgba(35,211,238,0.12)" : "rgba(255,255,255,0.04)",
                           color: "inherit",
                           fontSize: 10,
                           fontWeight: 800,
@@ -2094,9 +1368,7 @@ marginTop: 14,
                           padding: "6px 11px",
                           borderRadius: 8,
                           border: "1px solid rgba(255,255,255,0.12)",
-                          background: canWithdrawUsdtReferral
-                            ? "rgba(35,211,238,0.12)"
-                            : "rgba(255,255,255,0.04)",
+                          background: canWithdrawUsdtReferral ? "rgba(35,211,238,0.12)" : "rgba(255,255,255,0.04)",
                           color: "inherit",
                           fontSize: 10,
                           fontWeight: 800,
@@ -2162,9 +1434,7 @@ marginTop: 14,
                   ) : (
                     <div className="withdraw-history-list">
                       {withdrawHistory.map((item) => {
-                        const rawStatus = String(
-                          item.display_status || item.status || ""
-                        ).toUpperCase();
+                        const rawStatus = String(item.display_status || item.status || "").toUpperCase();
 
                         const statusText =
                           ["SUCCESS", "COMPLETE", "COMPLETED"].includes(rawStatus)
@@ -2184,12 +1454,8 @@ marginTop: 14,
                             ? "failed"
                             : "default";
 
-                        const isTon =
-                          String(item.raw_asset || item.asset || "").toUpperCase() === "TON";
-
-                        const sourceAsset = String(
-                          item.source_asset || "ECG"
-                        ).toUpperCase();
+                        const isTon = String(item.raw_asset || item.asset || "").toUpperCase() === "TON";
+                        const sourceAsset = String(item.source_asset || "ECG").toUpperCase();
 
                         const requestedValue = isTon
                           ? `${Number(
@@ -2248,20 +1514,14 @@ marginTop: 14,
                               {isTon && (
                                 <div className="withdraw-history-detail-row">
                                   <span className="withdraw-history-label">
-                                    {sourceAsset === "USDT"
-                                      ? "USDT reserved"
-                                      : "ECG reserved"}
+                                    {sourceAsset === "USDT" ? "USDT reserved" : "ECG reserved"}
                                   </span>
                                   <span className="withdraw-history-value">
                                     {sourceAsset === "USDT"
-                                      ? `${Number(
-                                          item.usdt_debited || item.amount || 0
-                                        ).toLocaleString(undefined, {
+                                      ? `${Number(item.usdt_debited || item.amount || 0).toLocaleString(undefined, {
                                           maximumFractionDigits: 6,
                                         })} USDT`
-                                      : `${Number(
-                                          item.ecg_debited || item.amount || 0
-                                        ).toLocaleString(undefined, {
+                                      : `${Number(item.ecg_debited || item.amount || 0).toLocaleString(undefined, {
                                           maximumFractionDigits: 6,
                                         })} ECG`}
                                   </span>
@@ -2271,9 +1531,7 @@ marginTop: 14,
                               <div className="withdraw-history-detail-row">
                                 <span className="withdraw-history-label">Requested</span>
                                 <span className="withdraw-history-value">
-                                  {item.created_at
-                                    ? new Date(item.created_at).toLocaleString()
-                                    : "—"}
+                                  {item.created_at ? new Date(item.created_at).toLocaleString() : "—"}
                                 </span>
                               </div>
 
@@ -2282,9 +1540,7 @@ marginTop: 14,
                                   <div className="withdraw-history-detail-row">
                                     <span className="withdraw-history-label">Completed</span>
                                     <span className="withdraw-history-value">
-                                      {item.completed_at
-                                        ? new Date(item.completed_at).toLocaleString()
-                                        : "—"}
+                                      {item.completed_at ? new Date(item.completed_at).toLocaleString() : "—"}
                                     </span>
                                   </div>
 
@@ -2325,17 +1581,10 @@ marginTop: 14,
 
                 <button
                   className="wallet-disconnect-btn"
-                  onClick={
-                    replaceWallet
-                  }
-                  disabled={
-                    isReplacingWallet ||
-                    isWithdrawing
-                  }
+                  onClick={replaceWallet}
+                  disabled={isReplacingWallet || isWithdrawing}
                 >
-                  {isReplacingWallet
-                    ? "Opening Wallet Selector..."
-                    : "🔄 Replace Wallet"}
+                  {isReplacingWallet ? "Opening Wallet Selector..." : "🔄 Replace Wallet"}
                 </button>
 
 
@@ -2343,75 +1592,11 @@ marginTop: 14,
 
                 <button
                   className="wallet-disconnect-btn"
-                  onClick={
-                    disconnectWallet
-                  }
-                  disabled={
-                    isReplacingWallet ||
-                    isWithdrawing
-                  }
+                  onClick={disconnectWallet}
+                  disabled={isReplacingWallet || isWithdrawing}
                 >
                   Disconnect Wallet
                 </button>
-
-
-                {/* STATS */}
-
-                <div className="wallet-stats-grid">
-
-                  <div className="wallet-stat-card">
-
-                    <div className="stat-icon">
-                      ⛏️
-                    </div>
-
-                    <div className="stat-title">
-                      Mining
-                    </div>
-
-                    <div className="stat-accent online">
-                      ● Active
-                    </div>
-
-                  </div>
-
-
-                  <div className="wallet-stat-card">
-
-                    <div className="stat-icon">
-                      🪙
-                    </div>
-
-                    <div className="stat-title">
-                      Total withdraw
-                    </div>
-
-                    <div className="stat-value">
-
-                      {Number(
-                        totalWithdrawEcg
-                      ).toFixed(4)}
-
-                      {" ECG"}
-
-                    </div>
-                    <div className="balance-card">
-                  
-
-                    <div className="value">
-                      {Number(
-                        wallet?.usdt_balance ||
-                        wallet?.usdt_available ||
-                        0
-                      ).toFixed(4)} USDT
-                    </div>
-                  </div>
-
-                    
-
-                  </div>
-
-                </div>
 
               </>
 
@@ -2428,21 +1613,16 @@ marginTop: 14,
       {/* WITHDRAW MODAL */}
       {/* ================================================= */}
 
-      {isWithdrawOpen &&
-        wallet && (
+      {isWithdrawOpen && wallet && (
 
         <div
           className="modal-backdrop"
-          onClick={
-            closeWithdraw
-          }
+          onClick={closeWithdraw}
         >
 
           <div
             className="modal"
-            onClick={(e) =>
-              e.stopPropagation()
-            }
+            onClick={(e) => e.stopPropagation()}
           >
 
             {/* HEADER */}
@@ -2459,18 +1639,13 @@ marginTop: 14,
 
               <button
                 className="modal-close"
-                onClick={
-                  closeWithdraw
-                }
-                disabled={
-                  isWithdrawing
-                }
+                onClick={closeWithdraw}
+                disabled={isWithdrawing}
               >
                 ×
               </button>
 
             </div>
-
 
             {/* BODY */}
 
@@ -2651,35 +1826,20 @@ marginTop: 14,
 
             {/* FOOTER */}
 
-            <div
-              className="modal-footer"
-              style={{
-                paddingTop: 18,
-                paddingBottom: 18,
-              }}
-            >
+            <div className="modal-footer">
 
               <button
                 className="btn-secondary"
-                onClick={
-                  closeWithdraw
-                }
-                disabled={
-                  isWithdrawing
-                }
+                onClick={closeWithdraw}
+                disabled={isWithdrawing}
               >
                 Cancel
               </button>
 
-
               <button
                 className="btn-primary"
-                onClick={
-                  onWithdraw
-                }
-                disabled={
-                  isWithdrawing
-                }
+                onClick={onWithdraw}
+                disabled={isWithdrawing}
               >
 
                 {isWithdrawing
@@ -2690,7 +1850,7 @@ marginTop: 14,
                       ? "Request TON Withdrawal"
                       : "Request ECG Withdrawal"}
 
-              </button><br /><br /><br /><br />
+              </button>
 
             </div>
 
@@ -2700,8 +1860,6 @@ marginTop: 14,
 
       )}
 
-    
-
-</div>
+    </div>
   );
 }
