@@ -623,44 +623,58 @@ body {
   font-size: 0.98rem;
 }
 
+/* ==========================================================
+   WITHDRAW MODAL - KEYBOARD SAFE (iOS FIX)
+   ========================================================== */
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(1, 6, 20, 0.72);
-  backdrop-filter: blur(8px);
   display: flex;
-  align-items: center;
   justify-content: center;
-  padding: 1rem;
+  align-items: center;
+  background: rgba(1, 6, 20, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 20px;
   z-index: 500;
+  overflow: hidden;
+  height: 100dvh;
+  width: 100vw;
 }
 
 .modal {
   width: 100%;
   max-width: 460px;
+  max-height: calc(100dvh - 40px);
   border-radius: 24px;
   background: linear-gradient(180deg, rgba(12, 25, 62, 0.98), rgba(6, 16, 45, 0.98));
   border: 1px solid rgba(110, 158, 255, 0.18);
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.42);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
   color: #eef4ff;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  margin: auto;
+  position: relative;
 }
 
-.modal-header,
-.modal-footer {
-  padding: 1rem 1.1rem;
+.modal-header {
+  flex-shrink: 0;
+  padding: 16px 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-}
-
-.modal-header {
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(12, 25, 62, 0.95);
+  z-index: 1;
 }
 
 .modal-header h3 {
   margin: 0;
   font-size: 1.1rem;
+  color: #f5f9ff;
 }
 
 .modal-close {
@@ -669,55 +683,117 @@ body {
   color: #d8e4ff;
   font-size: 1.5rem;
   cursor: pointer;
+  padding: 0 8px;
+  line-height: 1;
+}
+
+.modal-close:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .modal-body {
-  padding: 1rem 1.1rem;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 20px;
+  padding-bottom: 12px;
+  -webkit-overflow-scrolling: touch;
 }
 
 .modal-body label {
   display: block;
-  margin-bottom: 0.45rem;
-  margin-top: 0.85rem;
+  margin-bottom: 6px;
+  margin-top: 14px;
   color: #bad1f7;
   font-size: 0.92rem;
+  font-weight: 600;
 }
 
-.modal-body input {
+.modal-body label:first-of-type {
+  margin-top: 0;
+}
+
+.modal-body input,
+.modal-body select {
   width: 100%;
-  border-radius: 16px;
+  height: 50px;
+  box-sizing: border-box;
+  font-size: 16px !important;
+  border-radius: 14px;
   border: 1px solid rgba(143, 179, 255, 0.18);
-  background: rgba(255, 255, 255, 0.04);
-  padding: 0.95rem 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0 16px;
   color: #eef4ff;
   outline: none;
+  transition: border-color 0.2s ease;
+  -webkit-appearance: none;
+  appearance: none;
 }
+
+.modal-body input:focus {
+  border-color: rgba(118, 190, 255, 0.65);
+  box-shadow: 0 0 0 3px rgba(118, 190, 255, 0.12);
+}
+
+.modal-body input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.modal-footer {
+  flex-shrink: 0;
+  width: 100%;
+  display: flex;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(6, 16, 45, 0.95);
+  position: relative;
+  z-index: 2;
+}
+
+/* ==========================================================
+   ASSET PICKER
+   ========================================================== */
 
 .asset-picker {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.7rem;
-}
-
-.asset-picker button,
-.max-btn,
-.btn-secondary,
-.btn-primary {
-  border-radius: 14px;
-  cursor: pointer;
+  gap: 8px;
 }
 
 .asset-picker button {
-  padding: 0.9rem 0.75rem;
+  padding: 10px 12px;
+  border-radius: 14px;
   border: 1px solid rgba(143, 179, 255, 0.18);
   background: rgba(255, 255, 255, 0.04);
   color: #dce8ff;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: all 0.18s ease;
+}
+
+.asset-picker button:hover:not(:disabled) {
+  border-color: rgba(143, 179, 255, 0.35);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .asset-picker button.selected {
   background: linear-gradient(180deg, rgba(44, 110, 255, 0.85), rgba(24, 78, 212, 0.85));
   color: #fff;
+  border-color: rgba(44, 110, 255, 0.5);
 }
+
+.asset-picker button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ==========================================================
+   AMOUNT WRAPPER
+   ========================================================== */
 
 .amount-wrapper {
   position: relative;
@@ -731,92 +807,48 @@ body {
   border: 1px solid rgba(143, 179, 255, 0.18);
   background: rgba(70, 124, 255, 0.16);
   color: #dce8ff;
-  padding: 0.45rem 0.8rem;
+  padding: 6px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.8rem;
+  transition: all 0.18s ease;
+  height: 34px;
+  display: flex;
+  align-items: center;
 }
 
-.max-balance-info,
+.max-btn:hover:not(:disabled) {
+  background: rgba(70, 124, 255, 0.3);
+  border-color: rgba(143, 179, 255, 0.35);
+}
+
+.max-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ==========================================================
+   INFO BOXES
+   ========================================================== */
+
 .ton-info,
+.max-balance-info,
 .error-text {
-  margin-top: 0.8rem;
+  margin-top: 10px;
   color: #bed0ef;
-  font-size: 0.9rem;
-  line-height: 1.6;
+  font-size: 0.85rem;
+  line-height: 1.7;
+}
+
+.ton-info b,
+.max-balance-info b {
+  color: #f5f9ff;
 }
 
 .error-text {
   color: #ff93ad;
 }
-
-.modal-footer {
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.btn-secondary,
-.btn-primary {
-  border: 0;
-  padding: 0.9rem 1rem;
-  font-weight: 700;
-}
-
-.btn-secondary {
-  background: rgba(255, 255, 255, 0.06);
-  color: #e9f2ff;
-}
-
-.btn-primary {
-  background: linear-gradient(90deg, #76beff 0%, #1f8cff 100%);
-  color: #fff;
-}
-
-@media (max-width: 640px) {
-  .wallet-page-container {
-    padding-left: 0.85rem;
-    padding-right: 0.85rem;
-  }
-
-  .wallet-box {
-    padding-left: 0;
-    padding-right: 0;
-  }
-
-  .contract-card {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .contract-actions {
-    width: 100%;
-    justify-content: flex-end;
-  }
-
-  .wallet-stats-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .goal-top-row,
-  .goal-bottom-row {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .goal-percent-badge {
-    min-width: 0;
-  }
-
-  .uni-level-referral-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .uni-level-referral-badge {
-    min-height: auto;
-  }
-
-  .uni-level-referral-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
 
 /* ==========================================================
    WITHDRAWAL HISTORY
@@ -1268,343 +1300,179 @@ body {
   line-height: 1.45;
 }
 
-
-/* FIX: Withdraw modal buttons hidden on mobile */
-.modal-backdrop {
-  overflow-y: auto;
-  align-items: flex-start;
-  padding-top: 24px;
-  padding-bottom: 24px;
-}
-
-.modal {
-  max-height: calc(100vh - 48px);
-  display: flex;
-  flex-direction: column;
-}
-
-.modal-body {
-  overflow-y: auto;
-  max-height: calc(100vh - 220px);
-}
-
-.modal-footer {
-  position: sticky;
-  bottom: 0;
-  background: linear-gradient(180deg, rgba(12,25,62,0.95), rgba(6,16,45,0.98));
-  z-index: 2;
-}
+/* ==========================================================
+   MOBILE RESPONSIVE - KEYBOARD SAFE
+   ========================================================== */
 
 @media (max-width: 640px) {
-  .modal-backdrop {
-    align-items: flex-start;
-    padding: 12px;
+  .wallet-page-container {
+    padding-left: 0.85rem;
+    padding-right: 0.85rem;
   }
 
-  .modal {
-    max-height: calc(100vh - 24px);
+  .wallet-box {
+    padding-left: 0;
+    padding-right: 0;
   }
 
-  .modal-body {
-    max-height: calc(100vh - 200px);
-    overflow-y: auto;
-  }
-
-  .modal-footer {
+  .contract-card {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .btn-secondary,
-  .btn-primary {
+  .contract-actions {
     width: 100%;
+    justify-content: flex-end;
   }
-}
 
-/* Fix withdraw modal bottom buttons hidden on mobile */
+  .wallet-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 
-.modal-backdrop {
-  align-items: flex-start;
-  overflow-y: auto;
-  padding: 20px 12px 120px;
-}
+  .goal-top-row,
+  .goal-bottom-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 
-.modal {
-  width: 100%;
-  max-width: 460px;
+  .goal-percent-badge {
+    min-width: 0;
+  }
 
-  display: block;
+  .uni-level-referral-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 
-  overflow: visible;
+  .uni-level-referral-badge {
+    min-height: auto;
+  }
 
-  max-height: none;
-}
+  .uni-level-referral-grid {
+    grid-template-columns: 1fr;
+  }
 
-.modal-body {
-
-  overflow: visible;
-
-  padding: 1rem 1.1rem 20px;
-
-}
-
-.modal-footer {
-  flex-shrink: 0;
-
-  position: static !important;
-
-  bottom: auto !important;
-
-  z-index: auto;
-
-  width: 100%;
-
-  display: flex;
-
-  gap: 12px;
-
-  padding: 14px;
-
-  background: transparent;
-
-  border-top: 1px solid rgba(255,255,255,0.06);
-}
-
-.modal-footer button {
-  flex: 1;
-  min-height: 50px;
-}
-
-
-@media(max-width:640px){
-
+  /* موبایل - مودال با کیبورد */
   .modal-backdrop {
-    padding-bottom: 140px;
+    padding: 10px;
+    align-items: flex-start;
+    padding-top: 20px;
+    height: 100dvh;
   }
 
   .modal {
-    max-height: calc(100dvh - 60px);
+    max-height: calc(100dvh - 30px);
+    margin: 0 auto;
+    align-self: flex-start;
+    width: 100%;
+    border-radius: 20px;
+  }
+
+  .modal-body {
+    padding: 14px 16px;
+    max-height: calc(100dvh - 200px);
+  }
+
+  .modal-body input,
+  .modal-body select {
+    height: 46px;
+    font-size: 16px !important;
   }
 
   .modal-footer {
     flex-direction: column;
+    gap: 8px;
+    padding: 12px 16px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
   }
 
   .modal-footer button {
-    width:100%;
+    width: 100%;
+    min-height: 46px;
+    font-size: 0.9rem;
+  }
+
+  .asset-picker {
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+
+  .asset-picker button {
+    padding: 8px 10px;
+    font-size: 0.85rem;
+  }
+
+  .max-btn {
+    height: 30px;
+    padding: 4px 12px;
+    font-size: 0.75rem;
+  }
+
+  .ton-info,
+  .max-balance-info,
+  .error-text {
+    font-size: 0.8rem;
   }
 }
 
-/* ==========================================================
-   FIX: Wallet withdraw modal wallet address overflow
-   ========================================================== */
+/* iOS safe area support */
+@supports (-webkit-touch-callout: none) {
+  .modal-footer {
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  }
 
-.modal {
-  width: 100%;
-  max-width: 460px;
-  max-height: calc(100dvh - 40px);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.modal-body {
-  overflow-x: hidden;
-  overflow-y: auto;
-  min-width: 0;
-}
-
-.modal-body input {
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  height: 52px;
-  box-sizing: border-box;
-
-  border-radius: 16px;
-  border: 1px solid rgba(143, 179, 255, 0.18);
-
-  background: rgba(255, 255, 255, 0.04);
-  padding: 0 1rem;
-
-  color: #eef4ff;
-  outline: none;
-
-  font-size: 0.9rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.modal-body input:focus {
-  border-color: rgba(118, 190, 255, 0.65);
-  box-shadow: 0 0 0 3px rgba(118, 190, 255, 0.12);
-}
-
-.wallet-address-input {
-  direction: ltr;
-  text-align: left;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-}
-
-.modal-footer {
-  flex-shrink: 0;
-  width: 100%;
-}
-
-@media (max-width:640px) {
   .modal {
-    width: 100%;
-    max-height: calc(100dvh - 24px);
+    max-height: calc(100dvh - 30px);
+  }
+
+  .modal-body {
+    max-height: calc(100dvh - 200px);
+  }
+}
+
+/* برای گوشی‌های خیلی کوچک */
+@media (max-height: 700px) {
+  .modal-body {
+    padding: 10px 14px;
+  }
+
+  .modal-body label {
+    margin-top: 8px;
+    font-size: 0.85rem;
   }
 
   .modal-body input {
-    font-size: 0.82rem;
-  }
-}
-/* ==========================================================
-   iOS / iPhone WITHDRAW MODAL FIX
-   ========================================================== */
-
-html,
-body {
-  width: 100%;
-  max-width: 100%;
-  overflow-x: hidden;
-  touch-action: manipulation;
-}
-
-
-/* جلوگیری از zoom شدن input در آیفون */
-.modal-body input,
-.modal-body textarea,
-.modal-body select {
-  font-size: 16px !important;
-  min-height: 48px;
-}
-
-
-/* اصلاح modal برای keyboard آیفون */
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  height: 100dvh;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-
-  padding: 8vh 1rem 2rem;
-}
-
-
-/* خود پنجره withdraw */
-.modal {
-  width: 100%;
-  max-width: 460px;
-
-  max-height: 90dvh;
-  overflow-y: auto;
-
-  -webkit-overflow-scrolling: touch;
-
-  margin: 0 auto;
-}
-
-
-/* input داخل withdraw */
-.modal-body input {
-  width: 100%;
-  box-sizing: border-box;
-
-  font-size: 16px !important;
-
-  padding: 0.95rem 1rem;
-
-  border-radius: 16px;
-
-  background: rgba(255,255,255,0.04);
-}
-
-
-/* وقتی keyboard باز می‌شود */
-@supports (-webkit-touch-callout: none) {
-
-  .modal-backdrop {
-    padding-bottom: env(safe-area-inset-bottom);
+    height: 40px;
+    font-size: 14px !important;
+    padding: 0 12px;
   }
 
-}
+  .modal-header {
+    padding: 12px 16px;
+  }
 
-/* ==========================================================
-   FINAL FIX - WITHDRAW MODAL iOS / IPHONE KEYBOARD
-   ========================================================== */
+  .modal-header h3 {
+    font-size: 1rem;
+  }
 
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  background: rgba(1, 6, 20, 0.72);
-  backdrop-filter: blur(8px);
-  padding: 40px 12px 40px;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  z-index: 500;
-  height: 100dvh;
-}
-
-.modal {
-  width: 100%;
-  max-width: 460px;
-  max-height: calc(100dvh - 80px);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.modal-body {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
-  padding: 1rem 1.1rem 30px;
-}
-
-.modal-body input {
-  width: 100%;
-  height: 52px;
-  box-sizing: border-box;
-  font-size: 16px !important;
-}
-
-.modal-footer {
-  flex-shrink: 0;
-  position: relative !important;
-  bottom: auto !important;
-  z-index: 2;
-  width: 100%;
-  display: flex;
-  gap: 12px;
-  padding: 14px;
-  background: #081631;
-}
-
-.modal-footer button {
-  flex: 1;
-  min-height: 50px;
-}
-
-@media(max-width:640px){
   .modal-footer {
-    flex-direction: column;
+    padding: 10px 14px;
   }
-}
 
-@supports (-webkit-touch-callout:none){
-  .modal-footer {
-    padding-bottom: calc(14px + env(safe-area-inset-bottom));
+  .modal-footer button {
+    min-height: 40px;
+    font-size: 0.85rem;
+  }
+
+  .max-btn {
+    height: 26px;
+    font-size: 0.7rem;
+    padding: 2px 10px;
+  }
+
+  .ton-info,
+  .max-balance-info {
+    font-size: 0.75rem;
+    margin-top: 6px;
   }
 }
