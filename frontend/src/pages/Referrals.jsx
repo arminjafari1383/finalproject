@@ -170,576 +170,6 @@ function getTelegramAvatar(
   );
 }
 
-// ======================================================
-// DEBUG PANEL
-// ======================================================
-
-function DebugPanel({
-  data,
-  logs = [],
-  onClear,
-}) {
-  const [open, setOpen] =
-    useState(true);
-
-  if (!open) {
-    return (
-      <button
-        onClick={() =>
-          setOpen(true)
-        }
-        style={{
-          position: "fixed",
-          bottom: "20px",
-          right: "20px",
-          zIndex: 999999,
-          padding:
-            "10px 16px",
-          background:
-            "#dc3545",
-          color: "#fff",
-          border: "none",
-          borderRadius: "8px",
-          fontWeight:
-            "bold",
-        }}
-      >
-        🐛 Debug
-      </button>
-    );
-  }
-
-  return (
-    <div
-      style={{
-        position: "fixed",
-        top: "10px",
-        right: "10px",
-        zIndex: 999999,
-        width:
-          "min(480px, calc(100vw - 20px))",
-        maxHeight: "82vh",
-        overflow: "auto",
-        background:
-          "#17172b",
-        color: "#ddd",
-        border:
-          "1px solid #333",
-        borderRadius: "12px",
-        padding: "14px",
-        boxShadow:
-          "0 10px 40px rgba(0,0,0,.8)",
-        fontFamily:
-          "monospace",
-        fontSize: "11px",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          justifyContent:
-            "space-between",
-          alignItems:
-            "center",
-          marginBottom: "10px",
-        }}
-      >
-        <strong
-          style={{
-            color: "#4caf50",
-          }}
-        >
-          🐛 Telegram Debug
-        </strong>
-
-        <div
-          style={{
-            display: "flex",
-            gap: "6px",
-            alignItems: "center",
-          }}
-        >
-          <button
-            onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(
-                  JSON.stringify(
-                    { data, logs },
-                    null,
-                    2
-                  )
-                );
-              } catch (error) {
-                console.error(
-                  "Debug copy failed:",
-                  error
-                );
-              }
-            }}
-            style={{
-              border: "1px solid #444",
-              background: "#22223a",
-              color: "#ddd",
-              borderRadius: "6px",
-              padding: "4px 7px",
-              fontSize: "10px",
-            }}
-          >
-            📋 Copy
-          </button>
-
-          <button
-            onClick={onClear}
-            style={{
-              border: "1px solid #444",
-              background: "#22223a",
-              color: "#ddd",
-              borderRadius: "6px",
-              padding: "4px 7px",
-              fontSize: "10px",
-            }}
-          >
-            🧹 Clear
-          </button>
-
-          <button
-            onClick={() =>
-              setOpen(false)
-            }
-            style={{
-              border: "none",
-              background:
-                "transparent",
-              color: "#888",
-              fontSize:
-                "18px",
-            }}
-          >
-            ✕
-          </button>
-        </div>
-      </div>
-
-      <DebugRow
-        name="window.Telegram"
-        value={
-          data?.hasTelegram
-            ? "✅ Yes"
-            : "❌ No"
-        }
-      />
-
-      <DebugRow
-        name="Telegram.WebApp"
-        value={
-          data?.hasWebApp
-            ? "✅ Yes"
-            : "❌ No"
-        }
-      />
-
-      <DebugRow
-        name="Platform"
-        value={
-          data?.platform ||
-          "Unknown"
-        }
-      />
-
-      <DebugRow
-        name="Telegram ID"
-        value={
-          data?.telegramId ??
-          "❌ Not found"
-        }
-      />
-
-      <DebugRow
-        name="Username"
-        value={
-          data?.telegramUsername ??
-          "❌ Not found"
-        }
-      />
-
-      <DebugRow
-        name="First Name"
-        value={
-          data?.firstName ??
-          "❌ Not found"
-        }
-      />
-
-      <DebugRow
-        name="Last Name"
-        value={
-          data?.lastName ??
-          "❌ Not found"
-        }
-      />
-
-      <DebugRow
-        name="Language"
-        value={
-          data?.language ??
-          "❌ Not found"
-        }
-      />
-
-      <DebugRow
-        name="Premium"
-        value={
-          data?.isPremium
-            ? "✅ Yes"
-            : "❌ No"
-        }
-      />
-
-      <DebugRow
-        name="Telegram Mode"
-        value={
-          data?.isTelegramWebApp
-            ? "✅ Telegram"
-            : "🌐 Browser"
-        }
-      />
-
-      <DebugRow
-        name="Identity Source"
-        value={
-          data?.identitySource ||
-          "None"
-        }
-      />
-
-      <DebugRow
-        name="Referral"
-        value={
-          data?.inviterCode ||
-          "None"
-        }
-      />
-
-      <DebugRow
-        name="unsafe.start_param"
-        value={
-          data?.unsafeStartParam ||
-          "None"
-        }
-      />
-
-      <DebugRow
-        name="tgWebAppStartParam"
-        value={
-          data?.tgWebAppStartParam ||
-          "None"
-        }
-      />
-
-      <DebugRow
-        name="Referral Source"
-        value={
-          data?.referralSource ||
-          "Unknown"
-        }
-      />
-
-      <DebugRow
-        name="Connect Status"
-        value={
-          data?.connectStatus ||
-          "Not sent"
-        }
-      />
-
-      <DebugRow
-        name="Diagnosis"
-        value={
-          data?.diagnosis ||
-          "Collecting data..."
-        }
-      />
-
-      <section
-        style={{
-          marginTop: "10px",
-          borderTop:
-            "1px solid #333",
-          paddingTop: "8px",
-        }}
-      >
-        <div
-          style={{
-            color: "#9c27b0",
-            marginBottom: "5px",
-          }}
-        >
-          📦 initDataUnsafe
-        </div>
-
-        <pre
-          style={{
-            margin: 0,
-            padding: "8px",
-            background:
-              "#0d0d1a",
-            borderRadius: "6px",
-            whiteSpace:
-              "pre-wrap",
-            wordBreak:
-              "break-word",
-            maxHeight:
-              "150px",
-            overflow:
-              "auto",
-            fontSize:
-              "9px",
-          }}
-        >
-          {JSON.stringify(
-            data?.initDataUnsafe ||
-              {},
-            null,
-            2
-          )}
-        </pre>
-      </section>
-
-      <section
-        style={{
-          marginTop: "10px",
-          borderTop:
-            "1px solid #333",
-          paddingTop: "8px",
-        }}
-      >
-        <div
-          style={{
-            color: "#2196f3",
-            marginBottom: "5px",
-          }}
-        >
-          📤 Payload
-        </div>
-
-        <pre
-          style={{
-            margin: 0,
-            padding: "8px",
-            background:
-              "#0d0d1a",
-            borderRadius: "6px",
-            whiteSpace:
-              "pre-wrap",
-            wordBreak:
-              "break-word",
-            maxHeight:
-              "180px",
-            overflow:
-              "auto",
-            fontSize:
-              "9px",
-          }}
-        >
-          {JSON.stringify(
-            data?.payload ||
-              {},
-            null,
-            2
-          )}
-        </pre>
-      </section>
-
-      <section
-        style={{
-          marginTop: "10px",
-          borderTop:
-            "1px solid #333",
-          paddingTop: "8px",
-        }}
-      >
-        <div
-          style={{
-            color: "#00bcd4",
-            marginBottom: "5px",
-          }}
-        >
-          📥 Backend Response
-        </div>
-
-        <pre
-          style={{
-            margin: 0,
-            padding: "8px",
-            background:
-              "#0d0d1a",
-            borderRadius: "6px",
-            whiteSpace:
-              "pre-wrap",
-            wordBreak:
-              "break-word",
-            maxHeight:
-              "180px",
-            overflow:
-              "auto",
-            fontSize:
-              "9px",
-          }}
-        >
-          {JSON.stringify(
-            data?.backendResponse ||
-              {},
-            null,
-            2
-          )}
-        </pre>
-      </section>
-
-      <section
-        style={{
-          marginTop: "10px",
-          borderTop: "1px solid #333",
-          paddingTop: "8px",
-        }}
-      >
-        <div
-          style={{
-            color: "#ffca28",
-            marginBottom: "6px",
-            fontWeight: "bold",
-          }}
-        >
-          🧭 Referral Trace ({logs.length})
-        </div>
-
-        <div
-          style={{
-            maxHeight: "260px",
-            overflow: "auto",
-            background: "#0d0d1a",
-            borderRadius: "6px",
-            padding: "8px",
-          }}
-        >
-          {logs.length === 0 ? (
-            <div style={{ color: "#777" }}>
-              No trace events yet.
-            </div>
-          ) : (
-            logs
-              .slice()
-              .reverse()
-              .map((item, index) => (
-                <div
-                  key={`${item.time}-${index}`}
-                  style={{
-                    padding: "6px 0",
-                    borderBottom:
-                      "1px solid rgba(255,255,255,.06)",
-                  }}
-                >
-                  <div>
-                    <span style={{ color: "#777" }}>
-                      {item.time}
-                    </span>{" "}
-                    <strong style={{ color: "#80cbc4" }}>
-                      {item.stage}
-                    </strong>
-                  </div>
-                  <pre
-                    style={{
-                      margin: "4px 0 0",
-                      whiteSpace: "pre-wrap",
-                      wordBreak: "break-word",
-                      fontSize: "9px",
-                      color: "#ccc",
-                    }}
-                  >
-                    {JSON.stringify(
-                      item.details || {},
-                      null,
-                      2
-                    )}
-                  </pre>
-                </div>
-              ))
-          )}
-        </div>
-      </section>
-
-      <section
-        style={{
-          marginTop: "10px",
-          borderTop:
-            "1px solid #333",
-          paddingTop: "8px",
-          color: "#888",
-        }}
-      >
-        <div>
-          inviter_code:{" "}
-          {localStorage.getItem(
-            "inviter_code"
-          ) || "null"}
-        </div>
-
-        <div>
-          telegram_username:{" "}
-          {localStorage.getItem(
-            "telegram_username"
-          ) || "null"}
-        </div>
-
-        <div>
-          telegram_id:{" "}
-          {localStorage.getItem(
-            "telegram_id"
-          ) || "null"}
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function DebugRow({
-  name,
-  value,
-}) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent:
-          "space-between",
-        gap: "10px",
-        padding:
-          "3px 0",
-        borderBottom:
-          "1px solid rgba(255,255,255,.04)",
-      }}
-    >
-      <span
-        style={{
-          color: "#888",
-        }}
-      >
-        {name}
-      </span>
-
-      <span
-        style={{
-          color: "#ddd",
-          textAlign:
-            "right",
-          wordBreak:
-            "break-word",
-        }}
-      >
-        {String(value)}
-      </span>
-    </div>
-  );
-}
 
 // ======================================================
 // COMPONENT
@@ -826,21 +256,6 @@ export default function Referrals() {
     setReferralReady,
   ] = useState(false);
 
-  const [
-    debugData,
-    setDebugData,
-  ] = useState({});
-
-  const [
-    backendResponse,
-    setBackendResponse,
-  ] = useState(null);
-
-  const [
-    traceLogs,
-    setTraceLogs,
-  ] = useState([]);
-
   const addTrace = useCallback(
     (stage, details = {}) => {
       const item = {
@@ -870,43 +285,6 @@ export default function Referrals() {
     const params =
       new URLSearchParams(
         window.location.search
-      );
-
-    addTrace("PAGE_OPEN", {
-      href: window.location.href,
-      search: window.location.search,
-      hash: window.location.hash,
-      startapp:
-        params.get("startapp"),
-      start_param:
-        params.get("start_param"),
-      tgWebAppStartParam:
-        params.get(
-          "tgWebAppStartParam"
-        ),
-      storedInviterCode:
-        localStorage.getItem(
-          "inviter_code"
-        ),
-    });
-  }, [addTrace]);
-
-  // مهم:
-  // این ref فقط key ثبت قبلی را نگه می‌دارد.
-  // دیگر روی string .current نمی‌زنیم.
-  const registerKeyRef =
-    useRef(null);
-
-  // ====================================================
-  // TELEGRAM INITIALIZATION
-  // ====================================================
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function initializeTelegram() {
-      console.log(
-        "========================================="
       );
 
       console.log(
@@ -966,17 +344,6 @@ export default function Referrals() {
           "tgWebAppStartParam"
         );
 
-      addTrace(
-        "TELEGRAM_DETECT",
-        {
-          hasTelegram,
-          hasWebApp,
-          platform,
-          tgWebAppStartParam,
-          href: window.location.href,
-        }
-      );
-
       console.log(
         "window.Telegram:",
         window.Telegram
@@ -990,18 +357,6 @@ export default function Referrals() {
       console.log(
         "Platform:",
         platform
-      );
-
-      setDebugData(
-        (prev) => ({
-          ...prev,
-
-          hasTelegram,
-
-          hasWebApp,
-
-          platform,
-        })
       );
 
       // ================================================
@@ -1075,41 +430,8 @@ export default function Referrals() {
           );
         }
 
-        addTrace(
-          "BROWSER_REFERRAL_CAPTURE",
-          {
-            code,
-            storedInviterCode:
-              localStorage.getItem(
-                "inviter_code"
-              ),
-            href: window.location.href,
-          }
-        );
-
         setInviterCode(
           code
-        );
-
-        setDebugData(
-          (prev) => ({
-            ...prev,
-
-            isTelegramWebApp:
-              false,
-
-            telegramId:
-              null,
-
-            telegramUsername:
-              null,
-
-            identitySource:
-              "browser",
-
-            inviterCode:
-              code,
-          })
         );
 
         setReferralReady(
@@ -1150,24 +472,6 @@ export default function Referrals() {
       const user =
         getTelegramUser(tg);
 
-      addTrace(
-        "TELEGRAM_INIT_DATA",
-        {
-          unsafeStartParam:
-            unsafe?.start_param ||
-            null,
-          tgWebAppStartParam,
-          initDataLength:
-            String(
-              tg?.initData || ""
-            ).length,
-          userId:
-            user?.id || null,
-          username:
-            user?.username || null,
-        }
-      );
-
       console.log(
         "initDataUnsafe:",
         unsafe
@@ -1180,27 +484,6 @@ export default function Referrals() {
 
       setIsTelegramWebApp(
         true
-      );
-
-      setDebugData(
-        (prev) => ({
-          ...prev,
-
-          hasTelegram: true,
-
-          hasWebApp: true,
-
-          platform:
-            tg.platform ||
-            "Unknown",
-
-          initDataUnsafe:
-            unsafe,
-
-          initData:
-            tg.initData ||
-            "",
-        })
       );
 
       // ================================================
@@ -1259,38 +542,6 @@ export default function Referrals() {
           "telegram_username",
           user.username || ""
         );
-
-        setDebugData(
-          (prev) => ({
-            ...prev,
-
-            telegramId:
-              user.id,
-
-            telegramUsername:
-              user.username,
-
-            firstName:
-              user.firstName,
-
-            lastName:
-              user.lastName,
-
-            language:
-              user.language,
-
-            isPremium:
-              user.isPremium,
-
-            isTelegramWebApp:
-              true,
-
-            identitySource:
-              "telegram",
-
-            user,
-          })
-        );
       } else {
         console.warn(
           "⚠️ Telegram WebApp exists but user is missing"
@@ -1315,27 +566,6 @@ export default function Referrals() {
             "telegram_username"
           );
         } catch {}
-
-        setDebugData(
-          (prev) => ({
-            ...prev,
-
-            isTelegramWebApp:
-              true,
-
-            telegramId:
-              null,
-
-            telegramUsername:
-              null,
-
-            identitySource:
-              "telegram-no-user",
-
-            error:
-              "Telegram WebApp detected, but initDataUnsafe.user is missing",
-          })
-        );
       }
 
       // ================================================
@@ -1389,14 +619,6 @@ export default function Referrals() {
               "captureInviterCode()";
           }
         } catch (captureError) {
-          addTrace(
-            "REFERRAL_CAPTURE_ERROR",
-            {
-              message:
-                captureError?.message ||
-                String(captureError),
-            }
-          );
         }
       }
 
@@ -1410,14 +632,6 @@ export default function Referrals() {
               "getInviterCode()";
           }
         } catch (storedError) {
-          addTrace(
-            "REFERRAL_STORAGE_ERROR",
-            {
-              message:
-                storedError?.message ||
-                String(storedError),
-            }
-          );
         }
       }
 
@@ -1428,41 +642,8 @@ export default function Referrals() {
         );
       }
 
-      addTrace(
-        "REFERRAL_RESOLVED",
-        {
-          unsafeStartParam:
-            startParam,
-          tgWebAppStartParam,
-          resolvedCode: code,
-          referralSource,
-          storedInviterCode:
-            localStorage.getItem(
-              "inviter_code"
-            ),
-        }
-      );
-
       setInviterCode(
         code
-      );
-
-      setDebugData(
-        (prev) => ({
-          ...prev,
-
-          inviterCode:
-            code,
-          unsafeStartParam:
-            startParam,
-          tgWebAppStartParam,
-          referralSource,
-          diagnosis: !user?.id
-            ? "Telegram user ID is missing"
-            : !code
-            ? "Referral code was not received"
-            : "Telegram identity + referral code found",
-        })
       );
 
       setReferralReady(
@@ -1502,17 +683,6 @@ export default function Referrals() {
     let cancelled = false;
 
     async function registerUser() {
-      addTrace(
-        "REGISTER_EFFECT",
-        {
-          address,
-          referralReady,
-          inviterCode,
-          telegramId,
-          telegramUsername,
-          isTelegramWebApp,
-        }
-      );
 
       console.log(
         "========================================="
@@ -1552,10 +722,6 @@ export default function Referrals() {
       );
 
       if (!address) {
-        addTrace(
-          "REGISTER_SKIPPED_NO_WALLET",
-          {}
-        );
         setMyCode(null);
 
         setRefCount(null);
@@ -1564,10 +730,6 @@ export default function Referrals() {
       }
 
       if (!referralReady) {
-        addTrace(
-          "REGISTER_WAITING_REFERRAL",
-          {}
-        );
         console.log(
           "⏳ Waiting for referral initialization"
         );
@@ -1633,20 +795,6 @@ export default function Referrals() {
         } catch {}
       }
 
-      addTrace(
-        "REGISTER_IDENTITY_READY",
-        {
-          finalTelegramId,
-          finalTelegramUsername,
-          finalInviterCode,
-          identitySource,
-          localStorageInviter:
-            localStorage.getItem(
-              "inviter_code"
-            ),
-        }
-      );
-
       // ==================================================
       // REGISTER KEY
       // ==================================================
@@ -1667,10 +815,6 @@ export default function Referrals() {
         registerKeyRef.current ===
         currentRegisterKey
       ) {
-        addTrace(
-          "REGISTER_SKIPPED_DUPLICATE_KEY",
-          { currentRegisterKey }
-        );
 
         console.log(
           "⛔ Already registered with same key"
@@ -1729,42 +873,6 @@ export default function Referrals() {
         "========================================="
       );
 
-      setDebugData(
-        (prev) => ({
-          ...prev,
-
-          finalTelegramId,
-
-          finalTelegramUsername,
-
-          identitySource,
-
-          inviterCode:
-            finalInviterCode,
-
-          payload,
-        })
-      );
-
-      addTrace(
-        "CONNECT_REQUEST",
-        payload
-      );
-
-      setDebugData(
-        (prev) => ({
-          ...prev,
-          connectStatus:
-            "Sending /connect/...",
-          diagnosis:
-            !payload.telegram_id
-              ? "BLOCKER: telegram_id is null"
-              : !payload.inviter_code
-              ? "BLOCKER: inviter_code is null"
-              : "Request has Telegram ID + inviter code",
-        })
-      );
-
       try {
         setLoading(true);
 
@@ -1785,47 +893,10 @@ export default function Referrals() {
           response.data
         );
 
-        setBackendResponse(
-          response.data
-        );
-
-        addTrace(
-          "CONNECT_SUCCESS",
-          {
-            status: response.status,
-            data: response.data,
-          }
-        );
-
         if (
           response.data?.referral_debug
         ) {
-          addTrace(
-            "BACKEND_REFERRAL_DEBUG",
-            response.data
-              .referral_debug
-          );
         }
-
-        setDebugData(
-          (prev) => ({
-            ...prev,
-
-            backendResponse:
-              response.data,
-            connectStatus:
-              `HTTP ${response.status} success`,
-            diagnosis:
-              response.data?.referral_debug
-                ?.reason
-                ? `Referral: ${
-                    response.data
-                      .referral_debug
-                      .reason
-                  }`
-                : "Connect succeeded. Checking referral tree...",
-          })
-        );
 
         const returnedCode =
           response.data?.user
@@ -1854,16 +925,6 @@ export default function Referrals() {
               }
             );
 
-          addTrace(
-            "REFERRAL_COUNT_RESPONSE",
-            {
-              status:
-                countResponse.status,
-              data:
-                countResponse.data,
-            }
-          );
-
           if (!cancelled) {
             setRefCount(
               countResponse.data
@@ -1874,21 +935,6 @@ export default function Referrals() {
           console.error(
             "Referral count error:",
             countError
-          );
-
-          addTrace(
-            "REFERRAL_COUNT_ERROR",
-            {
-              message:
-                countError?.message ||
-                String(countError),
-              status:
-                countError?.response
-                  ?.status || null,
-              data:
-                countError?.response
-                  ?.data || null,
-            }
           );
 
           if (!cancelled) {
@@ -1907,43 +953,6 @@ export default function Referrals() {
         console.error(
           "Backend:",
           err?.response?.data
-        );
-
-
-        addTrace(
-          "CONNECT_ERROR",
-          {
-            message:
-              err?.message ||
-              String(err),
-            status:
-              err?.response
-                ?.status || null,
-            data:
-              err?.response
-                ?.data || null,
-          }
-        );
-
-        setDebugData(
-          (prev) => ({
-            ...prev,
-            connectStatus:
-              `ERROR ${
-                err?.response
-                  ?.status || ""
-              }`.trim(),
-            backendResponse:
-              err?.response
-                ?.data || null,
-            diagnosis:
-              err?.response?.data
-                ?.error ||
-              err?.response?.data
-                ?.detail ||
-              err?.message ||
-              "Connect request failed",
-          })
         );
         setError(
           err?.response?.data
@@ -2013,22 +1022,6 @@ export default function Referrals() {
         const data =
           response.data;
 
-        addTrace(
-          "LEVELS_RESPONSE",
-          {
-            status: response.status,
-            total_referrals:
-              data?.total_referrals ||
-              0,
-            level_1_count:
-              data?.levels?.level_1
-                ?.count || 0,
-            first_level_user:
-              data?.levels?.level_1
-                ?.users?.[0] || null,
-          }
-        );
-
         setLevels(
           data?.levels || {}
         );
@@ -2041,46 +1034,10 @@ export default function Referrals() {
         const firstLevel =
           data?.levels
             ?.level_1;
-
-        setDebugData(
-          (prev) => ({
-            ...prev,
-            referralLevelsLastRefresh:
-              new Date().toISOString(),
-            firstLevelUser:
-              firstLevel?.users?.[0] ||
-              null,
-            diagnosis:
-              (data?.levels?.level_1
-                ?.count || 0) > 0
-                ? "Referral tree contains Level 1 users"
-                : prev?.connectStatus?.includes(
-                    "success"
-                  )
-                ? "Connect succeeded but Level 1 is still empty"
-                : prev?.diagnosis ||
-                  "Level 1 is empty",
-          })
-        );
       } catch (err) {
         console.error(
           "❌ Levels error:",
           err
-        );
-
-        addTrace(
-          "LEVELS_ERROR",
-          {
-            message:
-              err?.message ||
-              String(err),
-            status:
-              err?.response
-                ?.status || null,
-            data:
-              err?.response
-                ?.data || null,
-          }
         );
       } finally {
         requestRunning = false;
@@ -2201,14 +1158,6 @@ export default function Referrals() {
 
   useEffect(() => {
     if (!referralLink) return;
-
-    addTrace(
-      "REFERRAL_LINK_READY",
-      {
-        myCode,
-        referralLink,
-      }
-    );
   }, [
     addTrace,
     myCode,
@@ -2658,11 +1607,7 @@ export default function Referrals() {
 
   return (
     <div className="referral-dashboard">
-      <DebugPanel
-        data={debugData}
-        logs={traceLogs}
-        onClear={clearTrace}
-      />
+
 
       <h2>
         🎯 Referral Dashboard
@@ -2846,4 +1791,3 @@ export default function Referrals() {
       )}
     </div>
   );
-}
