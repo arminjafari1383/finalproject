@@ -1320,11 +1320,17 @@ export default function Wallet() {
   const ecgAsset = wallet?.assets?.ECG || wallet?.balances?.ECG || {};
   const usdtAsset = wallet?.assets?.USDT || wallet?.balances?.USDT || {};
 
-  const referralAvailableEcg = Number(
+  // Referral ECG balance must come from the real backend withdrawable referral balance.
+  // Supports both new and old backend field names.
+  const referralProfitEcgUnlocked = Number(
+    wallet?.referral_profit_ecg_unlocked ??
     wallet?.referral_available_ecg ??
     wallet?.available_referral_ecg ??
+    wallet?.ecg_referral_profit ??
     0
   );
+
+  const referralAvailableEcg = referralProfitEcgUnlocked;
 
   const purchaseProfitLocked = Number(
     wallet?.purchase_profit_ecg_locked ??
@@ -2743,4 +2749,3 @@ marginTop: 14,
 </div>
   );
 }
-
