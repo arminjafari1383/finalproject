@@ -1279,7 +1279,8 @@ def request_withdraw(request):
                     "source_asset": "USDT",
                     "asset": "TON",
                     "status": "PENDING",
-                    "destination": destination
+                    "destination": destination,
+                    "balance_deducted_at_request": True,  # موجودی در زمان درخواست کم شد
                 },
             )
     elif source_asset == "EPL":
@@ -1342,17 +1343,17 @@ def request_withdraw(request):
                     "asset": "EPL",
                     "epl_debited": str(requested_amount),
                     "status": "PENDING",
-                    "destination": destination
+                    "destination": destination,
+                    "balance_deducted_at_request": True,  # موجودی در زمان درخواست کم شد
                 }
             )
 
-    else:
+    else:  # source_asset == "ECG"
         if is_ton:
             ecg_amount = (
                 requested_amount * ton_rate * ECG_PER_USD
             ).quantize(Decimal("0.000001"), rounding=ROUND_UP)
             ton_amount = requested_amount
-
         else:
             ecg_amount = requested_amount
             ton_amount = Decimal("0")
@@ -1398,18 +1399,12 @@ def request_withdraw(request):
                     status=400,
                 )
 
-            # Only normal ECG balance is reduced here.
-            # Referral/Self are ledger based.
-            if withdraw_bucket not in {"REFERRAL", "SELF"}:
-                ecg_balance.available = (
-                    available - ecg_amount
-                )
-
-                ecg_balance.save(
-                    update_fields=[
-                        "available",
-                    ]
-                )
+            # ============================================================
+            # تغییر مهم: کم کردن موجودی در زمان درخواست (مانند USDT)
+            # ============================================================
+            # موجودی قابل برداشت را از AssetBalance کم می‌کنیم
+            ecg_balance.available = available - ecg_amount
+            ecg_balance.save(update_fields=["available"])
 
             req = WithdrawRequest.objects.create(
                 user=user,
@@ -1431,7 +1426,8 @@ def request_withdraw(request):
                     "ecg_debited": str(ecg_amount),
                     "requested_ton": str(ton_amount),
                     "withdraw_bucket": withdraw_bucket,
-                    "destination": destination
+                    "destination": destination,
+                    "balance_deducted_at_request": True,  # موجودی در زمان درخواست کم شد
                 },
             )
 
@@ -1730,34 +1726,45 @@ def admin_complete_withdraw(request, withdraw_id):
             update_fields.append("tx_hash")
         req.save(update_fields=update_fields)
 
-        # کم کردن فقط مقدار برداشت شده از موجودی
-        # موجودی کامل صفر نمی‌شود.
-        source_asset = str(req.source_asset or "ECG").upper()
-
-        balance = (
-            AssetBalance.objects
-            .select_for_update()
-            .filter(
-                user=req.user,
-                asset=source_asset
-            )
-            .first()
-        )
-
-        if balance:
-            withdraw_amount = Decimal(str(req.amount or 0))
-            current_available = Decimal(str(balance.available or 0))
-
-            balance.available = max(
-                Decimal("0"),
-                current_available - withdraw_amount
-            )
-
-            balance.save(
-                update_fields=["available"]
-            )
-
+        # ============================================================
+        # تغییر مهم: فقط برای برداشت‌هایی که موجودی در زمان درخواست کم نشده
+        # ============================================================
         ledger = _withdraw_ledger(req)
+        meta = dict(ledger.meta or {}) if ledger else {}
+        
+        # بررسی اینکه آیا موجودی قبلاً در زمان درخواست کم شده است
+        balance_deducted_at_request = meta.get("balance_deducted_at_request", False)
+        
+        # فقط اگر موجودی قبلاً کم نشده باشد، آن را کم می‌کنیم
+        # (این برای موارد قدیمی یا مواردی است که هنوز این منطق را ندارند)
+        if not balance_deducted_at_request:
+            # کم کردن فقط مقدار برداشت شده از موجودی
+            source_asset = str(req.source_asset or "ECG").upper()
+
+            balance = (
+                AssetBalance.objects
+                .select_for_update()
+                .filter(
+                    user=req.user,
+                    asset=source_asset
+                )
+                .first()
+            )
+
+            if balance:
+                withdraw_amount = Decimal(str(req.amount or 0))
+                current_available = Decimal(str(balance.available or 0))
+
+                balance.available = max(
+                    Decimal("0"),
+                    current_available - withdraw_amount
+                )
+
+                balance.save(
+                    update_fields=["available"]
+                )
+
+        # به‌روزرسانی Ledger
         if ledger:
             meta = dict(ledger.meta or {})
             meta.update({
