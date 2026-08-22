@@ -1994,7 +1994,7 @@ marginTop: 14,
                         ECG • Referral Profit
                       </div>
                       <strong style={{ marginTop: 5, fontSize: 16 }}>
-                        {referralBreakdownEcgTotal.toFixed(4)} ECG
+                        {referralProfitEcgUnlocked.toFixed(4)} ECG
                       </strong>
                       <div style={{ fontSize: 10, opacity: 0.68, marginTop: 6, lineHeight: 1.55 }}>
                         Level 1 • 5%: {referralLevel1FivePercentEcg.toFixed(4)} ECG
