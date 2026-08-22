@@ -317,8 +317,6 @@ export default function Wallet() {
   }, []);
 
 
-  const [debugLogs, setDebugLogs] = useState([]);
-
   // ====================================================
   // REFERRAL
   // ====================================================
@@ -2721,37 +2719,7 @@ marginTop: 14,
       )}
 
     
-        <section
-          style={{
-            marginTop:20,
-            padding:15,
-            background:"#050505",
-            border:"1px solid #333",
-            borderRadius:12,
-            color:"#00ff88",
-            maxHeight:350,
-            overflow:"auto",
-            fontSize:12
-          }}
-        >
-          <h3 style={{color:"white"}}>🛠 Withdraw Debug Console</h3>
-          {debugLogs.length === 0 ? (
-            <div>No logs yet...</div>
-          ) : (
-            debugLogs.map((log,index)=>(
-              <div key={index} style={{marginBottom:15}}>
-                <div>
-                  [{log.time}] {log.title}
-                </div>
-                {log.data && (
-                  <pre style={{whiteSpace:"pre-wrap",color:"#aaa"}}>
-                    {JSON.stringify(log.data,null,2)}
-                  </pre>
-                )}
-              </div>
-            ))
-          )}
-        </section>
+
 </div>
   );
 }
