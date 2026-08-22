@@ -2473,6 +2473,7 @@ def create_ton_transaction(request):
 
         return JsonResponse(
             {
+                
                 "status": "error",
                 "message": str(e)
             },
