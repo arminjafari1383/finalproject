@@ -2095,7 +2095,7 @@ marginTop: 14,
                         Tether • Referral Profit
                       </div>
                       <strong style={{ marginTop: 5, fontSize: 16 }}>
-                        {referralBreakdownUsdtTotal.toFixed(4)} USDT
+                        {referralProfitUsdtUnlocked.toFixed(4)} USDT
                       </strong>
                       <div style={{ fontSize: 10, opacity: 0.68, marginTop: 6, lineHeight: 1.55 }}>
                         Level 1 • 5%: {referralLevel1FivePercentUsdt.toFixed(4)} USDT
