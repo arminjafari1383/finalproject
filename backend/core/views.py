@@ -2366,7 +2366,60 @@ def get_referral_levels(request):
             status=status.HTTP_200_OK,
         )
 
-    def serialize_level_users(stored_users):
+    # Build an authoritative purchase-profit index from Ledger once.
+    # ReferralLevel JSON is only a display snapshot and can be stale for legacy
+    # rows; Ledger is the accounting source of truth.
+    ledger_profit_index = {}
+
+    for ledger_row in user.ledgers.filter(
+        typ__in=[
+            "DIRECT_REFERRAL_BONUS",
+            "INDIRECT_REFERRAL_BONUS",
+        ]
+    ):
+        meta = dict(ledger_row.meta or {})
+
+        buyer_wallet = str(meta.get("buyer") or "").strip()
+        buyer_user_id = meta.get("buyer_user_id")
+        buyer_telegram_id = meta.get("buyer_telegram_id")
+
+        if ledger_row.typ == "DIRECT_REFERRAL_BONUS":
+            ledger_level = 1
+        else:
+            raw_level = str(meta.get("level") or "").lower()
+            try:
+                ledger_level = int(raw_level.replace("level_", ""))
+            except (TypeError, ValueError):
+                continue
+
+        if ledger_level < 1 or ledger_level > 5:
+            continue
+
+        ledger_asset = str(meta.get("asset") or "ECG").upper()
+        if ledger_asset not in {"ECG", "USDT"}:
+            ledger_asset = "ECG"
+
+        amount = Decimal(str(ledger_row.amount or 0))
+        if amount <= 0:
+            continue
+
+        identity_keys = []
+        if buyer_user_id is not None:
+            identity_keys.append(("user", str(buyer_user_id)))
+        if buyer_telegram_id is not None:
+            identity_keys.append(("telegram", str(buyer_telegram_id)))
+        if buyer_wallet:
+            identity_keys.append(("wallet", buyer_wallet))
+
+        for identity_key in identity_keys:
+            key = (ledger_level, identity_key)
+            bucket = ledger_profit_index.setdefault(
+                key,
+                {"ECG": Decimal("0"), "USDT": Decimal("0")},
+            )
+            bucket[ledger_asset] += amount
+
+    def serialize_level_users(stored_users, level_number):
         stored_users = stored_users or []
         stored_users = stored_users[:20]
 
@@ -2398,19 +2451,22 @@ def get_referral_levels(request):
 
         result = []
 
-        for item in stored_users:
-            if isinstance(item, str):
+        for raw_item in stored_users:
+            if isinstance(raw_item, str):
                 item = {
-                    "wallet": item,
+                    "wallet": raw_item,
                     "investment": 0,
                     "profit": 0,
+                    "profit_ecg": 0,
+                    "profit_usdt": 0,
                     "referral_bonus": 0,
                 }
-
-            if not isinstance(item, dict):
+            elif isinstance(raw_item, dict):
+                item = dict(raw_item)
+            else:
                 continue
 
-            wallet = item.get("wallet")
+            wallet = str(item.get("wallet") or "").strip()
             telegram_id = item.get("telegram_id")
 
             app_user = (
@@ -2422,31 +2478,64 @@ def get_referral_levels(request):
             photo_url = item.get("telegram_photo_url")
 
             if app_user:
-                username = (
-                    app_user.telegram_username
-                    or username
-                )
+                wallet = app_user.wallet_address or wallet
+                username = app_user.telegram_username or username
+                photo_url = app_user.telegram_photo_url or photo_url
+                telegram_id = app_user.telegram_id or telegram_id
 
-                photo_url = (
-                    app_user.telegram_photo_url
-                    or photo_url
-                )
+            legacy_profit = Decimal(str(item.get("profit", 0) or 0))
+            stored_asset = str(item.get("profit_asset", "ECG") or "ECG").upper()
 
-                telegram_id = (
-                    app_user.telegram_id
-                    or telegram_id
-                )
+            stored_ecg = item.get("profit_ecg")
+            if stored_ecg is None:
+                stored_ecg = Decimal("0") if stored_asset == "USDT" else legacy_profit
+            else:
+                stored_ecg = Decimal(str(stored_ecg or 0))
 
-            legacy_profit = item.get("profit", 0) or 0
-            profit_asset = str(item.get("profit_asset", "ECG") or "ECG").upper()
+            stored_usdt = item.get("profit_usdt")
+            if stored_usdt is None:
+                stored_usdt = legacy_profit if stored_asset == "USDT" else Decimal("0")
+            else:
+                stored_usdt = Decimal(str(stored_usdt or 0))
 
-            profit_ecg = item.get("profit_ecg")
-            if profit_ecg is None:
-                profit_ecg = 0 if profit_asset == "USDT" else legacy_profit
+            # Prefer authoritative Ledger totals whenever matching accounting
+            # rows exist.  Fall back to the snapshot for legacy data that has
+            # no corresponding Ledger rows.
+            ledger_totals = None
+            identity_candidates = []
+            if app_user:
+                identity_candidates.append(("user", str(app_user.id)))
+                if app_user.telegram_id is not None:
+                    identity_candidates.append(("telegram", str(app_user.telegram_id)))
+            elif telegram_id is not None:
+                identity_candidates.append(("telegram", str(telegram_id)))
 
-            profit_usdt = item.get("profit_usdt")
-            if profit_usdt is None:
-                profit_usdt = legacy_profit if profit_asset == "USDT" else 0
+            if wallet:
+                identity_candidates.append(("wallet", wallet))
+            original_wallet = str(item.get("wallet") or "").strip()
+            if original_wallet and original_wallet != wallet:
+                identity_candidates.append(("wallet", original_wallet))
+
+            for identity_key in identity_candidates:
+                match = ledger_profit_index.get((level_number, identity_key))
+                if match is not None:
+                    ledger_totals = match
+                    break
+
+            if ledger_totals is not None:
+                profit_ecg = ledger_totals["ECG"]
+                profit_usdt = ledger_totals["USDT"]
+            else:
+                profit_ecg = stored_ecg
+                profit_usdt = stored_usdt
+
+            profit_asset = (
+                "MIXED"
+                if profit_ecg > 0 and profit_usdt > 0
+                else "USDT"
+                if profit_usdt > 0
+                else "ECG"
+            )
 
             result.append({
                 "telegram_id": telegram_id,
@@ -2454,9 +2543,10 @@ def get_referral_levels(request):
                 "telegram_photo_url": photo_url,
                 "wallet": wallet,
                 "investment": item.get("investment", 0),
-                "profit": legacy_profit,
-                "profit_ecg": profit_ecg,
-                "profit_usdt": profit_usdt,
+                # Legacy field stays ECG-only.
+                "profit": float(profit_ecg),
+                "profit_ecg": float(profit_ecg),
+                "profit_usdt": float(profit_usdt),
                 "profit_asset": profit_asset,
                 "referral_bonus": item.get("referral_bonus", 0),
             })
@@ -2480,7 +2570,7 @@ def get_referral_levels(request):
 
         levels[f"level_{level_number}"] = {
             "count": count,
-            "users": serialize_level_users(stored_users)
+            "users": serialize_level_users(stored_users, level_number)
         }
 
         total_referrals += count

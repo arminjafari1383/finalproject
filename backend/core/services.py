@@ -1073,48 +1073,155 @@ def update_level_profit(
     profit: Decimal,
     asset: str = "ECG",
 ):
-    """Store Referral Tree stake profit in its real asset."""
+    """
+    Keep ReferralLevel JSON in sync with the real upline profit credit.
+
+    The accounting truth remains AssetBalance + Ledger.  This helper only
+    updates the referral-tree display snapshot.  It deliberately supports
+    legacy string rows and wallet replacement so a successful upline credit
+    does not disappear from the visible ``profit_ecg`` / ``profit_usdt``
+    fields.
+    """
     asset = str(asset or "ECG").upper()
     if asset not in {"ECG", "USDT"}:
         asset = "ECG"
 
-    profit = Decimal(str(profit))
-    level_obj = ReferralLevel.objects.filter(user=user).first()
-    if not level_obj:
+    profit = Decimal(str(profit or 0))
+    if profit <= 0:
         return
 
-    level_field = f"level_{level}_users"
-    users = getattr(level_obj, level_field) or []
+    try:
+        level = int(level)
+    except (TypeError, ValueError):
+        return
 
-    for i, item in enumerate(users):
-        if not isinstance(item, dict) or item.get("wallet") != from_wallet:
+    if level < 1 or level > 5:
+        return
+
+    from_wallet = str(from_wallet or "").strip()
+    if not from_wallet:
+        return
+
+    source_user = (
+        AppUser.objects
+        .filter(wallet_address=from_wallet)
+        .first()
+    )
+    source_telegram_id = source_user.telegram_id if source_user else None
+
+    level_obj, _ = ReferralLevel.objects.get_or_create(user=user)
+    level_field = f"level_{level}_users"
+    count_field = f"level_{level}_count"
+    users = list(getattr(level_obj, level_field) or [])
+
+    matched_index = None
+
+    for i, raw_item in enumerate(users):
+        if isinstance(raw_item, str):
+            if raw_item != from_wallet:
+                continue
+            item = {
+                "wallet": from_wallet,
+                "telegram_id": source_telegram_id,
+                "telegram_username": (
+                    source_user.telegram_username if source_user else None
+                ),
+                "telegram_photo_url": (
+                    source_user.telegram_photo_url if source_user else None
+                ),
+                "investment": 0,
+                "profit": 0,
+                "profit_ecg": 0,
+                "profit_usdt": 0,
+                "profit_asset": asset,
+                "referral_bonus": 0,
+            }
+            users[i] = item
+            matched_index = i
+            break
+
+        if not isinstance(raw_item, dict):
             continue
 
-        # All historical ``profit`` values were ECG. Preserve them as ECG.
-        legacy_ecg = Decimal(str(item.get("profit", 0) or 0))
-        current_ecg = Decimal(str(item.get("profit_ecg", legacy_ecg) or 0))
-        current_usdt = Decimal(str(item.get("profit_usdt", 0) or 0))
+        item_wallet = str(raw_item.get("wallet") or "").strip()
+        item_telegram_id = raw_item.get("telegram_id")
 
-        if asset == "USDT":
-            current_usdt += profit
-        else:
-            current_ecg += profit
-
-        users[i]["profit_ecg"] = float(current_ecg)
-        users[i]["profit_usdt"] = float(current_usdt)
-        # Backward compatibility: do not mix units in the legacy field.
-        users[i]["profit"] = float(current_ecg)
-        users[i]["profit_asset"] = (
-            "MIXED"
-            if current_ecg > 0 and current_usdt > 0
-            else "USDT"
-            if current_usdt > 0
-            else "ECG"
+        same_wallet = item_wallet == from_wallet
+        same_identity = (
+            source_telegram_id is not None
+            and item_telegram_id is not None
+            and str(item_telegram_id) == str(source_telegram_id)
         )
-        break
 
+        if same_wallet or same_identity:
+            matched_index = i
+            break
+
+    if matched_index is None:
+        users.append({
+            "wallet": from_wallet,
+            "telegram_id": source_telegram_id,
+            "telegram_username": (
+                source_user.telegram_username if source_user else None
+            ),
+            "telegram_photo_url": (
+                source_user.telegram_photo_url if source_user else None
+            ),
+            "investment": 0,
+            "profit": 0,
+            "profit_ecg": 0,
+            "profit_usdt": 0,
+            "profit_asset": asset,
+            "referral_bonus": 0,
+        })
+        matched_index = len(users) - 1
+
+    item = dict(users[matched_index])
+
+    # Keep identity metadata current after wallet replacement.
+    item["wallet"] = from_wallet
+    if source_user:
+        item["telegram_id"] = source_user.telegram_id
+        item["telegram_username"] = source_user.telegram_username
+        item["telegram_photo_url"] = source_user.telegram_photo_url
+
+    legacy_ecg = Decimal(str(item.get("profit", 0) or 0))
+    current_ecg = Decimal(str(item.get("profit_ecg", legacy_ecg) or 0))
+    current_usdt = Decimal(str(item.get("profit_usdt", 0) or 0))
+
+    if asset == "USDT":
+        current_usdt += profit
+    else:
+        current_ecg += profit
+
+    item["profit_ecg"] = float(current_ecg)
+    item["profit_usdt"] = float(current_usdt)
+    # Legacy ``profit`` remains ECG-only to avoid mixing units.
+    item["profit"] = float(current_ecg)
+    item["profit_asset"] = (
+        "MIXED"
+        if current_ecg > 0 and current_usdt > 0
+        else "USDT"
+        if current_usdt > 0
+        else "ECG"
+    )
+
+    users[matched_index] = item
     setattr(level_obj, level_field, users)
-    level_obj.save(update_fields=[level_field])
+
+    # Keep count aligned when a legacy/missing display row had to be restored.
+    unique_identities = set()
+    for row in users:
+        if isinstance(row, str):
+            unique_identities.add(("wallet", row))
+        elif isinstance(row, dict):
+            if row.get("telegram_id") is not None:
+                unique_identities.add(("telegram", str(row.get("telegram_id"))))
+            elif row.get("wallet"):
+                unique_identities.add(("wallet", str(row.get("wallet"))))
+
+    setattr(level_obj, count_field, len(unique_identities))
+    level_obj.save(update_fields=[level_field, count_field])
 
 
 @transaction.atomic
@@ -1312,6 +1419,8 @@ def credit_direct_upline_purchase_bonus(
         amount=reward,
         meta={
             "buyer": buyer.wallet_address,
+            "buyer_user_id": buyer.id,
+            "buyer_telegram_id": buyer.telegram_id,
             "invoice": invoice_no,
             "tx": tx_hash,
             "currency": currency,
@@ -1423,6 +1532,8 @@ def credit_indirect_upline_purchase_bonuses(
                 amount=reward,
                 meta={
                     "buyer": buyer.wallet_address,
+                    "buyer_user_id": buyer.id,
+                    "buyer_telegram_id": buyer.telegram_id,
                     "invoice": invoice_no,
                     "tx": tx_hash,
                     "currency": currency,
