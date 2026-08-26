@@ -77,6 +77,7 @@ const CopyIcon = ({ size = 22, className = "" }) => (
     aria-hidden="true"
     focusable="false"
   >
+    {/* this code for icon copy */}
     <rect
       x="8.25"
       y="8.25"
@@ -86,6 +87,7 @@ const CopyIcon = ({ size = 22, className = "" }) => (
       stroke="currentColor"
       strokeWidth="1.75"
     />
+    {/* this code about code for two page together */}
     <path
       d="M15.75 8.25V6.75C15.75 5.64543 14.8546 4.75 13.75 4.75H6.75C5.64543 4.75 4.75 5.64543 4.75 6.75V13.75C4.75 14.8546 5.64543 15.75 6.75 15.75H8.25"
       stroke="currentColor"
@@ -102,13 +104,18 @@ const CopyIcon = ({ size = 22, className = "" }) => (
 // ======================================================
 
 export default function Wallet() {
+  // this function get ton wallet situation 
   const tonWallet = useTonWallet();
+  // this variable include open wallet list and disconnect wallet
   const [tonConnectUI] = useTonConnectUI();
+  // get address wallet from wallet 
   const address = useMemo(
     () => tonWallet?.account?.address,
     [tonWallet]
   );
+  // show address wallet in ui
   const displayAddress = useTonAddress();
+  // ignore all request in moment, send for connect wallet
   const hasConnected = useRef(false);
 
 
@@ -116,11 +123,22 @@ export default function Wallet() {
   // STATES
   // ====================================================
 
+  // this state save all information wallet
   const [wallet, setWallet] = useState(null);
+
+  // this state realize wallet lock or not
   const [walletLocked, setWalletLocked] = useState(false);
+
+  // this state keep all word error about situation wallet realtionship and get note for example("none","network","locked","bad_request","server_error")
   const [connectError, setConnectError] = useState("");
+
+  // this state keep all typr error about situation wallet realtionship and get note for example("none","network","locked","bad_request","server_error")
   const [errorType, setErrorType] = useState("none");
+
+  // this state use for copy note when you click at copy button show toast for users in ui
   const [copiedText, setCopiedText] = useState("");
+
+  // this state show users change wallet or not
   const [isReplacingWallet, setIsReplacingWallet] = useState(false);
 
 
@@ -128,56 +146,106 @@ export default function Wallet() {
   // WITHDRAW STATES
   // ====================================================
 
+  // show users want to withdraw or not if usestate == flase means users didn't want to withdraw of usestate == true means users want to withdraw
   const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
+
+  // this state keep withdraw amount (this state keep variable by string not Number)
+
   const [amount, setAmount] = useState("");
+  
+  // this state keep live ton price
   const [tonPrice, setTonPrice] = useState(null);
+
+  // this state set final assets for withdraw (this state means that users want to what coin want to withdraw for example ecg or ton)
+
   const [withdrawAsset, setWithdrawAsset] = useState("ECG");
+
+  // this state say where is money (for example : first inventory == usdt convert to end inventory == ton)
+
   const [withdrawSource, setWithdrawSource] = useState("ECG");
+
+  // this state it truns out what profit 
   const [withdrawBucket, setWithdrawBucket] = useState("ECG_SELF");
+
+  // this state about destination address wallet
   const [destinationWallet, setDestinationWallet] = useState("");
+
+  // this state about wallet note for example("invalid amount", "please connect your wallet first")
+
   const [withdrawError, setWithdrawError] = useState("");
+
+  // this state about is it withdraw request sending (it is important for ignore double click)
   const [isWithdrawing, setIsWithdrawing] = useState(false);
+
+  // history list withdraw
   const [withdrawHistory, setWithdrawHistory] = useState([]);
+
+  // it truns out loading history
   const [withdrawHistoryLoading, setWithdrawHistoryLoading] = useState(false);
+
+  // this state for stituation withdraw message
   const [withdrawNotice, setWithdrawNotice] = useState("");
+
+  // this state save levels inforamtion referral
   const [referralLevels, setReferralLevels] = useState({});
+
+  // this state save loads information 
   const [referralLevelsLoading, setReferralLevelsLoading] = useState(false);
 
   // ====================================================
   // TON PRICE
   // ====================================================
 
+
+  
   useEffect(() => {
+
+    // use async function beacuse i want send request internet 
     async function getTonPrice() {
       try {
+        //this variable get ton price by api for COINGECKO website
         const res = await fetch(
           "https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd"
         );
+        // this variable convert json string to object
         const data = await res.json();
+        // this state for save ton price 
         setTonPrice(data?.["the-open-network"]?.usd || null);
-      } catch (err) {
+      } catch (err) { // error handling
         console.log("TON price error", err);
       }
     }
+    // calls get tonprice
     getTonPrice();
   }, []);
+
 
 
   // ====================================================
   // REFERRAL
   // ====================================================
 
+
   useEffect(() => {
+    // this variable save ref code that captureinvitercode discover
     const inviterCode = captureInviterCode();
+    // if inviter code exists save at localstorage
+    // this condition needs if users change pages the ref code save at local storage 
     if (inviterCode) {
       localStorage.setItem("inviter_code", inviterCode);
     }
-
+    // this variable check enter from telegram app
+    // check the user enter from telegram or not if not the app doesn't crash
     const tg = window.Telegram?.WebApp;
+    // check telegram has start param send or not 
     if (tg?.initDataUnsafe?.start_param) {
+      // save start param on startparamvalue 
       const startParamValue = tg.initDataUnsafe.start_param;
+      // if start param start with ref this condition work
       if (startParamValue && startParamValue.startsWith("ref_")) {
+        // this variable save referral code without ref_
         const refCode = startParamValue.replace("ref_", "");
+        // this variable save referral code without ref_
         localStorage.setItem("inviter_code", refCode);
       }
     }
@@ -187,16 +255,19 @@ export default function Wallet() {
   // ====================================================
   // SAVE WALLET ADDRESS
   // ====================================================
-
+  
   useEffect(() => {
+    // if wallet connect and address exsits , continue
     if (address) {
+      // load users information from localstorage 
       const currentData = loadUserDataFromStorage() || {};
+      // add new address to information that load for localstorage
       saveUserDataToStorage({
         ...currentData,
         walletAddress: address,
       });
     }
-  }, [address]);
+  }, [address]);// this part very important (when this effect change it is run)
 
 
   // ====================================================
@@ -205,58 +276,83 @@ export default function Wallet() {
 
   const connectAndLoadWallet = useCallback(
     async () => {
+      // this condition has it because 1 - if wallet connected , function didn't run again  2 - if wallet didn't exists go out
       if (hasConnected.current || !address) {
         return;
       }
-
+      // when function run , ignore request repeat
       hasConnected.current = true;
+
+      // clear last notice , before new attempt 
       setConnectError("");
       setErrorType("none");
+      
 
+      // get last referral code for localstorage
       let inviter_code = localStorage.getItem("inviter_code");
 
+      
+      // if localstorage hasn't referral code , attempt again to get url . this trick has benfiet beacuse maybe after wallet connect enter user. 
+ 
       if (!inviter_code) {
         inviter_code = captureInviterCode();
         if (inviter_code) {
           localStorage.setItem("inviter_code", inviter_code);
         }
-      }
+      } 
 
-      let telegramId = null;
-      let telegramUsername = null;
-      let isTelegram = false;
-      let telegramPhotoUrl = null;
+      // after this line get information from telegram if absence use wallet information
+      let telegramId = null;// get id telegram
+      let telegramUsername = null;// get usernametelegram
+      let isTelegram = false;//is true from telegram?
+      let telegramPhotoUrl = null;// get photo from telegram
 
-      const savedData = loadUserDataFromStorage();
+      const savedData = loadUserDataFromStorage();// load localstorage 
 
+      // first condition means that telegram exists second condition means that trust about id is integer third means that number is positive
       if (savedData?.telegramId && Number.isInteger(Number(savedData.telegramId)) && Number(savedData.telegramId) > 0) {
+        //get information from localstorage and use it 
         telegramId = Number(savedData.telegramId);
         telegramUsername = savedData.telegramUsername || null;
         isTelegram = savedData.isTelegram || false;
+        // this part want get information from wallet and telegram
       } else {
+        // get information telegram user
         const tg = window.Telegram?.WebApp;
+        // if telegram get information user means that user is it in telegram
         if (tg?.initDataUnsafe?.user) {
           const user = tg.initDataUnsafe.user;
           telegramId = Number(user.id);
           telegramUsername = user.username || null;
           telegramPhotoUrl = user.photo_url || null;
           isTelegram = true;
+          // save this informatio because didn't user everywhere get information telegram from telegram
           saveUserDataToStorage({
             telegramId,
             telegramUsername,
             telegramPhotoUrl,
             isTelegram: true,
           });
+        // if user enter from browser and have only address wallet
         } else if (address) {
+          // first create a new variable named hash
           let hash = 0;
+          // review all character wallet address
           for (let i = 0; i < address.length; i++) {
+            // each character convert to unicode/ascii
             const char = address.charCodeAt(i);
+            // each charcter shift  bit to left
             hash = (hash << 5) - hash + char;
+            // this line doesn't allow the length bigger
             hash = hash & hash;
           }
+          // maybe hash is negative convert to positive
           telegramId = Number(Math.abs(hash) + 1000000000000);
+          // create telegram username fake
           telegramUsername = `browser_${address.slice(0, 8)}`;
+          // it truns out user didn't enter from telegram
           isTelegram = false;
+          // save information from localstorage
           saveUserDataToStorage({
             telegramId,
             telegramUsername,
@@ -266,10 +362,13 @@ export default function Wallet() {
         }
       }
 
+
+      // despite all ways create random telegram id
       if (!telegramId) {
         telegramId = Number(Math.floor(Math.random() * 1000000000) + 100000000);
       }
 
+      // this payload send to bakend
       const payload = {
         wallet_address: address,
         inviter_code: inviter_code || null,
@@ -279,7 +378,9 @@ export default function Wallet() {
         is_telegram: isTelegram,
       };
 
+      // show payload on console web
       console.log("[CONNECT PAYLOAD]", payload);
+
 
       try {
         const response = await api.post("/connect/", payload);
@@ -289,30 +390,18 @@ export default function Wallet() {
         if (response.data?.user) {
           const user = response.data.user;
           saveUserDataToStorage({
-            telegramId: user.telegram_id || telegramId,
-            telegramUsername: user.telegram_username || telegramUsername,
-            isTelegram: user.is_telegram || isTelegram,
+            telegramId: user.telegram_id ?? telegramId,
+            telegramUsername: user.telegram_username ?? telegramUsername,
+            isTelegram: user.is_telegram ?? isTelegram,
             walletAddress: address,
           });
         }
 
-        setWallet((prev) => {
-          if (!prev) return prev;
-          const value = Number(amount);
-          if (withdrawAsset === "ECG") {
-            return {
-              ...prev,
-              ecg_balance: Math.max(0, Number(prev.ecg_balance || 0) - value),
-            };
-          }
-          if (withdrawAsset === "USDT") {
-            return {
-              ...prev,
-              usdt_balance: Math.max(0, Number(prev.usdt_balance || 0) - value),
-            };
-          }
-          return prev;
-        });
+        const walletResponse = await api.get(
+          `/wallet/${address}/`
+        );
+
+        setWallet(walletResponse.data);
 
         setErrorType("none");
       } catch (e) {
@@ -346,7 +435,7 @@ export default function Wallet() {
         }
       }
     },
-    [address, amount, withdrawAsset]
+    [address]
   );
 
 
