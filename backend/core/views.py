@@ -79,7 +79,13 @@ def _ledger_total(user, ledger_type, asset="ECG"):
 
     for row in user.ledgers.filter(typ=ledger_type):
         meta = dict(row.meta or {})
-        row_asset = str(meta.get("asset") or "ECG").upper()
+        row_asset = str(
+            meta.get("asset")
+            or meta.get("profit_asset")
+            or meta.get("source_asset")
+            or meta.get("output_asset")
+            or "ECG"
+        ).upper()
 
         if row_asset == asset:
             total += Decimal(str(row.amount or 0))
@@ -851,6 +857,19 @@ def wallet_view(request, wallet_address):
         else:
             own_locked_ecg += amount
 
+    # Direct USDT purchases live in PurchaseUSDT, not Purchase.
+    # Include their still-locked 5% own profit in the Tether box.
+    for purchase in user.purchases_usdt.all():
+        amount = Decimal(str(purchase.self_profit_5 or 0))
+        if amount <= 0:
+            continue
+
+        unlock_at = purchase.self_profit_unlock_at
+        if unlock_at and unlock_at <= now:
+            continue
+
+        own_locked_usdt += amount
+
     # ============================================================
     # Profit bucket values shown in the UI
     #
@@ -911,7 +930,22 @@ def wallet_view(request, wallet_address):
     # این موجودی قبلاً در زمان درخواست برداشت کم شده
     # ============================================================
     withdrawable_ecg_profit = Decimal(str(ecg_balance.available or 0))
-    withdrawable_usdt_profit = Decimal(str(usdt_balance.available or 0))
+
+    # Tether shown/withdrawable in this screen is PROFIT only.
+    # AssetBalance remains the hard accounting ceiling, while the visible
+    # profit buckets are the net SELF + REFERRAL amounts after reservations.
+    usdt_asset_available = max(
+        zero,
+        Decimal(str(usdt_balance.available or 0)),
+    )
+    usdt_profit_available = max(
+        zero,
+        own_unlocked_usdt + referral_usdt_total,
+    )
+    withdrawable_usdt_profit = min(
+        usdt_asset_available,
+        usdt_profit_available,
+    )
 
     total_ecg_profit = (
         own_locked_ecg
@@ -980,6 +1014,9 @@ def wallet_view(request, wallet_address):
         # ============================================================
         "withdrawable_ecg_profit": str(withdrawable_ecg_profit),
         "withdrawable_usdt_profit": str(withdrawable_usdt_profit),
+        "usdt_balance": str(withdrawable_usdt_profit),
+        "usdt_asset_available": str(usdt_asset_available),
+        "usdt_profit_available": str(usdt_profit_available),
         "ecg_balance": str(withdrawable_ecg_profit),
         "available_balance": str(withdrawable_ecg_profit),
         "withdrawable_total": str(withdrawable_ecg_profit),
