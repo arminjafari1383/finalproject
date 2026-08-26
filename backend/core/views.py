@@ -94,6 +94,99 @@ def _ledger_total_for_asset(user, ledger_type, asset="ECG"):
     return _ledger_total(user, ledger_type, asset)
 
 
+def _normalize_withdraw_bucket(value):
+    """
+    Normalize frontend/legacy bucket names to SELF / REFERRAL / ALL.
+    """
+    bucket = str(value or "").strip().upper()
+
+    if bucket in {"SELF", "ECG_SELF", "USDT_SELF"}:
+        return "SELF"
+
+    if bucket in {"REFERRAL", "ECG_REFERRAL", "USDT_REFERRAL"}:
+        return "REFERRAL"
+
+    return "ALL"
+
+
+def _withdrawn_total_for_bucket(user, asset="ECG", bucket="SELF"):
+    """
+    Sum amounts that have already been reserved/deducted from a profit bucket
+    at withdrawal-request time.
+
+    PENDING and completed withdrawals stay deducted. Failed/cancelled/rejected
+    rows are ignored if they ever exist.
+    """
+    zero = Decimal("0")
+    total = zero
+    asset = str(asset or "ECG").upper()
+    bucket = _normalize_withdraw_bucket(bucket)
+
+    if bucket not in {"SELF", "REFERRAL"}:
+        return zero
+
+    for row in user.ledgers.filter(typ="WITHDRAW"):
+        meta = dict(row.meta or {})
+
+        source_asset = str(
+            meta.get("source_asset") or "ECG"
+        ).upper()
+
+        row_bucket = _normalize_withdraw_bucket(
+            meta.get("withdraw_bucket")
+        )
+
+        row_status = str(
+            meta.get("status") or ""
+        ).upper()
+
+        if source_asset != asset:
+            continue
+
+        if row_bucket != bucket:
+            continue
+
+        if row_status in {"FAILED", "CANCELLED", "CANCELED", "REJECTED"}:
+            continue
+
+        if not meta.get("balance_deducted_at_request"):
+            continue
+
+        total += abs(Decimal(str(row.amount or 0)))
+
+    return total
+
+
+def _available_profit_bucket(user, asset="ECG", bucket="SELF"):
+    """
+    Return the currently available amount for a specific profit bucket:
+    gross earned ledger amount minus amounts already reserved/withdrawn.
+    """
+    zero = Decimal("0")
+    asset = str(asset or "ECG").upper()
+    bucket = _normalize_withdraw_bucket(bucket)
+
+    if bucket == "SELF":
+        gross = _ledger_total(user, "SELF_PROFIT_UNLOCK", asset)
+
+    elif bucket == "REFERRAL":
+        gross = (
+            _ledger_total(user, "DIRECT_REFERRAL_BONUS", asset)
+            + _ledger_total(user, "INDIRECT_REFERRAL_BONUS", asset)
+        )
+
+    else:
+        return zero
+
+    withdrawn = _withdrawn_total_for_bucket(
+        user,
+        asset,
+        bucket,
+    )
+
+    return max(zero, gross - withdrawn)
+
+
 # ============================================================
 # TON / GRAM on-chain confirmation helpers
 # ============================================================
@@ -758,19 +851,60 @@ def wallet_view(request, wallet_address):
         else:
             own_locked_ecg += amount
 
-    # Own unlocked profit (from Ledger)
-    own_unlocked_ecg = _ledger_total(user, "SELF_PROFIT_UNLOCK", "ECG")
-    own_unlocked_usdt = _ledger_total(user, "SELF_PROFIT_UNLOCK", "USDT")
+    # ============================================================
+    # Profit bucket values shown in the UI
+    #
+    # Gross earned profit remains in the earning ledgers.
+    # WITHDRAW ledgers reserve/deduct money at request time.
+    # Therefore the visible available bucket must be:
+    #     gross earned - already reserved/withdrawn
+    # ============================================================
 
-    # Referral profit (from Ledger)
-    level1_5_ecg = _ledger_total(user, "DIRECT_REFERRAL_BONUS", "ECG")
-    level1_5_usdt = _ledger_total(user, "DIRECT_REFERRAL_BONUS", "USDT")
+    own_unlocked_ecg = _available_profit_bucket(
+        user,
+        "ECG",
+        "SELF",
+    )
+    own_unlocked_usdt = _available_profit_bucket(
+        user,
+        "USDT",
+        "SELF",
+    )
 
-    levels2_5_1_ecg = _ledger_total(user, "INDIRECT_REFERRAL_BONUS", "ECG")
-    levels2_5_1_usdt = _ledger_total(user, "INDIRECT_REFERRAL_BONUS", "USDT")
+    # Gross referral breakdown is still useful for the Level 1 / Levels 2-5
+    # descriptive lines in the UI.
+    level1_5_ecg = _ledger_total(
+        user,
+        "DIRECT_REFERRAL_BONUS",
+        "ECG",
+    )
+    level1_5_usdt = _ledger_total(
+        user,
+        "DIRECT_REFERRAL_BONUS",
+        "USDT",
+    )
 
-    referral_ecg_total = level1_5_ecg + levels2_5_1_ecg
-    referral_usdt_total = level1_5_usdt + levels2_5_1_usdt
+    levels2_5_1_ecg = _ledger_total(
+        user,
+        "INDIRECT_REFERRAL_BONUS",
+        "ECG",
+    )
+    levels2_5_1_usdt = _ledger_total(
+        user,
+        "INDIRECT_REFERRAL_BONUS",
+        "USDT",
+    )
+
+    referral_ecg_total = _available_profit_bucket(
+        user,
+        "ECG",
+        "REFERRAL",
+    )
+    referral_usdt_total = _available_profit_bucket(
+        user,
+        "USDT",
+        "REFERRAL",
+    )
 
     # ============================================================
     # موجودی قابل برداشت = موجودی AssetBalance
@@ -864,6 +998,7 @@ def wallet_view(request, wallet_address):
         "purchase_profit_usdt": str(own_locked_usdt + own_unlocked_usdt),
         "purchase_profit_usdt_locked": str(own_locked_usdt),
         "purchase_profit_usdt_unlocked": str(own_unlocked_usdt),
+        "self_profit_usdt_unlocked": str(own_unlocked_usdt),
         "usdt_self_locked": str(own_locked_usdt),
         "usdt_self_unlocked": str(own_unlocked_usdt),
 
@@ -1239,7 +1374,7 @@ def request_withdraw(request):
     release_matured_purchase_profits(user)
 
     # ============================================================
-    # USDT WITHDRAWAL - balance deducted at request time
+    # USDT WITHDRAWAL - reserve/deduct immediately at request time
     # ============================================================
     if source_asset == "USDT":
         source_amount = requested_amount.quantize(Decimal("0.000001"))
@@ -1248,29 +1383,56 @@ def request_withdraw(request):
             source_amount / ton_rate
         ).quantize(Decimal("0.000000001"))
 
+        withdraw_bucket = _normalize_withdraw_bucket(
+            request.data.get("withdraw_bucket")
+        )
+
         with transaction.atomic():
             balance, _ = (
                 AssetBalance.objects
                 .select_for_update()
                 .get_or_create(user=user, asset="USDT")
             )
-            available = Decimal(str(balance.available or 0))
-            max_ton = (
-                        available / ton_rate
-                    ).quantize(Decimal("0.000000001"))
 
-            if source_amount > available:
+            total_available = Decimal(
+                str(balance.available or 0)
+            )
+
+            if withdraw_bucket in {"SELF", "REFERRAL"}:
+                bucket_available = _available_profit_bucket(
+                    user,
+                    "USDT",
+                    withdraw_bucket,
+                )
+            else:
+                bucket_available = total_available
+
+            usable_available = min(
+                total_available,
+                bucket_available,
+            )
+
+            max_ton = (
+                usable_available / ton_rate
+            ).quantize(Decimal("0.000000001"))
+
+            if source_amount > usable_available:
                 return Response(
                     {
                         "error": "Insufficient unlocked USDT profit.",
-                        "available_usdt": str(available),
+                        "available_usdt": str(usable_available),
+                        "total_available_usdt": str(total_available),
+                        "bucket_available_usdt": str(bucket_available),
+                        "withdraw_bucket": withdraw_bucket,
                         "max_ton": str(max_ton),
                     },
                     status=400,
                 )
 
-            # ✅ Deduct balance immediately
-            balance.available = available - source_amount
+            # IMPORTANT:
+            # AssetBalance.available is the TOTAL available USDT balance.
+            # Never overwrite it with a bucket-only balance.
+            balance.available = total_available - source_amount
             balance.save(update_fields=["available"])
 
             req = WithdrawRequest.objects.create(
@@ -1292,8 +1454,10 @@ def request_withdraw(request):
                     "asset": "TON",
                     "status": "PENDING",
                     "destination": destination,
+                    "withdraw_bucket": withdraw_bucket,
                     "balance_deducted_at_request": True,
                     "deducted_amount": str(source_amount),
+                    "requested_ton": str(ton_amount),
                 },
             )
 
@@ -1362,17 +1526,26 @@ def request_withdraw(request):
             )
 
     # ============================================================
-    # ECG WITHDRAWAL - balance deducted at request time
+    # ECG WITHDRAWAL - reserve/deduct immediately at request time
     # ============================================================
     else:  # source_asset == "ECG"
         if is_ton:
+            # Frontend sends TON amount when ECG is withdrawn as TON.
+            # Convert the requested TON to the real ECG debit.
             ecg_amount = (
                 requested_amount * ton_rate * ECG_PER_USD
             ).quantize(Decimal("0.000001"), rounding=ROUND_UP)
             ton_amount = requested_amount
         else:
-            ecg_amount = requested_amount
+            # Direct ECG withdrawal: input amount already is ECG.
+            ecg_amount = requested_amount.quantize(
+                Decimal("0.000001")
+            )
             ton_amount = Decimal("0")
+
+        withdraw_bucket = _normalize_withdraw_bucket(
+            request.data.get("withdraw_bucket")
+        )
 
         with transaction.atomic():
             ecg_balance, _ = (
@@ -1383,39 +1556,41 @@ def request_withdraw(request):
                     asset="ECG"
                 )
             )
-            withdraw_bucket = str(
-                request.data.get("withdraw_bucket", "")
-                or ""
-            ).upper()
 
-            # Calculate available balance from the correct bucket
-            if withdraw_bucket == "REFERRAL":
-                available = (
-                    _ledger_total(user, "DIRECT_REFERRAL_BONUS", "ECG")
-                    +
-                    _ledger_total(user, "INDIRECT_REFERRAL_BONUS", "ECG")
+            total_available = Decimal(
+                str(ecg_balance.available or 0)
+            )
+
+            if withdraw_bucket in {"SELF", "REFERRAL"}:
+                bucket_available = _available_profit_bucket(
+                    user,
+                    "ECG",
+                    withdraw_bucket,
                 )
-
-            elif withdraw_bucket == "SELF":
-                available = _ledger_total(user, "SELF_PROFIT_UNLOCK", "ECG")
-
             else:
-                available = Decimal(
-                    str(ecg_balance.available or 0)
-                )
+                bucket_available = total_available
 
-            if ecg_amount > available:
+            usable_available = min(
+                total_available,
+                bucket_available,
+            )
+
+            if ecg_amount > usable_available:
                 return Response(
                     {
                         "error": "Insufficient ECG balance.",
-                        "available": str(available),
+                        "available": str(usable_available),
+                        "total_available": str(total_available),
+                        "bucket_available": str(bucket_available),
                         "withdraw_bucket": withdraw_bucket,
                     },
                     status=400,
                 )
 
-            # ✅ Deduct balance immediately
-            ecg_balance.available = available - ecg_amount
+            # IMPORTANT:
+            # AssetBalance.available is the TOTAL ECG balance.
+            # Deduct from the total; never replace it with bucket_available.
+            ecg_balance.available = total_available - ecg_amount
             ecg_balance.save(update_fields=["available"])
 
             req = WithdrawRequest.objects.create(
@@ -1439,6 +1614,7 @@ def request_withdraw(request):
                     "requested_ton": str(ton_amount),
                     "withdraw_bucket": withdraw_bucket,
                     "destination": destination,
+                    "status": "PENDING",
                     "balance_deducted_at_request": True,
                     "deducted_amount": str(ecg_amount),
                 },
@@ -1537,6 +1713,7 @@ def serialize_withdraw(item):
         "created_at": item.created_at,
         "completed_at": completed_at,
         "balance_deducted_at_request": meta.get("balance_deducted_at_request", False),
+        "withdraw_bucket": _normalize_withdraw_bucket(meta.get("withdraw_bucket")),
     }
 
 

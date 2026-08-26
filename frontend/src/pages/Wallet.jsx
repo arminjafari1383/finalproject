@@ -715,124 +715,17 @@ export default function Wallet() {
           withdrawResponse: withdrawResponse?.data,
         }));
 
-       setWallet((prev) => {
-            if (!prev) return prev;
+      // Backend is the source of truth.
+      // /withdraw/request/ has already reserved/deducted the source balance.
+      // Reload the wallet immediately so the UI shows the exact backend value.
+      const walletResponse = await api.get(`/wallet/${address}/`);
+      setWallet(walletResponse.data);
 
-            // =========================
-            // ECG - OWN
-            // =========================
-            if (
-              withdrawSource === "ECG" &&
-              withdrawBucket === "SELF"
-            ) {
-              const current =
-                Number(
-                  prev.purchase_profit_ecg_unlocked ??
-                  prev.ecg_self_unlocked ??
-                  0
-                );
-
-              const nextValue = Math.max(0, current - value);
-
-              return {
-                ...prev,
-
-                purchase_profit_ecg_unlocked: nextValue,
-                ecg_self_unlocked: nextValue,
-
-                withdrawable_ecg_profit: Math.max(
-                  0,
-                  Number(prev.withdrawable_ecg_profit || 0) - value
-                ),
-              };
-            }
-
-            // =========================
-            // ECG - REFERRAL
-            // =========================
-            if (
-              withdrawSource === "ECG" &&
-              withdrawBucket === "REFERRAL"
-            ) {
-              const current =
-                Number(
-                  prev.referral_profit_ecg_unlocked ??
-                  prev.referral_available_ecg ??
-                  prev.available_referral_ecg ??
-                  prev.ecg_referral_profit ??
-                  0
-                );
-
-              const nextValue = Math.max(0, current - value);
-
-              return {
-                ...prev,
-
-                referral_profit_ecg_unlocked: nextValue,
-                referral_available_ecg: nextValue,
-                available_referral_ecg: nextValue,
-                ecg_referral_profit: nextValue,
-
-                withdrawable_ecg_profit: Math.max(
-                  0,
-                  Number(prev.withdrawable_ecg_profit || 0) - value
-                ),
-              };
-            }
-
-            // =========================
-            // USDT - OWN
-            // =========================
-            if (
-              withdrawSource === "USDT" &&
-              withdrawBucket === "SELF"
-            ) {
-              const current =
-                Number(prev.self_profit_usdt_unlocked || 0);
-
-              const nextValue = Math.max(0, current - value);
-
-              return {
-                ...prev,
-
-                self_profit_usdt_unlocked: nextValue,
-
-                withdrawable_usdt_profit: Math.max(
-                  0,
-                  Number(prev.withdrawable_usdt_profit || 0) - value
-                ),
-              };
-            }
-
-            // =========================
-            // USDT - REFERRAL
-            // =========================
-            if (
-              withdrawSource === "USDT" &&
-              withdrawBucket === "REFERRAL"
-            ) {
-              const current =
-                Number(prev.referral_profit_usdt_unlocked || 0);
-
-              const nextValue = Math.max(0, current - value);
-
-              return {
-                ...prev,
-
-                referral_profit_usdt_unlocked: nextValue,
-
-                withdrawable_usdt_profit: Math.max(
-                  0,
-                  Number(prev.withdrawable_usdt_profit || 0) - value
-                ),
-              };
-            }
-
-            return prev;
-            });
-
-      // const walletResponse = await api.get(`/wallet/${address}/`);
-      // setWallet(walletResponse.data);
+      setDebugInfo((prev) => ({
+        ...prev,
+        step: "AFTER BACKEND WALLET REFRESH",
+        walletAfterWithdraw: walletResponse?.data,
+      }));
 
       const createdRequest = withdrawResponse?.data || {};
 
