@@ -141,6 +141,8 @@ export default function Wallet() {
   // this state show users change wallet or not
   const [isReplacingWallet, setIsReplacingWallet] = useState(false);
 
+  const [debugInfo, setDebugInfo] = useState({});
+
 
   // ====================================================
   // WITHDRAW STATES
@@ -695,7 +697,23 @@ export default function Wallet() {
     try {
       setIsWithdrawing(true);
 
+      setDebugInfo({
+            step: "BEFORE WITHDRAW",
+            amount,
+            withdrawSource,
+            withdrawBucket,
+            withdrawAsset,
+            wallet,
+            payload,
+          });
+
       const withdrawResponse = await api.post("/withdraw/request/", payload);
+
+      setDebugInfo((prev) => ({
+          ...prev,
+          step: "AFTER WITHDRAW POST",
+          withdrawResponse: withdrawResponse?.data,
+        }));
 
        setWallet((prev) => {
             if (!prev) return prev;
@@ -1601,6 +1619,34 @@ export default function Wallet() {
                     ⏳ {withdrawNotice}
                   </div>
                 )}
+                <div
+                    style={{
+                      marginTop: 16,
+                      padding: 12,
+                      border: "1px solid #555",
+                      borderRadius: 10,
+                      background: "#111",
+                      color: "#00ff88",
+                      fontSize: 11,
+                      overflowX: "auto",
+                      maxHeight: 350,
+                      overflowY: "auto",
+                    }}
+                  >
+                    <div style={{ marginBottom: 8, fontWeight: 800 }}>
+                      DEBUG INFO
+                    </div>
+
+                    <pre
+                      style={{
+                        margin: 0,
+                        whiteSpace: "pre-wrap",
+                        wordBreak: "break-word",
+                      }}
+                    >
+                      {JSON.stringify(debugInfo, null, 2)}
+                    </pre>
+                  </div>
 
 
                 {/* WITHDRAW HISTORY */}
