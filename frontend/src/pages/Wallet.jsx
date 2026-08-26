@@ -697,8 +697,36 @@ export default function Wallet() {
 
       const withdrawResponse = await api.post("/withdraw/request/", payload);
 
-      const walletResponse = await api.get(`/wallet/${address}/`);
-      setWallet(walletResponse.data);
+       setWallet((prev) => {
+          if (!prev) return prev;
+
+          const value = Number(amount);
+
+          if (withdrawSource === "ECG") {
+            return {
+              ...prev,
+              withdrawable_ecg_profit: Math.max(
+                0,
+                Number(prev.withdrawable_ecg_profit || 0) - value
+              ),
+            };
+          }
+
+          if (withdrawSource === "USDT") {
+            return {
+              ...prev,
+              withdrawable_usdt_profit: Math.max(
+                0,
+                Number(prev.withdrawable_usdt_profit || 0) - value
+              ),
+            };
+          }
+
+          return prev;
+        });
+
+      // const walletResponse = await api.get(`/wallet/${address}/`);
+      // setWallet(walletResponse.data);
 
       const createdRequest = withdrawResponse?.data || {};
 
