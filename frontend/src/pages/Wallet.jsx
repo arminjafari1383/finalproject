@@ -660,7 +660,7 @@ export default function Wallet() {
     setWithdrawError("");
     setWithdrawNotice("");
 
-    const n = Number(amount);
+    const value = Number(amount);
 
     if (!Number.isFinite(n) || n <= 0) {
       setWithdrawError("Invalid amount.");
