@@ -247,6 +247,68 @@ def _profit_bucket_snapshot(user, asset="ECG", authoritative_available=None):
     }
 
 
+
+
+def _reconcile_profit_asset_available(user, asset="ECG"):
+    """
+    Rebuild AssetBalance.available from the accounting ledgers.
+
+    This is an idempotent legacy backfill + ongoing consistency check:
+      available = unlocked SELF profit + referral profit - reserved withdrawals
+
+    Older deployments could write referral-profit Ledger rows / ReferralLevel
+    profit snapshots without crediting AssetBalance.available.  Setting the
+    balance to the ledger-derived net amount (instead of adding a delta) makes
+    the repair safe to run repeatedly and also respects historical withdrawals.
+
+    ECG/USDT AssetBalance.available is used by this project only for unlocked
+    profit; locked principal/profit remains in AssetBalance.locked.
+    """
+    asset = str(asset or "ECG").upper()
+    if asset not in {"ECG", "USDT"}:
+        return None
+
+    snapshot = _profit_bucket_snapshot(
+        user,
+        asset,
+        authoritative_available=None,
+    )
+
+    expected_available = max(
+        Decimal("0"),
+        snapshot["SELF"] + snapshot["REFERRAL"],
+    )
+
+    with transaction.atomic():
+        balance, _ = (
+            AssetBalance.objects
+            .select_for_update()
+            .get_or_create(user=user, asset=asset)
+        )
+
+        current_available = Decimal(str(balance.available or 0))
+
+        if current_available != expected_available:
+            logger.warning(
+                "[PROFIT_BALANCE_RECONCILE] user=%s asset=%s current=%s expected=%s "
+                "gross_self=%s gross_referral=%s reserved_self=%s "
+                "reserved_referral=%s reserved_legacy=%s",
+                user.id,
+                asset,
+                current_available,
+                expected_available,
+                snapshot["GROSS_SELF"],
+                snapshot["GROSS_REFERRAL"],
+                snapshot["RESERVED_SELF"],
+                snapshot["RESERVED_REFERRAL"],
+                snapshot["RESERVED_LEGACY"],
+            )
+
+            balance.available = expected_available
+            balance.save(update_fields=["available"])
+
+    return balance
+
 def _withdrawn_total_for_bucket(user, asset="ECG", bucket="SELF"):
     """Backward-compatible helper used by older code paths."""
     bucket = _normalize_withdraw_bucket(bucket)
@@ -888,6 +950,11 @@ def wallet_view(request, wallet_address):
     reconcile_existing_referral_join_rewards(user)
     release_matured_purchase_profits(user)
 
+    # Legacy-safe backfill: make AssetBalance.available match the real
+    # ledger-derived unlocked profit after historical withdrawals.
+    _reconcile_profit_asset_available(user, "ECG")
+    _reconcile_profit_asset_available(user, "USDT")
+
     user.refresh_from_db()
     wallet, _ = Wallet.objects.get_or_create(user=user)
 
@@ -1476,6 +1543,11 @@ def request_withdraw(request):
     )
 
     release_matured_purchase_profits(user)
+
+    # Ensure old pre-fix referral profits are available before validating a
+    # withdrawal, while already-recorded withdrawals stay deducted.
+    if source_asset in {"ECG", "USDT"}:
+        _reconcile_profit_asset_available(user, source_asset)
 
     # ============================================================
     # USDT WITHDRAWAL - reserve/deduct immediately at request time
