@@ -662,7 +662,7 @@ export default function Wallet() {
 
     const value = Number(amount);
 
-    if (!Number.isFinite(n) || n <= 0) {
+    if (!Number.isFinite(value) || value <= 0) {
       setWithdrawError("Invalid amount.");
       return;
     }
@@ -691,7 +691,7 @@ export default function Wallet() {
       asset: withdrawSource === "USDT" ? "TON" : withdrawAsset,
       scope: withdrawSource === "USDT" ? "USDT_PROFIT_ONLY" : "ALL_WITHDRAWABLE",
       withdraw_bucket: withdrawBucket,
-      amount: n,
+      amount: value,
     };
 
     try {
