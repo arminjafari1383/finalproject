@@ -115,21 +115,22 @@ def _normalize_withdraw_bucket(value):
     return "ALL"
 
 
-def _withdrawn_total_for_bucket(user, asset="ECG", bucket="SELF"):
+def _withdraw_reservation_breakdown(user, asset="ECG"):
     """
-    Sum amounts that have already been reserved/deducted from a profit bucket
-    at withdrawal-request time.
+    Return withdrawal reservations for one source asset.
 
-    PENDING and completed withdrawals stay deducted. Failed/cancelled/rejected
-    rows are ignored if they ever exist.
+    New withdrawals carry withdraw_bucket=SELF/REFERRAL. Older USDT
+    withdrawals did not store that field, so they are tracked as LEGACY.
+    Only rows that actually deducted AssetBalance at request time count.
     """
     zero = Decimal("0")
-    total = zero
     asset = str(asset or "ECG").upper()
-    bucket = _normalize_withdraw_bucket(bucket)
 
-    if bucket not in {"SELF", "REFERRAL"}:
-        return zero
+    totals = {
+        "SELF": zero,
+        "REFERRAL": zero,
+        "LEGACY": zero,
+    }
 
     for row in user.ledgers.filter(typ="WITHDRAW"):
         meta = dict(row.meta or {})
@@ -138,19 +139,12 @@ def _withdrawn_total_for_bucket(user, asset="ECG", bucket="SELF"):
             meta.get("source_asset") or "ECG"
         ).upper()
 
-        row_bucket = _normalize_withdraw_bucket(
-            meta.get("withdraw_bucket")
-        )
+        if source_asset != asset:
+            continue
 
         row_status = str(
             meta.get("status") or ""
         ).upper()
-
-        if source_asset != asset:
-            continue
-
-        if row_bucket != bucket:
-            continue
 
         if row_status in {"FAILED", "CANCELLED", "CANCELED", "REJECTED"}:
             continue
@@ -158,39 +152,119 @@ def _withdrawn_total_for_bucket(user, asset="ECG", bucket="SELF"):
         if not meta.get("balance_deducted_at_request"):
             continue
 
-        total += abs(Decimal(str(row.amount or 0)))
+        amount = abs(Decimal(str(row.amount or 0)))
+        bucket = _normalize_withdraw_bucket(
+            meta.get("withdraw_bucket")
+        )
 
-    return total
+        if bucket in {"SELF", "REFERRAL"}:
+            totals[bucket] += amount
+        else:
+            totals["LEGACY"] += amount
+
+    return totals
 
 
-def _available_profit_bucket(user, asset="ECG", bucket="SELF"):
+def _profit_bucket_snapshot(user, asset="ECG", authoritative_available=None):
     """
-    Return the currently available amount for a specific profit bucket:
-    gross earned ledger amount minus amounts already reserved/withdrawn.
+    Build the current SELF/REFERRAL profit balances from accounting data.
+
+    1) Start from gross earning ledgers.
+    2) Subtract bucket-tagged withdrawals.
+    3) Subtract legacy unbucketed withdrawals (old USDT endpoint).
+       Because the old endpoint discarded the requested bucket, exact historic
+       attribution is impossible. Referral is consumed first because it is the
+       instantly-withdrawable bucket; SELF is consumed only after referral.
+    4) Cap the result to AssetBalance.available, which is the hard accounting
+       source of truth and was already debited at request time.
     """
     zero = Decimal("0")
     asset = str(asset or "ECG").upper()
-    bucket = _normalize_withdraw_bucket(bucket)
 
-    if bucket == "SELF":
-        gross = _ledger_total(user, "SELF_PROFIT_UNLOCK", asset)
-
-    elif bucket == "REFERRAL":
-        gross = (
-            _ledger_total(user, "DIRECT_REFERRAL_BONUS", asset)
-            + _ledger_total(user, "INDIRECT_REFERRAL_BONUS", asset)
-        )
-
-    else:
-        return zero
-
-    withdrawn = _withdrawn_total_for_bucket(
+    gross_self = _ledger_total(
         user,
+        "SELF_PROFIT_UNLOCK",
         asset,
-        bucket,
+    )
+    gross_referral = (
+        _ledger_total(user, "DIRECT_REFERRAL_BONUS", asset)
+        + _ledger_total(user, "INDIRECT_REFERRAL_BONUS", asset)
     )
 
-    return max(zero, gross - withdrawn)
+    reserved = _withdraw_reservation_breakdown(user, asset)
+
+    self_available = max(
+        zero,
+        gross_self - reserved["SELF"],
+    )
+    referral_available = max(
+        zero,
+        gross_referral - reserved["REFERRAL"],
+    )
+
+    # Legacy USDT withdrawals were deducted from AssetBalance but the old
+    # backend did not persist SELF/REFERRAL. Consume referral first.
+    legacy_remaining = reserved["LEGACY"]
+
+    take = min(referral_available, legacy_remaining)
+    referral_available -= take
+    legacy_remaining -= take
+
+    take = min(self_available, legacy_remaining)
+    self_available -= take
+    legacy_remaining -= take
+
+    # AssetBalance.available is authoritative. If historical rows or migrations
+    # leave ledger-derived buckets above that hard balance, trim the difference
+    # rather than showing money that cannot actually be withdrawn.
+    if authoritative_available is not None:
+        hard_available = max(
+            zero,
+            Decimal(str(authoritative_available or 0)),
+        )
+
+        overflow = max(
+            zero,
+            (self_available + referral_available) - hard_available,
+        )
+
+        take = min(referral_available, overflow)
+        referral_available -= take
+        overflow -= take
+
+        take = min(self_available, overflow)
+        self_available -= take
+        overflow -= take
+
+    return {
+        "SELF": max(zero, self_available),
+        "REFERRAL": max(zero, referral_available),
+        "GROSS_SELF": max(zero, gross_self),
+        "GROSS_REFERRAL": max(zero, gross_referral),
+        "RESERVED_SELF": reserved["SELF"],
+        "RESERVED_REFERRAL": reserved["REFERRAL"],
+        "RESERVED_LEGACY": reserved["LEGACY"],
+    }
+
+
+def _withdrawn_total_for_bucket(user, asset="ECG", bucket="SELF"):
+    """Backward-compatible helper used by older code paths."""
+    bucket = _normalize_withdraw_bucket(bucket)
+    if bucket not in {"SELF", "REFERRAL"}:
+        return Decimal("0")
+    return _withdraw_reservation_breakdown(user, asset)[bucket]
+
+
+def _available_profit_bucket(user, asset="ECG", bucket="SELF", authoritative_available=None):
+    """Return one current profit bucket."""
+    bucket = _normalize_withdraw_bucket(bucket)
+    if bucket not in {"SELF", "REFERRAL"}:
+        return Decimal("0")
+    return _profit_bucket_snapshot(
+        user,
+        asset,
+        authoritative_available=authoritative_available,
+    )[bucket]
 
 
 # ============================================================
@@ -857,18 +931,9 @@ def wallet_view(request, wallet_address):
         else:
             own_locked_ecg += amount
 
-    # Direct USDT purchases live in PurchaseUSDT, not Purchase.
-    # Include their still-locked 5% own profit in the Tether box.
-    for purchase in user.purchases_usdt.all():
-        amount = Decimal(str(purchase.self_profit_5 or 0))
-        if amount <= 0:
-            continue
-
-        unlock_at = purchase.self_profit_unlock_at
-        if unlock_at and unlock_at <= now:
-            continue
-
-        own_locked_usdt += amount
+    # NOTE: PurchaseUSDT is a purchase PAID WITH USDT that outputs ECG in
+    # services.register_purchase_usdt(). Its 5% own profit is ECG, not USDT.
+    # Therefore PurchaseUSDT must NOT be added to the Tether Own Profit box.
 
     # ============================================================
     # Profit bucket values shown in the UI
@@ -879,16 +944,28 @@ def wallet_view(request, wallet_address):
     #     gross earned - already reserved/withdrawn
     # ============================================================
 
-    own_unlocked_ecg = _available_profit_bucket(
+    ecg_asset_available = max(
+        zero,
+        Decimal(str(ecg_balance.available or 0)),
+    )
+    usdt_asset_available = max(
+        zero,
+        Decimal(str(usdt_balance.available or 0)),
+    )
+
+    ecg_bucket_snapshot = _profit_bucket_snapshot(
         user,
         "ECG",
-        "SELF",
+        authoritative_available=ecg_asset_available,
     )
-    own_unlocked_usdt = _available_profit_bucket(
+    usdt_bucket_snapshot = _profit_bucket_snapshot(
         user,
         "USDT",
-        "SELF",
+        authoritative_available=usdt_asset_available,
     )
+
+    own_unlocked_ecg = ecg_bucket_snapshot["SELF"]
+    own_unlocked_usdt = usdt_bucket_snapshot["SELF"]
 
     # Gross referral breakdown is still useful for the Level 1 / Levels 2-5
     # descriptive lines in the UI.
@@ -914,38 +991,23 @@ def wallet_view(request, wallet_address):
         "USDT",
     )
 
-    referral_ecg_total = _available_profit_bucket(
-        user,
-        "ECG",
-        "REFERRAL",
-    )
-    referral_usdt_total = _available_profit_bucket(
-        user,
-        "USDT",
-        "REFERRAL",
-    )
+    referral_ecg_total = ecg_bucket_snapshot["REFERRAL"]
+    referral_usdt_total = usdt_bucket_snapshot["REFERRAL"]
 
     # ============================================================
-    # موجودی قابل برداشت = موجودی AssetBalance
-    # این موجودی قبلاً در زمان درخواست برداشت کم شده
+    # Withdrawable profit after all reservations.
+    # The bucket snapshot is already capped to AssetBalance.available.
     # ============================================================
-    withdrawable_ecg_profit = Decimal(str(ecg_balance.available or 0))
-
-    # Tether shown/withdrawable in this screen is PROFIT only.
-    # AssetBalance remains the hard accounting ceiling, while the visible
-    # profit buckets are the net SELF + REFERRAL amounts after reservations.
-    usdt_asset_available = max(
+    withdrawable_ecg_profit = max(
         zero,
-        Decimal(str(usdt_balance.available or 0)),
+        own_unlocked_ecg + referral_ecg_total,
     )
+
     usdt_profit_available = max(
         zero,
         own_unlocked_usdt + referral_usdt_total,
     )
-    withdrawable_usdt_profit = min(
-        usdt_asset_available,
-        usdt_profit_available,
-    )
+    withdrawable_usdt_profit = usdt_profit_available
 
     total_ecg_profit = (
         own_locked_ecg
@@ -1017,6 +1079,11 @@ def wallet_view(request, wallet_address):
         "usdt_balance": str(withdrawable_usdt_profit),
         "usdt_asset_available": str(usdt_asset_available),
         "usdt_profit_available": str(usdt_profit_available),
+        "usdt_self_gross": str(usdt_bucket_snapshot["GROSS_SELF"]),
+        "usdt_referral_gross": str(usdt_bucket_snapshot["GROSS_REFERRAL"]),
+        "usdt_reserved_self": str(usdt_bucket_snapshot["RESERVED_SELF"]),
+        "usdt_reserved_referral": str(usdt_bucket_snapshot["RESERVED_REFERRAL"]),
+        "usdt_reserved_legacy": str(usdt_bucket_snapshot["RESERVED_LEGACY"]),
         "ecg_balance": str(withdrawable_ecg_profit),
         "available_balance": str(withdrawable_ecg_profit),
         "withdrawable_total": str(withdrawable_ecg_profit),
@@ -1440,6 +1507,7 @@ def request_withdraw(request):
                     user,
                     "USDT",
                     withdraw_bucket,
+                    authoritative_available=total_available,
                 )
             else:
                 bucket_available = total_available
@@ -1603,6 +1671,7 @@ def request_withdraw(request):
                     user,
                     "ECG",
                     withdraw_bucket,
+                    authoritative_available=total_available,
                 )
             else:
                 bucket_available = total_available
