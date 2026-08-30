@@ -2311,7 +2311,7 @@ const [totalRewards, setTotalRewards] =
                       </span>
 
                       <span className="drawer-telegram">
-                        @Ai_polyfi_support
+                        @Ai_POLYFI
                       </span>
 
                     </a>
