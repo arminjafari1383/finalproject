@@ -143,10 +143,6 @@ export default function Wallet() {
 
   // this state show users change wallet or not
   const [isReplacingWallet, setIsReplacingWallet] = useState(false);
-
-  const [debugInfo, setDebugInfo] = useState({});
-
-
   // ====================================================
   // WITHDRAW STATES
   // ====================================================
@@ -785,37 +781,12 @@ export default function Wallet() {
 
     try {
       setIsWithdrawing(true);
-
-      setDebugInfo({
-            step: "BEFORE WITHDRAW",
-            amount,
-            withdrawSource,
-            withdrawBucket,
-            withdrawAsset,
-            wallet,
-            payload,
-          });
-
       const withdrawResponse = await api.post("/withdraw/request/", payload);
-
-      setDebugInfo((prev) => ({
-          ...prev,
-          step: "AFTER WITHDRAW POST",
-          withdrawResponse: withdrawResponse?.data,
-        }));
-
       // Backend is the source of truth.
       // /withdraw/request/ has already reserved/deducted the source balance.
       // Reload the wallet immediately so the UI shows the exact backend value.
       const walletResponse = await api.get(`/wallet/${address}/`);
       setWallet(walletResponse.data);
-
-      setDebugInfo((prev) => ({
-        ...prev,
-        step: "AFTER BACKEND WALLET REFRESH",
-        walletAfterWithdraw: walletResponse?.data,
-      }));
-
       const createdRequest = withdrawResponse?.data || {};
 
       setWithdrawNotice(
@@ -1601,34 +1572,6 @@ export default function Wallet() {
                     ⏳ {withdrawNotice}
                   </div>
                 )}
-                <div
-                    style={{
-                      marginTop: 16,
-                      padding: 12,
-                      border: "1px solid #555",
-                      borderRadius: 10,
-                      background: "#111",
-                      color: "#00ff88",
-                      fontSize: 11,
-                      overflowX: "auto",
-                      maxHeight: 350,
-                      overflowY: "auto",
-                    }}
-                  >
-                    <div style={{ marginBottom: 8, fontWeight: 800 }}>
-                      DEBUG INFO
-                    </div>
-
-                    <pre
-                      style={{
-                        margin: 0,
-                        whiteSpace: "pre-wrap",
-                        wordBreak: "break-word",
-                      }}
-                    >
-                      {JSON.stringify(debugInfo, null, 2)}
-                    </pre>
-                  </div>
 
 
                 {/* WITHDRAW HISTORY */}
@@ -1808,36 +1751,6 @@ export default function Wallet() {
                     </div>
                   )}
                 </section>
-
-
-                {/* ================================================= */}
-                {/* TEST BUTTON - REMOVE AFTER TESTING */}
-                {/* ================================================= */}
-
-                <button
-                  className="wallet-disconnect-btn"
-                  onClick={() => {
-                    setWithdrawError("");
-                    setWithdrawNotice("");
-                    setAmount("0.5");
-                    setWithdrawSource("ECG");
-                    setWithdrawBucket("SELF");
-                    setWithdrawAsset("TON");
-                    setDestinationWallet("UQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
-                    setIsWithdrawOpen(true);
-                  }}
-                  style={{
-                    borderColor: "rgba(255, 200, 50, 0.5)",
-                    color: "#ffd700",
-                    marginBottom: "10px",
-                    background: "rgba(255, 200, 50, 0.08)",
-                    borderWidth: "2px",
-                  }}
-                >
-                  🧪 Test Withdraw Modal (No Balance Required)
-                </button>
-
-
                 {/* REPLACE WALLET */}
 
                 <button
