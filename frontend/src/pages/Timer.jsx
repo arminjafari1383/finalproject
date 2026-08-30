@@ -2298,7 +2298,7 @@ const [totalRewards, setTotalRewards] =
                         drawer-main-btn
                         drawer-support-btn
                       "
-                      href="https://t.me/Ai_polyfi_support"
+                      href="https://t.me/Ai_POLYFI"
                       target="_blank"
                       rel="noreferrer"
                       onClick={() =>

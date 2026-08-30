@@ -658,18 +658,61 @@ export default function Purchase() {
   // =========================
 
   const allInvoices = useMemo(() => {
-    const confirmed = invoices.map((invoice) => ({
-      ...invoice,
-      currency: "TON",
-      __pending: false,
-    }));
+    const seen = new Set();
+    const paidInvoices = [];
 
-    if (!pendingInvoice) {
-      return confirmed;
+    for (const invoice of invoices) {
+      if (!invoice || typeof invoice !== "object") {
+        continue;
+      }
+
+      const invoiceNo = String(invoice.invoice_no || "").trim();
+      const txHash = String(invoice.ton_tx_hash || "").trim();
+      const tonAmountValue = Number(invoice.ton_amount ?? 0);
+      const paymentStatus = String(
+        invoice.payment_status ||
+        invoice.status ||
+        invoice.__status ||
+        ""
+      ).trim().toUpperCase();
+
+      // فقط فاکتور واقعی و کاملِ پرداخت‌شده نمایش داده شود.
+      // فاکتورهای pending/خالی/ناقص در UI نمایش داده نمی‌شوند.
+      if (
+        invoice.__pending === true ||
+        !invoiceNo ||
+        invoiceNo.startsWith("PENDING-") ||
+        !txHash ||
+        txHash === "-" ||
+        txHash.startsWith("TEST_") ||
+        ["FAILED", "CANCELLED", "CANCELED", "REJECTED", "PENDING", "SAVING"].includes(
+          paymentStatus
+        ) ||
+        !Number.isFinite(tonAmountValue) ||
+        tonAmountValue <= 0
+      ) {
+        continue;
+      }
+
+      // اگر همان پرداخت دوبار از state و API برگشت، فقط یک کارت نشان بده.
+      const dedupeKey = txHash || invoiceNo;
+
+      if (seen.has(dedupeKey)) {
+        continue;
+      }
+
+      seen.add(dedupeKey);
+
+      paidInvoices.push({
+        ...invoice,
+        currency: invoice.currency || "TON",
+        __pending: false,
+        __status: "PAID",
+      });
     }
 
-    return [pendingInvoice, ...confirmed];
-  }, [invoices, pendingInvoice]);
+    return paidInvoices;
+  }, [invoices]);
 
   function formatInvoiceDate(value) {
     if (!value) return "-";
@@ -913,45 +956,7 @@ export default function Purchase() {
       <div className="page-container dark-card">
         <h2 className="title">Stake</h2>
 
-        <div
-          style={{
-            marginBottom: 14,
-            padding: 12,
-            borderRadius: 14,
-            border: "1px solid rgba(0, 217, 255, 0.18)",
-            background: "rgba(0, 217, 255, 0.05)",
-            fontSize: 12,
-            lineHeight: 1.6,
-          }}
-        >
-          {telegramId ? (
-            <>
-              <div style={{ fontWeight: 900, color: "#00d9ff" }}>
-                Telegram Account
-              </div>
-              <div>
-                {telegramUsername ? `@${telegramUsername}` : "Telegram User"}
-              </div>
-              <div style={{ opacity: 0.72 }}>ID: {telegramId}</div>
-              <div
-                style={{
-                  marginTop: 6,
-                  color: walletAddress ? "#66f5c7" : "#ffd166",
-                }}
-              >
-                {walletAddress
-                  ? "Wallet connected — ready for TON payment."
-                  : "Wallet is optional for browsing. Connect it only when you want to pay."}
-              </div>
-            </>
-          ) : (
-            <div style={{ color: "#ff9a9a" }}>
-              Telegram ID was not detected. Open this Mini App inside Telegram.
-            </div>
-          )}
-        </div>
-
-            {successMessage && (
+        {successMessage && (
               <div className="success-box">{successMessage}</div>
             )}
 
@@ -1165,9 +1170,24 @@ export default function Purchase() {
             </div>
 
             <div className="invoices-grid">
+              {allInvoices.length === 0 && (
+                <div
+                  className="invoice-empty-state"
+                  style={{
+                    padding: "18px 14px",
+                    borderRadius: 14,
+                    border: "1px dashed rgba(255,255,255,0.12)",
+                    background: "rgba(255,255,255,0.025)",
+                    textAlign: "center",
+                    opacity: 0.72,
+                    fontSize: 13,
+                  }}
+                >
+                  No successful payments yet.
+                </div>
+              )}
+
               {allInvoices.map((item) => {
-                const isPending = item.__pending === true;
-                const isTest = !isPending && item.ton_tx_hash?.startsWith("TEST_");
                 const currency = item.currency || "TON";
                 const amount = item.ton_amount || "-";
                 const txHash = item.ton_tx_hash || "-";
@@ -1180,54 +1200,76 @@ export default function Purchase() {
                         <span className="invoice-id">#{item.invoice_no}</span>
                       </div>
 
-                      <div
-                        className={`invoice-status ${
-                          isPending ? "status-test" : isTest ? "status-test" : "status-paid"
-                        }`}
-                      >
+                      <div className="invoice-status status-paid">
                         <span className="dot" />
-                        {isPending ? "SAVING" : isTest ? "TEST" : "PAID"}
+                        PAID
                       </div>
                     </div>
 
                     <div className="invoice-body">
-                      <Row label="Invoice Date" value={formatInvoiceDate(item.created_at)} />
+                      {item.created_at && (
+                        <Row
+                          label="Invoice Date"
+                          value={formatInvoiceDate(item.created_at)}
+                        />
+                      )}
+
                       <Row label="TON Amount" value={amount} />
-                      <Row label="ECG Value" value={item.ecg_value} />
-                      <Row
-                        label="USDT Value"
-                        value={(Number(item.ecg_value) / ECG_PER_USDT).toFixed(2)}
-                      />
-                      <Row
-                        label="5% Profit"
-                        value={`${item.self_profit_5 ?? "-"} ${
-                          item.profit_asset || item.output_asset || "ECG"
-                        }`}
-                      />
-                      <Row
-                        label="Investment Lock"
-                        value={
-                          <InvestmentCountdown
-                            unlockAt={item.principal_unlock_at}
-                            createdAt={item.created_at}
+
+                      {Number.isFinite(Number(item.ecg_value)) &&
+                        Number(item.ecg_value) > 0 && (
+                          <>
+                            <Row label="ECG Value" value={item.ecg_value} />
+                            <Row
+                              label="USDT Value"
+                              value={(Number(item.ecg_value) / ECG_PER_USDT).toFixed(2)}
+                            />
+                          </>
+                        )}
+
+                      {item.self_profit_5 !== null &&
+                        item.self_profit_5 !== undefined &&
+                        String(item.self_profit_5).trim() !== "" &&
+                        String(item.self_profit_5).trim() !== "-" && (
+                          <Row
+                            label="5% Profit"
+                            value={`${item.self_profit_5} ${
+                              item.profit_asset || item.output_asset || "ECG"
+                            }`}
                           />
-                        }
-                      />
-                      <Row
-                        label="Principal Unlock"
-                        value={formatInvoiceDate(item.principal_unlock_at)}
-                      />
-                      <Row
-                        label="Profit Unlock"
-                        value={
-                          <InvestmentCountdown
-                            unlockAt={item.self_profit_unlock_at}
-                            createdAt={item.created_at}
-                            fallbackDays={30}
-                            completedLabel="Profit Unlocked"
+                        )}
+
+                      {item.principal_unlock_at && (
+                        <>
+                          <Row
+                            label="Investment Lock"
+                            value={
+                              <InvestmentCountdown
+                                unlockAt={item.principal_unlock_at}
+                                createdAt={item.created_at}
+                              />
+                            }
                           />
-                        }
-                      />
+                          <Row
+                            label="Principal Unlock"
+                            value={formatInvoiceDate(item.principal_unlock_at)}
+                          />
+                        </>
+                      )}
+
+                      {item.self_profit_unlock_at && (
+                        <Row
+                          label="Profit Unlock"
+                          value={
+                            <InvestmentCountdown
+                              unlockAt={item.self_profit_unlock_at}
+                              createdAt={item.created_at}
+                              fallbackDays={30}
+                              completedLabel="Profit Unlocked"
+                            />
+                          }
+                        />
+                      )}
                     </div>
 
                     <div
@@ -1244,17 +1286,13 @@ export default function Purchase() {
                       <span>
                         TX:{" "}
                         <b>
-                          {isPending
-                            ? item.__message_hash
-                              ? `${item.__message_hash.slice(0, 12)}... (message)`
-                              : "Waiting for TX hash..."
-                            : typeof txHash === "string"
-                              ? `${txHash.slice(0, 12)}...`
-                              : "-"}
+                          {typeof txHash === "string"
+                            ? `${txHash.slice(0, 12)}...`
+                            : "-"}
                         </b>
                       </span>
 
-                      {!isPending && txHash !== "-" && (
+                      {txHash !== "-" && (
                         <button
                           type="button"
                           onClick={() => copyTxHash(txHash)}
