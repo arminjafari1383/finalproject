@@ -3,12 +3,9 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
-
-import { useTonWallet } from "@tonconnect/ui-react";
 
 import { api } from "../api";
 
@@ -117,13 +114,6 @@ function getTelegramAvatar(telegramId, username) {
 // ======================================================
 
 export default function Referrals() {
-  const tonWallet = useTonWallet();
-
-  const address = useMemo(
-    () => tonWallet?.account?.address || null,
-    [tonWallet]
-  );
-
   // ====================================================
   // STATE
   // ====================================================
@@ -136,6 +126,7 @@ export default function Referrals() {
   const [error, setError] = useState("");
   const [telegramId, setTelegramId] = useState(null);
   const [telegramUsername, setTelegramUsername] = useState(null);
+  const [telegramPhotoUrl, setTelegramPhotoUrl] = useState(null);
   const [isTelegramWebApp, setIsTelegramWebApp] = useState(false);
   const [inviterCode, setInviterCode] = useState(null);
   const [referralReady, setReferralReady] = useState(false);
@@ -152,6 +143,7 @@ export default function Referrals() {
     async function initializeTelegram() {
       let tg = getTelegramWebApp();
 
+      // Telegram WebApp can become available a little after first render.
       if (!tg) {
         for (let i = 0; i < 40; i++) {
           await new Promise((resolve) => setTimeout(resolve, 50));
@@ -162,76 +154,83 @@ export default function Referrals() {
 
       if (cancelled) return;
 
-      if (!tg) {
-        setIsTelegramWebApp(false);
-        setTelegramId(null);
-        setTelegramUsername(null);
+      let resolvedTelegramId = null;
+      let resolvedUsername = null;
+      let resolvedPhotoUrl = null;
+      let resolvedIsTelegram = false;
 
+      if (tg) {
         try {
-          localStorage.removeItem("telegram_id");
-          localStorage.removeItem("telegram_username");
-          const saved = loadUserData();
-          if (saved?.isTelegram) {
-            const cleaned = {
-              ...saved,
-              telegramId: null,
-              telegramUsername: null,
-              isTelegram: false,
-            };
-            localStorage.setItem(USER_DATA_KEY, JSON.stringify(cleaned));
+          tg.ready();
+          if (typeof tg.expand === "function") {
+            tg.expand();
           }
-        } catch {}
-
-        let code = null;
-        try {
-          code = getInviterCode() || captureInviterCode() || null;
         } catch (err) {
-          console.warn("Referral capture error:", err);
+          console.warn("Telegram ready error:", err);
         }
 
-        setInviterCode(code);
-        setReferralReady(true);
-        return;
-      }
+        const telegramUser = getTelegramUser(tg);
 
-      try {
-        tg.ready();
-        if (typeof tg.expand === "function") {
-          tg.expand();
+        if (telegramUser?.id) {
+          resolvedTelegramId = Number(telegramUser.id);
+          resolvedUsername = telegramUser.username || null;
+          resolvedPhotoUrl = telegramUser.photoUrl || null;
+          resolvedIsTelegram = true;
         }
-      } catch (err) {
-        console.warn("Telegram ready error:", err);
       }
 
-      const unsafe = tg.initDataUnsafe || {};
-      const user = getTelegramUser(tg);
+      // If Telegram object is temporarily unavailable after navigation/reload,
+      // keep using the Telegram identity already captured for this Mini App user.
+      if (!resolvedTelegramId) {
+        const saved = loadUserData() || {};
 
-      setIsTelegramWebApp(true);
+        const storedId = Number(
+          saved.telegramId ||
+          localStorage.getItem("telegram_id") ||
+          0
+        );
 
-      if (user) {
-        setTelegramId(user.id);
-        setTelegramUsername(user.username);
+        if (Number.isInteger(storedId) && storedId > 0) {
+          resolvedTelegramId = storedId;
+          resolvedUsername =
+            saved.telegramUsername ||
+            localStorage.getItem("telegram_username") ||
+            null;
+          resolvedPhotoUrl = saved.telegramPhotoUrl || null;
+          resolvedIsTelegram = Boolean(saved.isTelegram);
+        }
+      }
 
+      if (cancelled) return;
+
+      setTelegramId(resolvedTelegramId);
+      setTelegramUsername(resolvedUsername);
+      setTelegramPhotoUrl(resolvedPhotoUrl);
+      setIsTelegramWebApp(resolvedIsTelegram);
+
+      if (resolvedTelegramId) {
         saveUserData({
-          telegramId: user.id,
-          telegramUsername: user.username,
-          isTelegram: true,
+          telegramId: resolvedTelegramId,
+          telegramUsername: resolvedUsername,
+          telegramPhotoUrl: resolvedPhotoUrl,
+          isTelegram: resolvedIsTelegram,
         });
 
-        localStorage.setItem("telegram_id", String(user.id));
-        localStorage.setItem("telegram_username", user.username || "");
-      } else {
-        setTelegramId(null);
-        setTelegramUsername(null);
+        localStorage.setItem(
+          "telegram_id",
+          String(resolvedTelegramId)
+        );
 
-        try {
-          localStorage.removeItem("telegram_id");
-          localStorage.removeItem("telegram_username");
-        } catch {}
+        localStorage.setItem(
+          "telegram_username",
+          resolvedUsername || ""
+        );
       }
 
       let code = null;
-      const startParam = unsafe.start_param || null;
+
+      const startParam =
+        tg?.initDataUnsafe?.start_param || null;
 
       if (startParam) {
         code = String(startParam).startsWith("ref_")
@@ -242,13 +241,17 @@ export default function Referrals() {
       if (!code) {
         try {
           code = captureInviterCode() || null;
-        } catch (captureError) {}
+        } catch (captureError) {
+          console.warn("Referral capture error:", captureError);
+        }
       }
 
       if (!code) {
         try {
           code = getInviterCode() || null;
-        } catch (storedError) {}
+        } catch (storedError) {
+          console.warn("Stored referral read error:", storedError);
+        }
       }
 
       if (code) {
@@ -267,55 +270,43 @@ export default function Referrals() {
   }, []);
 
   // ====================================================
-  // SAVE WALLET
-  // ====================================================
-
-  useEffect(() => {
-    if (!address) return;
-    saveUserData({ walletAddress: address });
-  }, [address]);
-
-  // ====================================================
-  // REGISTER USER
+  // REGISTER / LOAD TELEGRAM USER
   // ====================================================
 
   useEffect(() => {
     let cancelled = false;
 
     async function registerUser() {
-      if (!address) {
-        setMyCode(null);
-        setRefCount(null);
-        return;
-      }
-
       if (!referralReady) {
         return;
       }
 
-      let finalTelegramId = null;
-      let finalTelegramUsername = null;
-      let identitySource = "browser";
+      const finalTelegramId = Number(telegramId || 0);
 
-      if (isTelegramWebApp && telegramId && Number(telegramId) > 0) {
-        finalTelegramId = Number(telegramId);
-        finalTelegramUsername = telegramUsername || null;
-        identitySource = "telegram";
+      if (!Number.isInteger(finalTelegramId) || finalTelegramId <= 0) {
+        setMyCode(null);
+        setRefCount(null);
+        setError(
+          "Telegram ID not found. Please open this Mini App from Telegram."
+        );
+        return;
       }
 
       let finalInviterCode = inviterCode || null;
+
       if (!finalInviterCode) {
         try {
           finalInviterCode = getInviterCode() || null;
-        } catch {}
+        } catch {
+          // ignore
+        }
       }
 
       const currentRegisterKey = [
-        address,
-        finalTelegramId || "",
-        finalTelegramUsername || "",
+        finalTelegramId,
+        telegramUsername || "",
+        telegramPhotoUrl || "",
         finalInviterCode || "",
-        identitySource,
       ].join("|");
 
       if (registerKeyRef.current === currentRegisterKey) {
@@ -324,57 +315,59 @@ export default function Referrals() {
 
       registerKeyRef.current = currentRegisterKey;
 
-      const telegramPhotoUrl =
-        window.Telegram?.WebApp?.initDataUnsafe?.user?.photo_url || null;
-
-      const payload = {
-        wallet_address: address,
-        telegram_photo_url: telegramPhotoUrl,
-        inviter_code: finalInviterCode,
+      const params = {
         telegram_id: finalTelegramId,
-        telegram_username: finalTelegramUsername,
-        is_telegram: identitySource === "telegram",
+        telegram_username: telegramUsername || undefined,
+        telegram_photo_url: telegramPhotoUrl || undefined,
+        inviter_code: finalInviterCode || undefined,
+        is_telegram: true,
       };
 
       try {
         setLoading(true);
         setError("");
 
-        const response = await api.post("/connect/", payload);
+        // This endpoint now creates/resolves the account by Telegram ID.
+        // No TON wallet connection is required.
+        const response = await api.get("/referrals/count/", {
+          params,
+        });
 
         if (cancelled) return;
 
+        setRefCount(response.data?.count ?? 0);
+
         const returnedCode =
-          response.data?.user?.referral_code ||
           response.data?.referral_code ||
+          response.data?.user?.referral_code ||
           null;
 
         setMyCode(returnedCode);
 
-        try {
-          const countResponse = await api.get("/referrals/count/", {
-            params: { wallet_address: address },
+        if (response.data?.telegram_id) {
+          saveUserData({
+            telegramId: Number(response.data.telegram_id),
+            telegramUsername:
+              response.data?.telegram_username ??
+              telegramUsername ??
+              null,
+            telegramPhotoUrl:
+              response.data?.telegram_photo_url ??
+              telegramPhotoUrl ??
+              null,
+            isTelegram: true,
           });
-
-          if (!cancelled) {
-            setRefCount(countResponse.data?.count ?? 0);
-          }
-        } catch (countError) {
-          console.error("Referral count error:", countError);
-          if (!cancelled) {
-            setRefCount(0);
-          }
         }
       } catch (err) {
         if (cancelled) return;
 
-        console.error("❌ CONNECT ERROR:", err);
+        console.error("❌ TELEGRAM REFERRAL LOAD ERROR:", err);
 
         setError(
           err?.response?.data?.error ||
             err?.response?.data?.detail ||
             err?.message ||
-            "Failed to connect user."
+            "Failed to load Telegram referral account."
         );
 
         registerKeyRef.current = null;
@@ -390,14 +383,28 @@ export default function Referrals() {
     return () => {
       cancelled = true;
     };
-  }, [address, referralReady, inviterCode, telegramId, telegramUsername, isTelegramWebApp]);
+  }, [
+    referralReady,
+    inviterCode,
+    telegramId,
+    telegramUsername,
+    telegramPhotoUrl,
+  ]);
 
   // ====================================================
-  // LEVELS
+  // LEVELS — TELEGRAM ID
   // ====================================================
 
   useEffect(() => {
-    if (!address) return;
+    const finalTelegramId = Number(telegramId || 0);
+
+    if (
+      !referralReady ||
+      !Number.isInteger(finalTelegramId) ||
+      finalTelegramId <= 0
+    ) {
+      return undefined;
+    }
 
     let cancelled = false;
     let requestRunning = false;
@@ -408,16 +415,35 @@ export default function Referrals() {
 
       try {
         const response = await api.get("/referral/levels/", {
-          params: { wallet_address: address },
+          params: {
+            telegram_id: finalTelegramId,
+            telegram_username: telegramUsername || undefined,
+            telegram_photo_url: telegramPhotoUrl || undefined,
+            inviter_code: inviterCode || undefined,
+            is_telegram: true,
+          },
         });
 
         if (cancelled) return;
 
         const data = response.data;
+
         setLevels(data?.levels || {});
         setTotalReferrals(data?.total_referrals || 0);
+
+        if (!myCode && data?.referral_code) {
+          setMyCode(data.referral_code);
+        }
       } catch (err) {
-        console.error("❌ Levels error:", err);
+        console.error("❌ Telegram referral levels error:", err);
+
+        if (!cancelled) {
+          setError(
+            err?.response?.data?.error ||
+              err?.response?.data?.detail ||
+              "Failed to load referral levels."
+          );
+        }
       } finally {
         requestRunning = false;
       }
@@ -428,6 +454,7 @@ export default function Referrals() {
     const intervalId = window.setInterval(fetchLevels, 5000);
 
     const refreshOnFocus = () => fetchLevels();
+
     const refreshOnVisible = () => {
       if (document.visibilityState === "visible") {
         fetchLevels();
@@ -441,9 +468,19 @@ export default function Referrals() {
       cancelled = true;
       window.clearInterval(intervalId);
       window.removeEventListener("focus", refreshOnFocus);
-      document.removeEventListener("visibilitychange", refreshOnVisible);
+      document.removeEventListener(
+        "visibilitychange",
+        refreshOnVisible
+      );
     };
-  }, [address]);
+  }, [
+    referralReady,
+    telegramId,
+    telegramUsername,
+    telegramPhotoUrl,
+    inviterCode,
+    myCode,
+  ]);
 
   // ====================================================
   // REFERRAL LINK
@@ -667,14 +704,14 @@ export default function Referrals() {
   }
 
   // ====================================================
-  // NO WALLET
+  // TELEGRAM ID REQUIRED
   // ====================================================
 
-  if (!address) {
+  if (referralReady && !telegramId) {
     return (
-      <>
-        <div className="wallet-required">🔌 Please connect your wallet first.</div>
-      </>
+      <div className="wallet-required">
+        📱 Telegram ID not found. Please open this Mini App from Telegram.
+      </div>
     );
   }
 

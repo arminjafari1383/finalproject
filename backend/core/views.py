@@ -2424,42 +2424,47 @@ def _telegram_user_payload(user):
 
 @api_view(["GET"])
 def referral_count(request):
-    """Referral count using Telegram ID first, with wallet fallback for legacy clients."""
-    telegram_id = request.query_params.get("telegram_id")
-    wallet_address = request.query_params.get("wallet_address")
+    """
+    Return direct referral count and referral identity using Telegram ID.
 
-    user = None
+    Telegram ID is the only account lookup key for this endpoint.
+    A TON wallet is not required. If the Telegram user does not exist yet,
+    create the Telegram-only AppUser with the deterministic internal
+    telegram:<id> placeholder handled by _get_or_create_telegram_user().
+    """
+    try:
+        user, _identity = _get_or_create_telegram_user(request)
 
-    if telegram_id:
-        try:
-            telegram_id = int(telegram_id)
-        except (TypeError, ValueError):
-            return Response(
-                {"error": "Invalid telegram_id"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        user = AppUser.objects.filter(telegram_id=telegram_id).first()
-
-    elif wallet_address:
-        user = AppUser.objects.filter(wallet_address=wallet_address).first()
-
-    else:
         return Response(
-            {"error": "telegram_id required"},
+            {
+                "count": user.invitees.count(),
+                "telegram_id": user.telegram_id,
+                "telegram_username": user.telegram_username,
+                "telegram_photo_url": user.telegram_photo_url,
+                "referral_code": user.referral_code,
+                "wallet_connected": bool(_public_wallet_address(user)),
+                "user": _telegram_user_payload(user),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    except ValueError as exc:
+        return Response(
+            {"error": str(exc)},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    if not user:
-        return Response({"count": 0}, status=status.HTTP_200_OK)
-
-    return Response(
-        {
-            "count": user.invitees.count(),
-            "telegram_id": user.telegram_id,
-        },
-        status=status.HTTP_200_OK,
-    )
+    except Exception as exc:
+        logger.exception(
+            "[REFERRAL_COUNT] Telegram-first lookup failed"
+        )
+        return Response(
+            {
+                "error": "Unable to load referral account",
+                "detail": str(exc),
+            },
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 
 # =======================
@@ -2755,22 +2760,29 @@ def test_tick(request):
 
 @api_view(["GET"])
 def get_referral_levels(request):
-    wallet_address = request.query_params.get("wallet_address")
+    """
+    Return the 5-level referral tree using Telegram ID as the account identity.
 
-    if not wallet_address:
+    Wallet connection is optional and is never required to open the referral
+    dashboard or resolve the referral tree.
+    """
+    try:
+        user, _identity = _get_or_create_telegram_user(request)
+    except ValueError as exc:
         return Response(
-            {"error": "wallet_address required"},
-            status=status.HTTP_400_BAD_REQUEST
+            {"error": str(exc)},
+            status=status.HTTP_400_BAD_REQUEST,
         )
-
-    user = AppUser.objects.filter(
-        wallet_address=wallet_address
-    ).first()
-
-    if not user:
+    except Exception as exc:
+        logger.exception(
+            "[REFERRAL_LEVELS] Telegram-first user lookup failed"
+        )
         return Response(
-            {"error": "User not found"},
-            status=status.HTTP_404_NOT_FOUND
+            {
+                "error": "Unable to load referral levels",
+                "detail": str(exc),
+            },
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
     reconcile_existing_referral_join_rewards(user)
@@ -2787,6 +2799,10 @@ def get_referral_levels(request):
                 "levels": empty_levels,
                 "total_referrals": 0,
                 "is_test": False,
+                "telegram_id": user.telegram_id,
+                "telegram_username": user.telegram_username,
+                "referral_code": user.referral_code,
+                "wallet_connected": bool(_public_wallet_address(user)),
             },
             status=status.HTTP_200_OK,
         )
@@ -2962,11 +2978,21 @@ def get_referral_levels(request):
                 else "ECG"
             )
 
+            public_row_wallet = (
+                _public_wallet_address(app_user)
+                if app_user
+                else (
+                    wallet
+                    if wallet and not _is_telegram_placeholder_wallet(wallet)
+                    else None
+                )
+            )
+
             result.append({
                 "telegram_id": telegram_id,
                 "telegram_username": username,
                 "telegram_photo_url": photo_url,
-                "wallet": wallet,
+                "wallet": public_row_wallet,
                 "investment": item.get("investment", 0),
                 # Legacy field stays ECG-only.
                 "profit": float(profit_ecg),
@@ -3005,6 +3031,10 @@ def get_referral_levels(request):
             "levels": levels,
             "total_referrals": total_referrals,
             "is_test": False,
+            "telegram_id": user.telegram_id,
+            "telegram_username": user.telegram_username,
+            "referral_code": user.referral_code,
+            "wallet_connected": bool(_public_wallet_address(user)),
         },
         status=status.HTTP_200_OK
     )
