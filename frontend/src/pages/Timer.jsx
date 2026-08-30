@@ -2056,42 +2056,23 @@ const [totalRewards, setTotalRewards] =
     return code;
   };
 
-  const shareReferralOnTelegram = async () => {
-    if (inviteLoading) return;
+  
 
-    setInviteLoading(true);
-    setInviteMessage("");
+  const goToStakePage = () => {
+    window.location.href = "/stake";
+  };
 
-    try {
-      const code = await getOwnReferralCode();
+  const handleDailyBonusAction = () => {
+    const claimButton = document.querySelector(".claim-btn");
 
-      const referralLink =
-        `https://t.me/${BOT_USERNAME}/app?startapp=ref_${encodeURIComponent(code)}`;
-
-      const shareUrl =
-        `https://t.me/share/url?url=${encodeURIComponent(referralLink)}` +
-        `&text=${encodeURIComponent("Join AI POLIFY with my referral link")}`;
-
-      const tg = window.Telegram?.WebApp;
-
-      if (typeof tg?.openTelegramLink === "function") {
-        tg.openTelegramLink(shareUrl);
-      } else {
-        window.open(shareUrl, "_blank", "noopener,noreferrer");
-      }
-
-      setInviteMessage("Referral link opened in Telegram.");
-    } catch (error) {
-      console.error("[Timer] Invite referral error:", error);
-      setInviteMessage(
-        error?.response?.data?.error ||
-        error?.response?.data?.detail ||
-        error?.message ||
-        "Could not open the referral link."
-      );
-    } finally {
-      setInviteLoading(false);
+    if (canClaim) {
+      claimReward();
     }
+
+    claimButton?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
   };
 
 
@@ -2836,7 +2817,7 @@ const [totalRewards, setTotalRewards] =
         {telegramId && (
 
           <button
-            className={`claim-btn ${!canClaim ? "claim-loading" : ""}`}
+            className={`claim-btn claim-btn-primary ${!canClaim ? "claim-loading" : ""}`}
             onClick={canClaim ? claimReward : undefined}
             disabled={!canClaim}
           >
@@ -2847,6 +2828,55 @@ const [totalRewards, setTotalRewards] =
 
 
         
+        <section className="glass-card action-panel">
+          <div className="section-kicker">EARN MORE EPL</div>
+
+          <div className="action-grid">
+            <button
+              type="button"
+              className="action-card-btn action-card-green"
+              onClick={shareReferralOnTelegram}
+              disabled={inviteLoading}
+            >
+              <span className="action-card-icon">👥</span>
+              <span className="action-card-content">
+                <span className="action-card-title">
+                  {inviteLoading ? "Opening Telegram..." : "Invite Friends"}
+                </span>
+                <span className="action-card-subtitle">Earn more with friends</span>
+              </span>
+              <span className="action-card-arrow">›</span>
+            </button>
+
+            <button
+              type="button"
+              className="action-card-btn action-card-purple"
+              onClick={goToStakePage}
+            >
+              <span className="action-card-icon">⚡</span>
+              <span className="action-card-content">
+                <span className="action-card-title">Stake EPL</span>
+                <span className="action-card-subtitle">Stake and earn more</span>
+              </span>
+              <span className="action-card-arrow">›</span>
+            </button>
+
+            <button
+              type="button"
+              className="action-card-btn action-card-gold action-card-wide"
+              onClick={handleDailyBonusAction}
+            >
+              <span className="action-card-icon">🎁</span>
+              <span className="action-card-content">
+                <span className="action-card-title">{canClaim ? "Daily Bonus" : "Hourly Bonus"}</span>
+                <span className="action-card-subtitle">
+                  {canClaim ? "Your reward is ready to claim" : "Open your mining reward section"}
+                </span>
+              </span>
+              <span className="action-card-arrow">›</span>
+            </button>
+          </div>
+        </section>
           {/* =====================================================
               REFERRAL MINING SAMPLE
           ===================================================== */}
@@ -2957,24 +2987,13 @@ const [totalRewards, setTotalRewards] =
     type="button"
     onClick={shareReferralOnTelegram}
     disabled={inviteLoading}
-    style={{
-      width: "100%",
-      marginTop: 14,
-      minHeight: 48,
-      border: "1px solid rgba(0,217,255,.55)",
-      borderRadius: 14,
-      background:
-        "linear-gradient(135deg, rgba(0,217,255,.22), rgba(30,104,255,.22))",
-      color: "#ffffff",
-      fontSize: 14,
-      fontWeight: 900,
-      letterSpacing: "0.03em",
-      cursor: inviteLoading ? "wait" : "pointer",
-      opacity: inviteLoading ? 0.7 : 1,
-      boxShadow: "0 10px 30px rgba(0,145,255,.15)",
-    }}
+    className="hero-action-btn hero-action-primary"
   >
-    {inviteLoading ? "Opening Telegram..." : "Invite Me"}
+    <span className="hero-action-icon">🚀</span>
+    <span className="hero-action-label">
+      {inviteLoading ? "Opening Telegram..." : "Invite Me"}
+    </span>
+    <span className="hero-action-arrow">›</span>
   </button>
 
   {inviteMessage && (
@@ -3116,39 +3135,14 @@ const [totalRewards, setTotalRewards] =
             <button
               type="button"
               disabled
-              style={{
-                width: "100%",
-                marginTop: 15,
-                padding: "13px 14px",
-                borderRadius: 14,
-                border:
-                  "1px solid rgba(255,255,255,0.12)",
-                background:
-                  "rgba(255,255,255,0.05)",
-                color: "inherit",
-                cursor: "not-allowed",
-                opacity: 0.72,
-              }}
+              className="hero-action-btn hero-action-ghost"
             >
-              <span
-                style={{
-                  display: "block",
-                  fontWeight: 900,
-                  fontSize: 14,
-                }}
-              >
-                Withdraw EPL
+              <span className="hero-action-icon">🔒</span>
+              <span className="hero-action-stack">
+                <span className="hero-action-label">Withdraw EPL</span>
+                <span className="hero-action-note">Coming soon to withdraw</span>
               </span>
-              <span
-                style={{
-                  display: "block",
-                  marginTop: 3,
-                  fontSize: 11,
-                  opacity: 0.7,
-                }}
-              >
-                Coming soon to withdraw
-              </span>
+              <span className="hero-action-badge">Soon</span>
             </button>
           </section>
         )}
