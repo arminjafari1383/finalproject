@@ -5,7 +5,6 @@ import React, {
   useState,
 } from "react";
 
-import { useTonWallet } from "@tonconnect/ui-react";
 import axios from "axios";
 
 import "./Timer.css";
@@ -20,6 +19,65 @@ const API = "/api/wallet";
 const BOT_USERNAME = "Aipolynetbot";
 const USER_DATA_KEY = "my_app_user_data";
 const OWN_REFERRAL_CODE_KEY = "my_referral_code";
+
+
+/* =========================================================
+   TELEGRAM IDENTITY
+   Telegram ID is the primary user identity on this page.
+========================================================= */
+
+function readTelegramIdentity() {
+  try {
+    const tgUser =
+      window.Telegram?.WebApp?.initDataUnsafe?.user || null;
+
+    const raw = localStorage.getItem(USER_DATA_KEY);
+    const stored = raw ? JSON.parse(raw) : {};
+
+    const telegramId = Number(
+      tgUser?.id ??
+      stored?.telegramId ??
+      localStorage.getItem("telegram_id") ??
+      0
+    );
+
+    if (!Number.isFinite(telegramId) || telegramId <= 0) {
+      return null;
+    }
+
+    const identity = {
+      telegram_id: telegramId,
+      telegram_username:
+        tgUser?.username || stored?.telegramUsername || null,
+      telegram_photo_url:
+        tgUser?.photo_url || stored?.telegramPhotoUrl || null,
+      telegram_first_name:
+        tgUser?.first_name || stored?.telegramFirstName || null,
+      telegram_last_name:
+        tgUser?.last_name || stored?.telegramLastName || null,
+      is_telegram: Boolean(tgUser?.id || stored?.isTelegram),
+    };
+
+    localStorage.setItem("telegram_id", String(telegramId));
+    localStorage.setItem(
+      USER_DATA_KEY,
+      JSON.stringify({
+        ...stored,
+        telegramId,
+        telegramUsername: identity.telegram_username,
+        telegramPhotoUrl: identity.telegram_photo_url,
+        telegramFirstName: identity.telegram_first_name,
+        telegramLastName: identity.telegram_last_name,
+        isTelegram: identity.is_telegram,
+      })
+    );
+
+    return identity;
+  } catch (error) {
+    console.error("[Timer] Could not read Telegram identity:", error);
+    return null;
+  }
+}
 
 
 /* =========================================================
@@ -1240,10 +1298,26 @@ function CountdownHourglass({
 
 export default function TimerPage() {
 
-  const tonWallet = useTonWallet();
+  const [telegramIdentity, setTelegramIdentity] =
+    useState(() => readTelegramIdentity());
 
-  const walletAddress =
-    tonWallet?.account?.address || null;
+  const telegramId =
+    telegramIdentity?.telegram_id || null;
+
+  const telegramUsername =
+    telegramIdentity?.telegram_username || null;
+
+  const telegramPhotoUrl =
+    telegramIdentity?.telegram_photo_url || null;
+
+  const telegramDisplayName =
+    [
+      telegramIdentity?.telegram_first_name,
+      telegramIdentity?.telegram_last_name,
+    ]
+      .filter(Boolean)
+      .join(" ") ||
+    (telegramUsername ? `@${telegramUsername}` : "Telegram User");
 
 
   const [remaining, setRemaining] =
@@ -1286,6 +1360,25 @@ const [totalRewards, setTotalRewards] =
 
   const menuRef =
     useRef(null);
+
+
+  /* =========================================================
+     TELEGRAM BOOTSTRAP
+  ========================================================= */
+
+  useEffect(() => {
+    const tg = window.Telegram?.WebApp;
+
+    try {
+      tg?.ready?.();
+      tg?.expand?.();
+    } catch (error) {
+      console.log("[Timer] Telegram WebApp init error:", error);
+    }
+
+    const identity = readTelegramIdentity();
+    setTelegramIdentity(identity);
+  }, []);
 
 
 
@@ -1383,124 +1476,77 @@ const [totalRewards, setTotalRewards] =
 
 
   /* =========================================================
-     FETCH STATUS
+     FETCH STATUS — TELEGRAM ID FIRST
   ========================================================= */
 
   const fetchStatus =
     useCallback(async () => {
 
-      if (!walletAddress) {
-
-        console.log(
-          "[Timer] No wallet address"
-        );
-
+      if (!telegramId) {
+        console.log("[Timer] Telegram ID is not available");
+        setRemaining(null);
+        setMessage("⚠️ Please open this Mini App inside Telegram.");
         return;
-
       }
 
-
-      const url =
-        `${API}/reward_status/`;
-
+      const url = `${API}/reward_status/`;
 
       console.log(
         "[Timer] fetchStatus =>",
         url,
-        "wallet_address=",
-        walletAddress
+        "telegram_id=",
+        telegramId
       );
 
-
       try {
+        const res = await axios.get(url, {
+          params: {
+            telegram_id: telegramId,
+          },
+        });
 
-        const res =
-          await axios.get(
-            url,
-            {
-              params: {
-
-                wallet_address:
-                  walletAddress,
-
-              },
-            }
-          );
-
-
-        console.log(
-          "[Timer] reward_status HTTP:",
-          res.status
-        );
-
-
-        console.log(
-          "[Timer] reward_status data:",
-          res.data
-        );
-
+        console.log("[Timer] reward_status HTTP:", res.status);
+        console.log("[Timer] reward_status data:", res.data);
 
         const data = res.data;
 
-
-        if (
-          data &&
-          data.status === "ok"
-        ) {
+        if (data && data.status === "ok") {
+          const serverCooldown =
+            data.cooldown_seconds ?? 60 * 60;
 
           const sec = Math.min(
             data.seconds_remaining ?? 0,
-            data.cooldown_seconds ?? 60 * 60
+            serverCooldown
           );
 
-          setCooldownSeconds(
-            data.cooldown_seconds ?? 60 * 60
-          );
-
+          setCooldownSeconds(serverCooldown);
           setRemaining(sec);
-
-
-
-          setTotalRewards(
-            data.total_rewards ?? "0"
-          );
-
+          setTotalRewards(data.total_rewards ?? "0");
           setReferralBonus(
-            data.referral_points ?? "0"
+            data.referral_points ??
+            data.referral_bonus ??
+            "0"
           );
+          setRewardCount(data.rewards_count ?? 0);
 
-          setRewardCount(
-            data.rewards_count ?? 0
-          );
-
+          // Keep all server-returned EPL/user fields available to the UI.
+          setEplWallet((prev) => ({
+            ...(prev || {}),
+            ...(data || {}),
+          }));
 
           if (sec > 0) {
-
-            setMessage(
-              "⏳ Timer is running..."
-            );
-
+            setMessage("⏳ Timer is running...");
             startTimer();
-
           } else {
-
-            setMessage(
-              "✅ Ready to claim hourly reward!"
-            );
-
+            setMessage("✅ Ready to claim hourly reward!");
             stopTimer();
-
           }
 
+          return;
+        }
 
-        } else if (data) {
-
-          console.warn(
-            "[Timer] Unexpected response format, using data:",
-            data
-          );
-
-
+        if (data) {
           const serverCooldown =
             data.cooldown_seconds ?? 60 * 60;
 
@@ -1512,100 +1558,67 @@ const [totalRewards, setTotalRewards] =
           );
 
           setCooldownSeconds(serverCooldown);
-
           setRemaining(sec);
-
-
           setTotalRewards(
             data.total_rewards ??
             data.totalRewards ??
             data.withdrawable_total ??
             "0"
           );
-
-
           setReferralBonus(
             data.referral_points ??
             data.referralBonus ??
             data.referral_bonus ??
             "0"
           );
-
-
           setRewardCount(
             data.rewards_count ??
             data.rewardCount ??
             0
           );
 
+          setEplWallet((prev) => ({
+            ...(prev || {}),
+            ...(data || {}),
+          }));
 
           if (sec > 0) {
-
-            setMessage(
-              "⏳ Timer is running..."
-            );
-
+            setMessage("⏳ Timer is running...");
             startTimer();
-
           } else {
-
-            setMessage(
-              "✅ Ready to claim hourly reward!"
-            );
-
+            setMessage("✅ Ready to claim hourly reward!");
             stopTimer();
-
           }
 
-
-        } else {
-
-          setMessage(
-            "❌ Invalid server response."
-          );
-
+          return;
         }
 
+        setMessage("❌ Invalid server response.");
       } catch (e) {
-
-        console.error(
-          "[Timer] fetchStatus ERROR:",
-          e
-        );
-
-
-        console.error(
-          "[Timer] fetchStatus status:",
-          e.response?.status
-        );
-
-
-        console.error(
-          "[Timer] fetchStatus data:",
-          e.response?.data
-        );
-
+        console.error("[Timer] fetchStatus ERROR:", e);
+        console.error("[Timer] fetchStatus status:", e.response?.status);
+        console.error("[Timer] fetchStatus data:", e.response?.data);
 
         setMessage(
+          e.response?.data?.message ||
+          e.response?.data?.error ||
+          e.response?.data?.detail ||
           "❌ Cannot load timer status from server."
         );
-
       }
-
-    }, [walletAddress]);
+    }, [telegramId]);
 
 
 
 
   /* =========================================================
-     EPL WALLET DATA
-     EPL hourly/referral balances live on Timer.
+     EPL ACCOUNT DATA — TELEGRAM ID FIRST
+     Uses reward_status as the canonical Telegram-based source.
   ========================================================= */
 
   const fetchEplData =
     useCallback(async () => {
-
-      if (!walletAddress) {
+      if (!telegramId) {
         setEplWallet(null);
         return;
       }
@@ -1613,22 +1626,25 @@ const [totalRewards, setTotalRewards] =
       setEplLoading(true);
 
       try {
-        const walletResult = await axios.get(
-          `${API}/${walletAddress}/`
+        const result = await axios.get(
+          `${API}/reward_status/`,
+          {
+            params: {
+              telegram_id: telegramId,
+            },
+          }
         );
 
-        setEplWallet(
-          walletResult?.data || null
-        );
+        setEplWallet(result?.data || null);
       } catch (error) {
         console.error(
-          "[Timer] EPL wallet load error:",
+          "[Timer] EPL Telegram account load error:",
           error
         );
       } finally {
         setEplLoading(false);
       }
-    }, [walletAddress]);
+    }, [telegramId]);
 
   /* =========================================================
      SAND PROGRESS
@@ -1678,115 +1694,77 @@ const [totalRewards, setTotalRewards] =
 
 
   /* =========================================================
-     CLAIM
+     CLAIM — TELEGRAM ID FIRST
   ========================================================= */
 
   const claimReward =
     async () => {
 
-      if (!walletAddress) {
-
+      if (!telegramId) {
         setMessage(
-          "⚠️ Please connect your wallet first."
+          "⚠️ Telegram identity is not available. Please open this Mini App inside Telegram."
         );
-
         return;
-
       }
 
-
       if (!canClaim) {
-
         setMessage(
           "⚠️ Please wait for the timer to finish."
         );
-
         return;
-
       }
 
-
-      const url =
-        `${API}/tick/`;
-
+      const url = `${API}/tick/`;
 
       console.log(
         "[Timer] claimReward =>",
         url,
-        "wallet_address=",
-        walletAddress
+        "telegram_id=",
+        telegramId
       );
 
-
       try {
+        setMessage("⏳ Claiming reward...");
 
-        setMessage(
-          "⏳ Claiming reward..."
+        const res = await axios.post(
+          url,
+          {
+            telegram_id: telegramId,
+            telegram_username: telegramUsername,
+            telegram_photo_url: telegramPhotoUrl,
+          }
         );
 
+        console.log("[Timer] tick HTTP:", res.status);
+        console.log("[Timer] tick data:", res.data);
 
-        const res =
-          await axios.post(
-            url,
-            {
-              wallet_address:
-                walletAddress,
-            }
-          );
+        const data = res.data;
 
-
-        console.log(
-          "[Timer] tick HTTP:",
-          res.status
-        );
-
-
-        console.log(
-          "[Timer] tick data:",
-          res.data
-        );
-
-
-        const data =
-          res.data;
-
-
-        if (
-          data?.status ===
-          "rewarded"
-        ) {
-
-
-
+        if (data?.status === "rewarded") {
           setTotalRewards(
-            data.total_rewards ??
-            "0"
+            data.total_rewards ?? "0"
           );
 
+          setReferralBonus(
+            data.referral_points ??
+            data.referral_bonus ??
+            referralBonus
+          );
 
           setRewardCount(
-            data.rewards_count ??
-            0
+            data.rewards_count ?? 0
           );
-
 
           setMessage(
-            `🎉 ${
-              data.message ||
-              "Reward claimed!"
-            }`
+            `🎉 ${data.message || "Reward claimed!"}`
           );
-
 
           await fetchStatus();
           await fetchEplData();
+          return;
+        }
 
-
-        } else if (
-          data?.status ===
-          "too_early"
-        ) {
-
+        if (data?.status === "too_early") {
           const serverCooldown =
             data.cooldown_seconds ?? 60 * 60;
 
@@ -1797,157 +1775,94 @@ const [totalRewards, setTotalRewards] =
 
           setCooldownSeconds(serverCooldown);
           setRemaining(sec);
-
-
           setMessage(
-            `⏳ Please wait ${
-              Math.floor(sec / 60)
-            } minutes ${
-              sec % 60
-            } seconds`
+            `⏳ Please wait ${Math.floor(sec / 60)} minutes ${sec % 60} seconds`
           );
-
-
           startTimer();
-
-
-        } else {
-
-          console.warn(
-            "[Timer] tick unexpected response:",
-            data
-          );
-
-
-          setMessage(
-            "⚠️ " +
-            (
-              data?.message ||
-              data?.error ||
-              "Could not claim."
-            )
-          );
-
-
-          setTimeout(
-            fetchStatus,
-            5000
-          );
-
+          return;
         }
 
+        console.warn(
+          "[Timer] tick unexpected response:",
+          data
+        );
 
+        setMessage(
+          "⚠️ " +
+          (data?.message ||
+            data?.error ||
+            "Could not claim.")
+        );
+
+        setTimeout(fetchStatus, 5000);
       } catch (e) {
-
-        console.error(
-          "[Timer] claimReward ERROR:",
-          e
-        );
-
-
-        console.error(
-          "[Timer] claimReward status:",
-          e.response?.status
-        );
-
-
-        console.error(
-          "[Timer] claimReward data:",
-          e.response?.data
-        );
-
+        console.error("[Timer] claimReward ERROR:", e);
+        console.error("[Timer] claimReward status:", e.response?.status);
+        console.error("[Timer] claimReward data:", e.response?.data);
 
         const errorMsg =
           e.response?.data?.message ||
           e.response?.data?.error ||
+          e.response?.data?.detail ||
           "Error claiming reward.";
 
-
-        setMessage(
-          `❌ ${errorMsg}`
-        );
-
-
-        if (
-          e.response?.status === 405
-        ) {
-
-          setMessage(
-            "❌ Server method not allowed. Please try again later."
-          );
-
-        }
-
-
-        setTimeout(
-          fetchStatus,
-          5000
-        );
-
+        setMessage(`❌ ${errorMsg}`);
+        setTimeout(fetchStatus, 5000);
       }
-
     };
 
 
 
   /* =========================================================
-     WALLET STATUS
+     TELEGRAM USER STATUS
   ========================================================= */
 
   useEffect(() => {
 
     stopTimer();
 
-    if (!walletAddress) {
-
+    if (!telegramId) {
       setRemaining(null);
-      setMessage("");
+      setMessage(
+        "⚠️ Telegram identity not detected. Open the Mini App inside Telegram."
+      );
       setEplWallet(null);
 
-      console.log(
-        "[Timer] wallet not connected"
-      );
-
+      console.log("[Timer] Telegram user not detected");
       return undefined;
     }
 
     console.log(
-      "[Timer] wallet connected:",
-      walletAddress
+      "[Timer] Telegram user detected:",
+      telegramId
     );
 
     fetchStatus();
     fetchEplData();
 
-    // EPL balances and referral summary stay fresh while Timer is open.
-    const eplRefresh =
-      window.setInterval(
-        fetchEplData,
-        15000
-      );
+    const eplRefresh = window.setInterval(
+      fetchEplData,
+      15000
+    );
 
     const onFocus = () => {
+      const latestIdentity = readTelegramIdentity();
+      if (latestIdentity) {
+        setTelegramIdentity(latestIdentity);
+      }
       fetchEplData();
     };
 
-    window.addEventListener(
-      "focus",
-      onFocus
-    );
+    window.addEventListener("focus", onFocus);
 
     return () => {
       stopTimer();
-      window.clearInterval(
-        eplRefresh
-      );
-      window.removeEventListener(
-        "focus",
-        onFocus
-      );
+      window.clearInterval(eplRefresh);
+      window.removeEventListener("focus", onFocus);
     };
 
   }, [
-    walletAddress,
+    telegramId,
     fetchStatus,
     fetchEplData,
   ]);
@@ -2074,39 +1989,6 @@ const [totalRewards, setTotalRewards] =
      REFERRAL INVITE
   ========================================================= */
 
-  const getStoredTelegramIdentity = () => {
-    try {
-      const raw = localStorage.getItem(USER_DATA_KEY);
-      const stored = raw ? JSON.parse(raw) : {};
-
-      const tgUser =
-        window.Telegram?.WebApp?.initDataUnsafe?.user || null;
-
-      const telegramId = Number(
-        tgUser?.id ??
-        stored?.telegramId ??
-        localStorage.getItem("telegram_id") ??
-        0
-      );
-
-      if (!Number.isFinite(telegramId) || telegramId <= 0) {
-        return null;
-      }
-
-      return {
-        telegram_id: telegramId,
-        telegram_username:
-          tgUser?.username || stored?.telegramUsername || null,
-        telegram_photo_url:
-          tgUser?.photo_url || stored?.telegramPhotoUrl || null,
-        is_telegram: Boolean(tgUser?.id || stored?.isTelegram),
-      };
-    } catch (error) {
-      console.error("[Timer] Could not read Telegram identity:", error);
-      return null;
-    }
-  };
-
   const getOwnReferralCode = async () => {
     const walletCode = String(
       eplWallet?.referral_code ||
@@ -2127,11 +2009,7 @@ const [totalRewards, setTotalRewards] =
       return cachedCode;
     }
 
-    if (!walletAddress) {
-      throw new Error("Please connect your wallet first.");
-    }
-
-    const identity = getStoredTelegramIdentity();
+    const identity = readTelegramIdentity();
 
     if (!identity) {
       throw new Error(
@@ -2144,7 +2022,6 @@ const [totalRewards, setTotalRewards] =
     const response = await axios.post(
       "/api/connect/",
       {
-        wallet_address: walletAddress,
         telegram_id: identity.telegram_id,
         telegram_username: identity.telegram_username,
         telegram_photo_url: identity.telegram_photo_url,
@@ -2434,6 +2311,91 @@ const [totalRewards, setTotalRewards] =
 
 
         </header>
+
+
+        {/* =====================================================
+            TELEGRAM IDENTITY
+        ===================================================== */}
+
+        <section
+          className="glass-card"
+          style={{
+            marginTop: 14,
+            padding: 14,
+            borderRadius: 18,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+          }}
+        >
+          <div style={{ minWidth: 0 }}>
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 900,
+                letterSpacing: "0.12em",
+                color: "#00d9ff",
+                marginBottom: 5,
+              }}
+            >
+              TELEGRAM ACCOUNT
+            </div>
+
+            <div
+              style={{
+                fontSize: 15,
+                fontWeight: 900,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {telegramDisplayName}
+            </div>
+
+            <div
+              style={{
+                marginTop: 4,
+                fontSize: 12,
+                opacity: 0.72,
+              }}
+            >
+              Telegram ID: {telegramId || "Not detected"}
+            </div>
+          </div>
+
+          {telegramPhotoUrl ? (
+            <img
+              src={telegramPhotoUrl}
+              alt="Telegram profile"
+              style={{
+                width: 46,
+                height: 46,
+                borderRadius: "50%",
+                objectFit: "cover",
+                border: "1px solid rgba(0,217,255,.55)",
+              }}
+            />
+          ) : (
+            <div
+              aria-hidden="true"
+              style={{
+                width: 46,
+                height: 46,
+                flex: "0 0 46px",
+                borderRadius: "50%",
+                display: "grid",
+                placeItems: "center",
+                background: "rgba(0,217,255,.10)",
+                border: "1px solid rgba(0,217,255,.40)",
+                fontSize: 20,
+              }}
+            >
+              ✈️
+            </div>
+          )}
+        </section>
 
 
 
@@ -2856,7 +2818,7 @@ const [totalRewards, setTotalRewards] =
             CLAIM BUTTON
         ===================================================== */}
 
-        {walletAddress && (
+        {telegramId && (
 
           <button
             className={`claim-btn ${!canClaim ? "claim-loading" : ""}`}
@@ -3016,10 +2978,10 @@ const [totalRewards, setTotalRewards] =
   )}
 </section>
 {/* =====================================================
-            EPL WALLET — moved from Wallet page
+            EPL ACCOUNT — Telegram ID based
         ===================================================== */}
 
-        {walletAddress && (
+        {telegramId && (
           <section
             className="glass-card"
             style={{
@@ -3046,7 +3008,7 @@ const [totalRewards, setTotalRewards] =
                     fontWeight: 800,
                   }}
                 >
-                  EPL WALLET
+                  EPL ACCOUNT
                 </div>
 
                 <div
