@@ -2116,27 +2116,264 @@ def admin_complete_withdraw(request, withdraw_id):
     })
 
 
+# ============================================================
+# TELEGRAM-FIRST IDENTITY HELPERS
+# ============================================================
+
+TELEGRAM_PLACEHOLDER_PREFIX = "telegram:"
+
+
+def _is_telegram_placeholder_wallet(value):
+    """Return True when wallet_address is only an internal Telegram placeholder."""
+    return str(value or "").startswith(TELEGRAM_PLACEHOLDER_PREFIX)
+
+
+def _request_payload_value(request, key, default=None):
+    """Read a value from query params, JSON/form body, or selected headers."""
+    value = request.query_params.get(key)
+    if value not in (None, ""):
+        return value
+
+    data = getattr(request, "data", None)
+    if data is not None:
+        try:
+            value = data.get(key)
+        except Exception:
+            value = None
+        if value not in (None, ""):
+            return value
+
+    header_map = {
+        "telegram_id": "X-Telegram-Id",
+        "telegram_username": "X-Telegram-Username",
+        "telegram_photo_url": "X-Telegram-Photo-Url",
+        "is_telegram": "X-Telegram",
+        "inviter_code": "X-Inviter-Code",
+    }
+    header_name = header_map.get(key)
+    if header_name:
+        value = request.headers.get(header_name)
+        if value not in (None, ""):
+            return value
+
+    return default
+
+
+def _parse_request_bool(value, default=False):
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _telegram_identity_from_request(request):
+    """
+    Parse the Telegram identity sent by the Mini App.
+
+    Telegram ID is the primary application identity for Timer/EPL.
+    wallet_address is deliberately NOT required here.
+    """
+    raw_telegram_id = _request_payload_value(request, "telegram_id")
+
+    if raw_telegram_id in (None, ""):
+        raise ValueError("telegram_id required")
+
+    try:
+        telegram_id = int(raw_telegram_id)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Invalid telegram_id") from exc
+
+    if telegram_id <= 0:
+        raise ValueError("Invalid telegram_id")
+
+    username = _request_payload_value(request, "telegram_username")
+    if username:
+        username = str(username).strip().lstrip("@") or None
+
+    photo_url = _request_payload_value(request, "telegram_photo_url")
+    if photo_url:
+        photo_url = str(photo_url).strip() or None
+
+    return {
+        "telegram_id": telegram_id,
+        "telegram_username": username,
+        "telegram_photo_url": photo_url,
+        "is_telegram": _parse_request_bool(
+            _request_payload_value(request, "is_telegram", True),
+            default=True,
+        ),
+        "inviter_code": (
+            str(_request_payload_value(request, "inviter_code") or "").strip()
+            or None
+        ),
+    }
+
+
+def _get_or_create_telegram_user(request):
+    """
+    Resolve the application user by Telegram ID.
+
+    AppUser.wallet_address is currently a required unique CharField in this
+    project. Until that schema is migrated to allow NULL/blank, Telegram-only
+    users receive a deterministic internal placeholder such as:
+
+        telegram:123456789
+
+    When the user later connects a real wallet, the existing /connect/ flow
+    resolves the same AppUser by telegram_id and replaces this placeholder.
+    """
+    identity = _telegram_identity_from_request(request)
+    telegram_id = identity["telegram_id"]
+    placeholder_wallet = f"{TELEGRAM_PLACEHOLDER_PREFIX}{telegram_id}"
+
+    defaults = {
+        "wallet_address": placeholder_wallet,
+        "telegram_username": (
+            identity["telegram_username"]
+            or f"tg_{telegram_id}"
+        ),
+        "telegram_photo_url": identity["telegram_photo_url"],
+        "is_telegram_user": True,
+        "telegram_verified": True,
+        "wallet_locked": False,
+    }
+
+    with transaction.atomic():
+        user, created = AppUser.objects.get_or_create(
+            telegram_id=telegram_id,
+            defaults=defaults,
+        )
+
+        update_fields = []
+
+        if identity["telegram_username"]:
+            clean_username = identity["telegram_username"]
+            if user.telegram_username != clean_username:
+                user.telegram_username = clean_username
+                update_fields.append("telegram_username")
+
+        if identity["telegram_photo_url"]:
+            clean_photo = identity["telegram_photo_url"]
+            if user.telegram_photo_url != clean_photo:
+                user.telegram_photo_url = clean_photo
+                update_fields.append("telegram_photo_url")
+
+        if not user.is_telegram_user:
+            user.is_telegram_user = True
+            update_fields.append("is_telegram_user")
+
+        if not user.telegram_verified:
+            user.telegram_verified = True
+            update_fields.append("telegram_verified")
+
+        if user.wallet_locked and _is_telegram_placeholder_wallet(user.wallet_address):
+            user.wallet_locked = False
+            update_fields.append("wallet_locked")
+
+        # These fields exist in the current project but are guarded to keep
+        # this helper compatible with older local database snapshots.
+        if hasattr(user, "is_active") and not user.is_active:
+            user.is_active = True
+            update_fields.append("is_active")
+
+        if hasattr(user, "last_active"):
+            user.last_active = timezone.now()
+            update_fields.append("last_active")
+
+        if update_fields:
+            user.save(update_fields=list(dict.fromkeys(update_fields)))
+
+        Wallet.objects.get_or_create(user=user)
+
+        inviter_code = identity.get("inviter_code")
+        if inviter_code and not user.inviter_id:
+            try:
+                apply_referral(inviter_code, user)
+                user.refresh_from_db()
+            except Exception:
+                logger.exception(
+                    "[TELEGRAM_IDENTITY] Could not apply inviter code user=%s code=%s",
+                    user.id,
+                    inviter_code,
+                )
+
+    logger.info(
+        "[TELEGRAM_IDENTITY] user=%s telegram_id=%s created=%s wallet=%s",
+        user.id,
+        telegram_id,
+        created,
+        user.wallet_address,
+    )
+
+    return user, identity
+
+
+def _public_wallet_address(user):
+    """Hide internal Telegram placeholder values from API clients."""
+    value = str(getattr(user, "wallet_address", "") or "").strip()
+    if not value or _is_telegram_placeholder_wallet(value):
+        return None
+    return value
+
+
+def _telegram_user_payload(user):
+    public_wallet = _public_wallet_address(user)
+    return {
+        "id": user.id,
+        "telegram_id": user.telegram_id,
+        "telegram_username": user.telegram_username,
+        "telegram_photo_url": user.telegram_photo_url,
+        "is_telegram": bool(user.is_telegram_user),
+        "telegram_verified": bool(user.telegram_verified),
+        "referral_code": user.referral_code,
+        "wallet_address": public_wallet,
+        "wallet_connected": bool(public_wallet),
+    }
+
+
 @api_view(["GET"])
 def referral_count(request):
+    """Referral count using Telegram ID first, with wallet fallback for legacy clients."""
+    telegram_id = request.query_params.get("telegram_id")
     wallet_address = request.query_params.get("wallet_address")
-    if not wallet_address:
+
+    user = None
+
+    if telegram_id:
+        try:
+            telegram_id = int(telegram_id)
+        except (TypeError, ValueError):
+            return Response(
+                {"error": "Invalid telegram_id"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = AppUser.objects.filter(telegram_id=telegram_id).first()
+
+    elif wallet_address:
+        user = AppUser.objects.filter(wallet_address=wallet_address).first()
+
+    else:
         return Response(
-            {"error": "wallet_address required"},
+            {"error": "telegram_id required"},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    user = AppUser.objects.filter(wallet_address=wallet_address).first()
     if not user:
         return Response({"count": 0}, status=status.HTTP_200_OK)
 
     return Response(
-        {"count": user.invitees.count()},
+        {
+            "count": user.invitees.count(),
+            "telegram_id": user.telegram_id,
+        },
         status=status.HTTP_200_OK,
     )
 
 
 # =======================
-# Timer endpoints
+# Timer endpoints — Telegram ID is the primary identity
 # =======================
 
 HOURLY_REWARD = Decimal("100")
@@ -2144,15 +2381,11 @@ COOLDOWN = timedelta(hours=1)
 
 
 def _hourly_reward_stats(user):
-    """Return EPL hourly-reward statistics used by Timer and Wallet."""
-    daily_qs = user.ledgers.filter(
-        typ="DAILY_UNLOCK"
-    )
+    """Return EPL hourly/referral statistics for one AppUser."""
+    daily_qs = user.ledgers.filter(typ="DAILY_UNLOCK")
 
     total_rewards = (
-        daily_qs.aggregate(
-            total=Sum("amount")
-        )["total"]
+        daily_qs.aggregate(total=Sum("amount"))["total"]
         or Decimal("0")
     )
 
@@ -2170,106 +2403,109 @@ def _hourly_reward_stats(user):
     }
 
 
-@api_view(["GET"])
-def reward_status(request):
-    wallet_address = request.query_params.get("wallet_address")
+def _timer_payload(user, *, now=None):
+    """Build the canonical Timer/EPL payload for Telegram-first clients."""
+    now = now or timezone.now()
 
-    if not wallet_address:
-        return Response(
-            {"error": "wallet_address required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    user = (
-        AppUser.objects
-        .select_related("wallet")
-        .filter(wallet_address=wallet_address)
-        .first()
-    )
-
-    if not user:
-        return Response(
-            {"error": "User not found"},
-            status=status.HTTP_404_NOT_FOUND,
-        )
-
-    wallet, _ = Wallet.objects.get_or_create(user=user)
+    Wallet.objects.get_or_create(user=user)
     epl_balance, _ = AssetBalance.objects.get_or_create(
         user=user,
-        asset="EPL"
+        asset="EPL",
     )
 
-    now = timezone.now()
     next_at = user.next_daily_claim_at
-
     max_next_at = now + COOLDOWN
+
+    # A brand-new user begins a fresh one-hour mining cycle.
+    # Also clamp legacy/corrupt timestamps that are farther than one cycle away.
     if not next_at or next_at > max_next_at:
         next_at = max_next_at
         user.next_daily_claim_at = next_at
         user.save(update_fields=["next_daily_claim_at"])
 
-    seconds_remaining = max(0, int((next_at - now).total_seconds()))
-    stats = _hourly_reward_stats(user)
-
-    return Response(
-        {
-            "status": "ok",
-            "seconds_remaining": seconds_remaining,
-            "next_claim_at": next_at,
-            "total_rewards": stats["total_rewards"],
-            "referral_points": stats["referral_points"],
-            "rewards_count": stats["rewards_count"],
-            "reward_amount": str(HOURLY_REWARD),
-            "cooldown_seconds": int(COOLDOWN.total_seconds()),
-            "hourly_reward_balance": stats["total_rewards"],
-            "epl_balance": str(epl_balance.available or Decimal("0")),
-            "epl_total_earned": str(epl_balance.total_earned or Decimal("0")),
-            "stake_balance": "0",
-        },
-        status=status.HTTP_200_OK,
+    seconds_remaining = max(
+        0,
+        int((next_at - now).total_seconds()),
     )
+
+    stats = _hourly_reward_stats(user)
+    epl_available = Decimal(str(epl_balance.available or 0))
+    epl_total_earned = Decimal(str(epl_balance.total_earned or 0))
+    referral_value = stats["referral_points"]
+
+    return {
+        "status": "ok",
+        "seconds_remaining": seconds_remaining,
+        "next_claim_at": next_at,
+        "reward_amount": str(HOURLY_REWARD),
+        "cooldown_seconds": int(COOLDOWN.total_seconds()),
+
+        # Timer values
+        "total_rewards": stats["total_rewards"],
+        "referral_points": referral_value,
+        "rewards_count": stats["rewards_count"],
+
+        # EPL aliases expected by the Timer UI
+        "hourly_reward_balance": stats["total_rewards"],
+        "hourly_reward_total": stats["total_rewards"],
+        "hourly_claims": stats["rewards_count"],
+        "daily_reward_unlocked": stats["total_rewards"],
+        "referral_bonus": referral_value,
+        "referral_bonus_balance": referral_value,
+        "referral_bonus_total": referral_value,
+        "epl_balance": str(epl_available),
+        "withdrawable_epl": str(epl_available),
+        "epl_total": str(epl_available),
+        "epl_total_earned": str(epl_total_earned),
+        "mining_days": stats["rewards_count"],
+        "stake_balance": "0",
+
+        # Identity — Telegram is canonical; wallet is optional.
+        "telegram_id": user.telegram_id,
+        "telegram_username": user.telegram_username,
+        "telegram_photo_url": user.telegram_photo_url,
+        "referral_code": user.referral_code,
+        "wallet_address": _public_wallet_address(user),
+        "wallet_connected": bool(_public_wallet_address(user)),
+        "user": _telegram_user_payload(user),
+    }
+
+
+@api_view(["GET"])
+def reward_status(request):
+    """
+    Return Timer/EPL status by telegram_id.
+
+    Example:
+        GET /api/wallet/reward_status/?telegram_id=123456789
+
+    A real TON wallet is NOT required.
+    """
+    try:
+        user, _identity = _get_or_create_telegram_user(request)
+        return Response(
+            _timer_payload(user),
+            status=status.HTTP_200_OK,
+        )
+
+    except ValueError as exc:
+        return Response(
+            {"error": str(exc)},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    except Exception as exc:
+        logger.exception("[REWARD_STATUS] Telegram-first status error")
+        return Response(
+            {"error": "Unable to load timer status", "detail": str(exc)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 
 @api_view(["POST"])
 def tick(request):
-    """Claim the 100 EPL hourly reward into Wallet.epl_balance."""
-    wallet_address = request.data.get("wallet_address")
-
-    if not wallet_address:
-        return Response(
-            {"error": "wallet_address required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    telegram_id = (
-        request.headers.get("X-Telegram-Id")
-        or request.data.get("telegram_id")
-    )
-
-    is_telegram = (
-        request.headers.get("X-Telegram") == "true"
-        or request.data.get("is_telegram", False)
-    )
-
+    """Claim the hourly EPL reward using telegram_id as the user identity."""
     try:
-        if telegram_id:
-            user = get_or_create_user(
-                wallet_address,
-                int(telegram_id),
-                is_telegram,
-            )
-        else:
-            user = get_or_create_user(
-                wallet_address,
-                telegram_id=None,
-                is_telegram=False,
-            )
-
-        if not user:
-            return Response(
-                {"error": "User not found"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        user, _identity = _get_or_create_telegram_user(request)
 
         with transaction.atomic():
             locked_user = (
@@ -2278,43 +2514,59 @@ def tick(request):
                 .get(pk=user.pk)
             )
 
-            locked_wallet, _ = Wallet.objects.select_for_update().get_or_create(
+            Wallet.objects.select_for_update().get_or_create(
                 user=locked_user
             )
 
-            epl_balance, _ = AssetBalance.objects.select_for_update().get_or_create(
-                user=locked_user,
-                asset="EPL"
+            epl_balance, _ = (
+                AssetBalance.objects
+                .select_for_update()
+                .get_or_create(
+                    user=locked_user,
+                    asset="EPL",
+                )
             )
+
             now = timezone.now()
             next_at = locked_user.next_daily_claim_at
-
             max_next_at = now + COOLDOWN
+
             if not next_at or next_at > max_next_at:
                 next_at = max_next_at
                 locked_user.next_daily_claim_at = next_at
                 locked_user.save(update_fields=["next_daily_claim_at"])
 
             if next_at > now:
-                seconds_remaining = int((next_at - now).total_seconds())
+                seconds_remaining = max(
+                    0,
+                    int((next_at - now).total_seconds()),
+                )
                 stats = _hourly_reward_stats(locked_user)
 
+                # HTTP 200 intentionally: the frontend treats too_early as a
+                # normal Timer state, not as a transport/server failure.
                 return Response(
                     {
                         "status": "too_early",
                         "message": f"Please wait {seconds_remaining} seconds",
                         "seconds_remaining": seconds_remaining,
-                        "total_rewards": stats["total_rewards"],
-                        "referral_points": stats["referral_points"],
-                        "rewards_count": stats["rewards_count"],
+                        "next_claim_at": next_at,
                         "reward_amount": str(HOURLY_REWARD),
                         "cooldown_seconds": int(COOLDOWN.total_seconds()),
+                        "total_rewards": stats["total_rewards"],
+                        "referral_points": stats["referral_points"],
+                        "referral_bonus": stats["referral_points"],
+                        "rewards_count": stats["rewards_count"],
                         "hourly_reward_balance": stats["total_rewards"],
-                        "epl_balance": str(locked_wallet.epl_balance or Decimal("0")),
-                        "epl_total_earned": str(locked_wallet.epl_total_earned or Decimal("0")),
-                        "stake_balance": "0",
+                        "epl_balance": str(epl_balance.available or Decimal("0")),
+                        "epl_total_earned": str(epl_balance.total_earned or Decimal("0")),
+                        "referral_code": locked_user.referral_code,
+                        "telegram_id": locked_user.telegram_id,
+                        "wallet_address": _public_wallet_address(locked_user),
+                        "wallet_connected": bool(_public_wallet_address(locked_user)),
+                        "user": _telegram_user_payload(locked_user),
                     },
-                    status=status.HTTP_400_BAD_REQUEST,
+                    status=status.HTTP_200_OK,
                 )
 
             epl_balance.available = (
@@ -2326,47 +2578,58 @@ def tick(request):
                 + HOURLY_REWARD
             )
             epl_balance.save(
-                update_fields=[
-                    "available",
-                    "total_earned",
-                ]
+                update_fields=["available", "total_earned"]
             )
 
             Ledger.objects.create(
                 user=locked_user,
                 typ="DAILY_UNLOCK",
                 amount=HOURLY_REWARD,
-                meta={"source": "timer", "asset": "EPL"},
+                meta={
+                    "source": "timer",
+                    "asset": "EPL",
+                    "telegram_id": locked_user.telegram_id,
+                },
             )
 
             locked_user.next_daily_claim_at = now + COOLDOWN
             locked_user.save(update_fields=["next_daily_claim_at"])
 
-        user = AppUser.objects.select_related("wallet").get(pk=user.pk)
+        user = AppUser.objects.get(pk=user.pk)
+        epl_balance = AssetBalance.objects.get(user=user, asset="EPL")
         stats = _hourly_reward_stats(user)
 
         return Response(
             {
                 "status": "rewarded",
-                "message": "100 EPL added to your Hourly Reward balance",
-                "balance_ecg": stats["total_rewards"],
+                "message": f"{HOURLY_REWARD} EPL added to your Hourly Reward balance",
                 "hourly_reward_balance": stats["total_rewards"],
-                "epl_balance": str(user.wallet.epl_balance or Decimal("0")),
-                "epl_total_earned": str(user.wallet.epl_total_earned or Decimal("0")),
-                "stake_balance": "0",
+                "epl_balance": str(epl_balance.available or Decimal("0")),
+                "epl_total_earned": str(epl_balance.total_earned or Decimal("0")),
                 "reward_amount": str(HOURLY_REWARD),
                 "cooldown_seconds": int(COOLDOWN.total_seconds()),
                 "total_rewards": stats["total_rewards"],
                 "referral_points": stats["referral_points"],
+                "referral_bonus": stats["referral_points"],
                 "rewards_count": stats["rewards_count"],
                 "seconds_remaining": int(COOLDOWN.total_seconds()),
                 "next_claim_at": user.next_daily_claim_at,
+                "referral_code": user.referral_code,
+                "telegram_id": user.telegram_id,
+                "wallet_address": _public_wallet_address(user),
+                "wallet_connected": bool(_public_wallet_address(user)),
+                "user": _telegram_user_payload(user),
             },
             status=status.HTTP_200_OK,
         )
 
+    except ValueError as exc:
+        return Response(
+            {"error": str(exc)},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
     except Exception as exc:
-        logger.exception("Error in tick")
+        logger.exception("Error in Telegram-first tick")
         return Response(
             {"error": str(exc)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -1502,6 +1502,10 @@ const [totalRewards, setTotalRewards] =
         const res = await axios.get(url, {
           params: {
             telegram_id: telegramId,
+            telegram_username: telegramUsername || undefined,
+            telegram_photo_url: telegramPhotoUrl || undefined,
+            is_telegram: true,
+            inviter_code: localStorage.getItem("inviter_code") || undefined,
           },
         });
 
@@ -1631,6 +1635,10 @@ const [totalRewards, setTotalRewards] =
           {
             params: {
               telegram_id: telegramId,
+              telegram_username: telegramUsername || undefined,
+              telegram_photo_url: telegramPhotoUrl || undefined,
+              is_telegram: true,
+              inviter_code: localStorage.getItem("inviter_code") || undefined,
             },
           }
         );
@@ -1732,6 +1740,8 @@ const [totalRewards, setTotalRewards] =
             telegram_id: telegramId,
             telegram_username: telegramUsername,
             telegram_photo_url: telegramPhotoUrl,
+            is_telegram: true,
+            inviter_code: localStorage.getItem("inviter_code") || undefined,
           }
         );
 
@@ -2017,20 +2027,25 @@ const [totalRewards, setTotalRewards] =
       );
     }
 
-    // Read this user's own referral code from the existing connect endpoint.
-    // IMPORTANT: inviter_code is intentionally NOT sent here.
-    const response = await axios.post(
-      "/api/connect/",
+    // Telegram-first: reward_status creates/loads the Telegram user and
+    // returns the referral code. No wallet connection is required.
+    const response = await axios.get(
+      `${API}/reward_status/`,
       {
-        telegram_id: identity.telegram_id,
-        telegram_username: identity.telegram_username,
-        telegram_photo_url: identity.telegram_photo_url,
-        is_telegram: identity.is_telegram,
+        params: {
+          telegram_id: identity.telegram_id,
+          telegram_username: identity.telegram_username || undefined,
+          telegram_photo_url: identity.telegram_photo_url || undefined,
+          is_telegram: true,
+          inviter_code: localStorage.getItem("inviter_code") || undefined,
+        },
       }
     );
 
     const code = String(
-      response?.data?.user?.referral_code || ""
+      response?.data?.referral_code ||
+      response?.data?.user?.referral_code ||
+      ""
     ).trim();
 
     if (!code) {
