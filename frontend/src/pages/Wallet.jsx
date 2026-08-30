@@ -1,16 +1,14 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { useTonWallet, TonConnectButton, useTonConnectUI, useTonAddress } from "@tonconnect/ui-react";
+import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { api } from "../api";
 import "./Wallet.css";
-import {
-  captureInviterCode,
-  clearInviterCode,
-} from "../utils/referral";
+import { captureInviterCode } from "../utils/referral";
 
 const USER_DATA_KEY = "my_app_user_data";
-const INVITER_CODE_KEY = "inviter_code";
 const ECG_PER_USDT = 312;
+const WALLET_RETURN_TO_KEY = "wallet_return_to";
 
 const ECG_CONTRACT_ADDRESS = "0x79b88B5298C6025b09d910428A30e960dcEeB282";
 
@@ -104,6 +102,11 @@ const CopyIcon = ({ size = 22, className = "" }) => (
 // ======================================================
 
 export default function Wallet() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const returnAfterConnectRef = useRef(false);
+  const routeReturnTo = location.state?.returnTo || null;
+
   // this function get ton wallet situation 
   const tonWallet = useTonWallet();
   // this variable include open wallet list and disconnect wallet
@@ -412,6 +415,35 @@ export default function Wallet() {
         // wallet response return json from backend
         setWallet(walletResponse.data);
 
+        // If the user came here from Stake, return only after the wallet
+        // has been connected to the Telegram account successfully.
+        if (!returnAfterConnectRef.current) {
+          let returnTo = routeReturnTo;
+
+          try {
+            returnTo = returnTo || sessionStorage.getItem(WALLET_RETURN_TO_KEY);
+          } catch {
+            // ignore sessionStorage access error
+          }
+
+          if (
+            typeof returnTo === "string" &&
+            returnTo.startsWith("/") &&
+            returnTo !== "/wallet"
+          ) {
+            returnAfterConnectRef.current = true;
+
+            try {
+              sessionStorage.removeItem(WALLET_RETURN_TO_KEY);
+            } catch {
+              // ignore sessionStorage cleanup error
+            }
+
+            navigate(returnTo, { replace: true });
+            return;
+          }
+        }
+
         // show error if exists
         setErrorType("none");
         // if exists error in try enter this block
@@ -459,8 +491,8 @@ export default function Wallet() {
         }
       }
     },
-    // in this part if address wallet change load again 
-    [address]
+    // in this part if address wallet / return route change load again
+    [address, navigate, routeReturnTo]
   );
 
 
@@ -550,17 +582,10 @@ export default function Wallet() {
       console.error("TonConnect disconnect error:", error);
     }
 
-    // remove old telegram id from browser storage
-    localStorage.removeItem("telegram_id");
-    // remove referral code saved.
-    localStorage.removeItem("inviter_code");
-    // remove referral code by key on app.
-    localStorage.removeItem(INVITER_CODE_KEY);
-    // function utility about referral run to remove referral
-    clearInviterCode();
-    // remove unique information user
-    localStorage.removeItem(USER_DATA_KEY);
-    
+    // Telegram is the account identity now. Disconnecting TON must NOT
+    // delete telegram_id, Telegram profile data, or the referral identity.
+    removeStoredWalletOnly();
+
     // remove wallet state
     setWallet(null);
     // situation lock to false

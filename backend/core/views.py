@@ -30,7 +30,7 @@ from .models import (
 )
 from .serializers import WalletSerializer, PurchaseSerializer, UserSerializer
 from django.conf import settings
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from django.db.models import Sum
 from django.db.utils import OperationalError
 from django.core import signing
@@ -645,38 +645,20 @@ def _find_verified_gram_payment(
 @api_view(["POST"])
 def connect_wallet(request):
     """
-    Connect a wallet to the Telegram identity.
+    Bind a TON wallet to the Telegram account.
 
-    There is no wallet-lock or explicit replacement flow anymore.
-    If the same telegram_id connects with another wallet_address, the same
-    AppUser is updated automatically by get_or_create_user().
+    Telegram ID is the canonical application identity.
+    The wallet is only a payment/withdrawal capability attached to that account.
+
+    Important behaviour:
+    - A Telegram-only user may already exist with wallet_address="telegram:<id>".
+    - Connecting a real wallet updates THAT SAME AppUser row.
+    - The wallet is never used as the primary identity.
+    - One real wallet cannot be attached to two different Telegram accounts.
     """
     wallet_address = str(
         request.data.get("wallet_address", "") or ""
     ).strip()
-
-    inviter_code = request.data.get("inviter_code")
-    telegram_id = request.data.get("telegram_id")
-    telegram_username = request.data.get("telegram_username")
-    telegram_photo_url = request.data.get("telegram_photo_url")
-
-    def parse_bool(value):
-        if isinstance(value, bool):
-            return value
-        return str(value or "").strip().lower() in {
-            "1", "true", "yes", "on"
-        }
-
-    is_telegram = parse_bool(
-        request.data.get("is_telegram", False)
-    )
-
-    logger.info(
-        "[CONNECT_UNLOCKED] wallet=%s telegram_id=%s is_telegram=%s",
-        wallet_address,
-        telegram_id,
-        is_telegram,
-    )
 
     if not wallet_address:
         return Response(
@@ -684,197 +666,234 @@ def connect_wallet(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    if not telegram_id:
+    try:
+        identity = _telegram_identity_from_request(request)
+    except ValueError as exc:
         return Response(
-            {"error": "telegram_id required"},
+            {"error": str(exc)},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    try:
-        telegram_id = int(telegram_id)
-    except (TypeError, ValueError):
-        return Response(
-            {"error": "Invalid telegram_id"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+    telegram_id = identity["telegram_id"]
+    telegram_username = identity.get("telegram_username")
+    telegram_photo_url = identity.get("telegram_photo_url")
+    inviter_code = identity.get("inviter_code")
+    is_telegram = bool(identity.get("is_telegram", True))
+
+    logger.info(
+        "[CONNECT_TELEGRAM_FIRST] telegram_id=%s wallet=%s",
+        telegram_id,
+        wallet_address,
+    )
 
     max_attempts = 5
 
     for attempt in range(max_attempts):
         try:
-            previous_user = (
-                AppUser.objects
-                .filter(telegram_id=telegram_id)
-                .first()
-            )
-
-            previous_wallet = (
-                previous_user.wallet_address
-                if previous_user
-                else None
-            )
-
-            user = get_or_create_user(
-                wallet_address=wallet_address,
-                telegram_id=telegram_id,
-                is_telegram=is_telegram,
-            )
-
-            update_fields = []
-
-            if telegram_username:
-                clean_username = str(telegram_username).strip().lstrip("@")
-
-                if (
-                    clean_username
-                    and not clean_username.startswith("browser_")
-                    and user.telegram_username != clean_username
-                ):
-                    user.telegram_username = clean_username
-                    update_fields.append("telegram_username")
-
-            if telegram_photo_url:
-                clean_photo = str(telegram_photo_url).strip()
-
-                if (
-                    clean_photo
-                    and user.telegram_photo_url != clean_photo
-                ):
-                    user.telegram_photo_url = clean_photo
-                    update_fields.append("telegram_photo_url")
-
-            # Keep wallet locking disabled even for legacy rows.
-            if user.wallet_locked:
-                user.wallet_locked = False
-                update_fields.append("wallet_locked")
-
-            if update_fields:
-                user.save(update_fields=list(dict.fromkeys(update_fields)))
-
-            # ============================================================
-            # REFERRAL DEBUG TRACE
-            # Adds diagnostics to /connect/ response without changing the
-            # one-time referral rule or reward logic.
-            # ============================================================
-            referral_debug = {
-                "requested_code": inviter_code,
-                "requested": bool(inviter_code),
-                "user_inviter_before_id": user.inviter_id,
-                "requested_inviter_exists": False,
-                "requested_inviter_id": None,
-                "requested_inviter_wallet": None,
-                "attempted": False,
-                "applied": False,
-                "reason": None,
-            }
-
-            requested_inviter = None
-            if inviter_code:
-                requested_inviter = (
+            with transaction.atomic():
+                user = (
                     AppUser.objects
-                    .filter(referral_code=inviter_code)
+                    .select_for_update()
+                    .filter(telegram_id=telegram_id)
                     .first()
                 )
 
-                if requested_inviter:
-                    referral_debug.update({
-                        "requested_inviter_exists": True,
-                        "requested_inviter_id": requested_inviter.id,
-                        "requested_inviter_wallet": requested_inviter.wallet_address,
-                    })
+                wallet_owner = (
+                    AppUser.objects
+                    .select_for_update()
+                    .filter(wallet_address=wallet_address)
+                    .first()
+                )
 
-            # Referral relationship remains one-time only. Wallet changes do not
-            # recreate inviter relationships or referral bonuses.
-            if inviter_code and not user.inviter_id:
-                referral_debug["attempted"] = True
-                apply_referral(inviter_code, user)
-                user.refresh_from_db(fields=["inviter"])
+                # A real wallet must never silently move between two Telegram IDs.
+                if (
+                    wallet_owner
+                    and wallet_owner.telegram_id not in (None, telegram_id)
+                    and (not user or wallet_owner.pk != user.pk)
+                ):
+                    return Response(
+                        {
+                            "error":
+                                "This wallet is already linked to another Telegram account.",
+                            "code": "wallet_collision",
+                        },
+                        status=status.HTTP_409_CONFLICT,
+                    )
 
-            referral_debug["user_inviter_after_id"] = user.inviter_id
+                previous_wallet = _public_wallet_address(user) if user else None
 
-            if not inviter_code:
-                referral_debug["reason"] = "NO_INVITER_CODE"
-            elif referral_debug["user_inviter_before_id"]:
-                referral_debug["reason"] = "USER_ALREADY_HAS_INVITER"
-            elif not requested_inviter:
-                referral_debug["reason"] = "INVITER_CODE_NOT_FOUND"
-            elif requested_inviter.id == user.id:
-                referral_debug["reason"] = "SELF_REFERRAL_BLOCKED"
-            elif user.inviter_id == requested_inviter.id:
-                referral_debug["applied"] = True
-                referral_debug["reason"] = "APPLIED"
-            else:
-                referral_debug["reason"] = "ATTEMPTED_BUT_NOT_APPLIED"
+                if user:
+                    # If another legacy row already owns this wallet, do not merge
+                    # financial histories automatically.
+                    if wallet_owner and wallet_owner.pk != user.pk:
+                        return Response(
+                            {
+                                "error":
+                                    "This wallet belongs to another existing account.",
+                                "code": "wallet_collision",
+                            },
+                            status=status.HTTP_409_CONFLICT,
+                        )
 
-            logger.info(
-                "[REF_DEBUG] user_id=%s telegram_id=%s requested_code=%s "
-                "before=%s requested_inviter=%s attempted=%s after=%s "
-                "applied=%s reason=%s",
-                user.id,
-                user.telegram_id,
-                inviter_code,
-                referral_debug["user_inviter_before_id"],
-                referral_debug["requested_inviter_id"],
-                referral_debug["attempted"],
-                referral_debug["user_inviter_after_id"],
-                referral_debug["applied"],
-                referral_debug["reason"],
-            )
+                    update_fields = []
 
-            wallet_changed = bool(
-                previous_wallet
-                and previous_wallet != user.wallet_address
-            )
+                    if user.wallet_address != wallet_address:
+                        user.wallet_address = wallet_address
+                        update_fields.append("wallet_address")
 
-            logger.info(
-                "[CONNECT_UNLOCKED] success user_id=%s telegram_id=%s "
-                "wallet=%s changed=%s",
-                user.id,
-                user.telegram_id,
-                user.wallet_address,
-                wallet_changed,
-            )
+                    if telegram_username and user.telegram_username != telegram_username:
+                        user.telegram_username = telegram_username
+                        update_fields.append("telegram_username")
 
-            return Response(
-                {
-                    "success": True,
-                    "wallet_changed": wallet_changed,
-                    "previous_wallet": (
-                        previous_wallet
-                        if wallet_changed
-                        else None
-                    ),
-                    "referral_debug": referral_debug,
-                    "user": {
-                        "id": user.id,
-                        "telegram_id": user.telegram_id,
-                        "telegram_username": user.telegram_username,
-                        "telegram_photo_url": user.telegram_photo_url,
-                        "wallet_address": user.wallet_address,
-                        "referral_code": user.referral_code,
+                    if telegram_photo_url and user.telegram_photo_url != telegram_photo_url:
+                        user.telegram_photo_url = telegram_photo_url
+                        update_fields.append("telegram_photo_url")
+
+                    if not user.is_telegram_user:
+                        user.is_telegram_user = True
+                        update_fields.append("is_telegram_user")
+
+                    if not user.telegram_verified:
+                        user.telegram_verified = True
+                        update_fields.append("telegram_verified")
+
+                    if user.wallet_locked:
+                        user.wallet_locked = False
+                        update_fields.append("wallet_locked")
+
+                    if hasattr(user, "is_active") and not user.is_active:
+                        user.is_active = True
+                        update_fields.append("is_active")
+
+                    if hasattr(user, "last_active"):
+                        user.last_active = timezone.now()
+                        update_fields.append("last_active")
+
+                    if update_fields:
+                        user.save(
+                            update_fields=list(dict.fromkeys(update_fields))
+                        )
+
+                elif wallet_owner:
+                    # Legacy wallet-only row: attach Telegram identity to it.
+                    user = wallet_owner
+                    update_fields = []
+
+                    if user.telegram_id != telegram_id:
+                        user.telegram_id = telegram_id
+                        update_fields.append("telegram_id")
+
+                    if telegram_username and user.telegram_username != telegram_username:
+                        user.telegram_username = telegram_username
+                        update_fields.append("telegram_username")
+
+                    if telegram_photo_url and user.telegram_photo_url != telegram_photo_url:
+                        user.telegram_photo_url = telegram_photo_url
+                        update_fields.append("telegram_photo_url")
+
+                    if not user.is_telegram_user:
+                        user.is_telegram_user = True
+                        update_fields.append("is_telegram_user")
+
+                    if not user.telegram_verified:
+                        user.telegram_verified = True
+                        update_fields.append("telegram_verified")
+
+                    if user.wallet_locked:
+                        user.wallet_locked = False
+                        update_fields.append("wallet_locked")
+
+                    if hasattr(user, "is_active") and not user.is_active:
+                        user.is_active = True
+                        update_fields.append("is_active")
+
+                    if hasattr(user, "last_active"):
+                        user.last_active = timezone.now()
+                        update_fields.append("last_active")
+
+                    if update_fields:
+                        user.save(
+                            update_fields=list(dict.fromkeys(update_fields))
+                        )
+
+                else:
+                    # Brand-new Telegram user connecting the first real wallet.
+                    create_kwargs = {
+                        "wallet_address": wallet_address,
+                        "telegram_id": telegram_id,
+                        "telegram_username":
+                            telegram_username or f"tg_{telegram_id}",
+                        "telegram_photo_url": telegram_photo_url,
+                        "is_telegram_user": True,
+                        "telegram_verified": True,
                         "wallet_locked": False,
-                        "is_telegram": user.is_telegram_user,
-                        "telegram_verified": user.telegram_verified,
+                    }
+
+                    # Current project snapshots contain these fields, but guard
+                    # them for compatibility with older local DBs/models.
+                    model_field_names = {
+                        field.name for field in AppUser._meta.get_fields()
+                    }
+                    if "is_active" in model_field_names:
+                        create_kwargs["is_active"] = True
+                    if "last_active" in model_field_names:
+                        create_kwargs["last_active"] = timezone.now()
+
+                    user = AppUser.objects.create(**create_kwargs)
+
+                Wallet.objects.get_or_create(user=user)
+
+                # Referral remains one-time and belongs to Telegram identity,
+                # not to a particular connected wallet.
+                if inviter_code and not user.inviter_id:
+                    apply_referral(inviter_code, user)
+                    user.refresh_from_db()
+
+                current_wallet = _public_wallet_address(user)
+                wallet_changed = bool(
+                    previous_wallet
+                    and current_wallet
+                    and previous_wallet != current_wallet
+                )
+
+                logger.info(
+                    "[CONNECT_TELEGRAM_FIRST] success user=%s telegram_id=%s "
+                    "wallet=%s changed=%s",
+                    user.id,
+                    telegram_id,
+                    current_wallet,
+                    wallet_changed,
+                )
+
+                return Response(
+                    {
+                        "success": True,
+                        "wallet_connected": bool(current_wallet),
+                        "wallet_changed": wallet_changed,
+                        "previous_wallet":
+                            previous_wallet if wallet_changed else None,
+                        "return_to": "/stake",
+                        "user": {
+                            **_telegram_user_payload(user),
+                            "wallet_locked": False,
+                        },
                     },
-                },
-                status=status.HTTP_200_OK,
-            )
+                    status=status.HTTP_200_OK,
+                )
 
         except OperationalError as exc:
             is_locked = "database is locked" in str(exc).lower()
 
             if not is_locked:
-                logger.exception("connect_wallet database error")
+                logger.exception(
+                    "[CONNECT_TELEGRAM_FIRST] database error"
+                )
                 return Response(
                     {"error": "Database error"},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
 
             if attempt >= max_attempts - 1:
-                logger.exception(
-                    "connect_wallet SQLite remained locked after %s attempts",
-                    max_attempts,
-                )
                 return Response(
                     {
                         "error": "Database is busy. Please retry.",
@@ -883,35 +902,25 @@ def connect_wallet(request):
                     status=status.HTTP_503_SERVICE_UNAVAILABLE,
                 )
 
-            delay = 0.15 * (2 ** attempt)
-            logger.warning(
-                "SQLite locked during /connect/; retry %s/%s in %.2fs",
-                attempt + 1,
-                max_attempts,
-                delay,
+            time.sleep(0.15 * (2 ** attempt))
+
+        except IntegrityError:
+            logger.exception(
+                "[CONNECT_TELEGRAM_FIRST] identity uniqueness conflict"
             )
-            time.sleep(delay)
-
-        except (TypeError, ValueError) as exc:
-            message = str(exc)
-            logger.warning("[CONNECT_UNLOCKED] validation/conflict: %s", message)
-
-            if "another account" in message.lower():
-                return Response(
-                    {
-                        "error": message,
-                        "code": "wallet_collision",
-                    },
-                    status=status.HTTP_409_CONFLICT,
-                )
-
             return Response(
-                {"error": message},
-                status=status.HTTP_400_BAD_REQUEST,
+                {
+                    "error":
+                        "Wallet or Telegram identity is already linked to another account.",
+                    "code": "identity_conflict",
+                },
+                status=status.HTTP_409_CONFLICT,
             )
 
         except Exception as exc:
-            logger.exception("[CONNECT_UNLOCKED] unexpected error")
+            logger.exception(
+                "[CONNECT_TELEGRAM_FIRST] unexpected error"
+            )
             return Response(
                 {
                     "error": "Unable to connect wallet",
@@ -1227,42 +1236,39 @@ def wallet_view(request, wallet_address):
 @api_view(["POST"])
 def create_purchase(request):
     """
-    Create the purchase immediately after TON Connect reports sendTransaction
-    success. This path intentionally does NOT wait for TON Center / on-chain
-    indexing. The signed wallet BOC is hashed locally and used as the
-    idempotency key so frontend retries cannot create duplicate invoices.
+    Save the real TON purchase AFTER TonConnect returned a signed BOC.
 
-    IMPORTANT: blockchain_verified=False means this is wallet-accepted, not a
-    final on-chain confirmation. Use a later reconciliation job if finality is
-    required.
+    Telegram ID is the account identity.
+    wallet_address is required only to prove which connected wallet signed
+    this payment and must match the wallet currently attached to telegram_id.
     """
     logger.info("=" * 60)
-    logger.info("💰 CREATE_PURCHASE / WALLET-IMMEDIATE")
+    logger.info("💰 CREATE_PURCHASE / TELEGRAM-FIRST")
     logger.info("📥 Data keys: %s", list(request.data.keys()))
 
     wallet_address = str(
-        request.data.get("wallet_address", "")
+        request.data.get("wallet_address", "") or ""
     ).strip()
 
     boc = str(
-        request.data.get("boc", "")
+        request.data.get("boc", "") or ""
     ).strip()
 
     output_asset = str(
-        request.data.get("output_asset", "ECG")
+        request.data.get("output_asset", "ECG") or "ECG"
     ).strip().upper()
 
     network = str(
-        request.data.get("network", "-239")
+        request.data.get("network", "-239") or "-239"
     ).strip()
 
     expected_gram_amount_raw = str(
-        request.data.get("expected_gram_amount", "")
+        request.data.get("expected_gram_amount", "") or ""
     ).strip()
 
     if not wallet_address:
         return Response(
-            {"error": "wallet_address required"},
+            {"error": "wallet_address required for TON payment"},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -1285,6 +1291,16 @@ def create_purchase(request):
         )
 
     try:
+        identity = _telegram_identity_from_request(request)
+    except ValueError as exc:
+        return Response(
+            {"error": str(exc)},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    telegram_id = identity["telegram_id"]
+
+    try:
         gram_nano = int(expected_gram_amount_raw)
         if gram_nano <= 0:
             raise ValueError()
@@ -1298,11 +1314,7 @@ def create_purchase(request):
         )
 
     gram_address = str(
-        getattr(
-            settings,
-            "GRAM_MERCHANT_ADDRESS",
-            "",
-        ) or ""
+        getattr(settings, "GRAM_MERCHANT_ADDRESS", "") or ""
     ).strip()
 
     if not gram_address:
@@ -1311,8 +1323,44 @@ def create_purchase(request):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
-    # Local receipt key. 64 hex chars keeps compatibility with a typical
-    # tx-hash CharField while avoiding any network/indexer dependency.
+    user = (
+        AppUser.objects
+        .filter(telegram_id=telegram_id)
+        .first()
+    )
+
+    if not user:
+        return Response(
+            {
+                "error":
+                    "Telegram account not found. Open Wallet and connect your TON wallet first.",
+                "code": "telegram_user_not_found",
+            },
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    connected_wallet = _public_wallet_address(user)
+
+    if not connected_wallet:
+        return Response(
+            {
+                "error": "No TON wallet is connected to this Telegram account.",
+                "code": "wallet_not_connected",
+            },
+            status=status.HTTP_409_CONFLICT,
+        )
+
+    if connected_wallet != wallet_address:
+        return Response(
+            {
+                "error":
+                    "The payment wallet does not match the wallet connected to this Telegram account.",
+                "code": "wallet_mismatch",
+                "connected_wallet": connected_wallet,
+            },
+            status=status.HTTP_409_CONFLICT,
+        )
+
     wallet_receipt_hash = hashlib.sha256(
         boc.encode("utf-8")
     ).hexdigest()
@@ -1322,34 +1370,17 @@ def create_purchase(request):
         / Decimal("1000000000")
     )
 
-    telegram_id = (
-        request.query_params.get("telegram_id")
-        or request.headers.get("X-Telegram-Id")
-    )
-
-    is_telegram = (
-        request.query_params.get("is_telegram", "false").lower() == "true"
-        or request.headers.get("X-Telegram") == "true"
-    )
-
     try:
-        user = get_or_create_user(
-            wallet_address,
-            int(telegram_id) if telegram_id else None,
-            is_telegram if telegram_id else False,
-        )
-
         logger.info(
-            "[WALLET_IMMEDIATE] user=%s user_id=%s inviter_id=%s amount=%s receipt=%s",
-            user.wallet_address,
+            "[PURCHASE_TELEGRAM_FIRST] telegram_id=%s user=%s wallet=%s amount=%s receipt=%s",
+            telegram_id,
             user.id,
-            user.inviter_id,
+            connected_wallet,
             ton_amount,
             wallet_receipt_hash,
         )
 
-        # Idempotency: the exact same signed wallet BOC can create only one
-        # Purchase, even if React retries because the HTTP response was lost.
+        # Idempotency: one signed BOC can produce only one purchase.
         existing = (
             Purchase.objects
             .filter(ton_tx_hash=wallet_receipt_hash)
@@ -1380,6 +1411,7 @@ def create_purchase(request):
                     "confirmation_source": "wallet",
                     "blockchain_verified": False,
                     "already_registered": True,
+                    "telegram_id": telegram_id,
                     "ton_tx_hash": wallet_receipt_hash,
                     "wallet_receipt_hash": wallet_receipt_hash,
                     "message_hash": wallet_receipt_hash,
@@ -1420,13 +1452,11 @@ def create_purchase(request):
         serialized["blockchain_verified"] = False
 
         logger.info(
-            "✅ WALLET-CONFIRMED INVOICE CREATED: invoice=%s user=%s inviter_id=%s receipt=%s",
+            "✅ TELEGRAM-FIRST PURCHASE CREATED invoice=%s user=%s telegram_id=%s",
             purchase.invoice_no,
             user.id,
-            user.inviter_id,
-            wallet_receipt_hash,
+            telegram_id,
         )
-        logger.info("=" * 60)
 
         return Response(
             {
@@ -1434,6 +1464,7 @@ def create_purchase(request):
                 "confirmation_source": "wallet",
                 "blockchain_verified": False,
                 "already_registered": False,
+                "telegram_id": telegram_id,
                 "ton_tx_hash": wallet_receipt_hash,
                 "wallet_receipt_hash": wallet_receipt_hash,
                 "message_hash": wallet_receipt_hash,
@@ -1446,14 +1477,18 @@ def create_purchase(request):
         )
 
     except OperationalError as exc:
-        logger.exception("SQLite/database error during immediate purchase")
+        logger.exception(
+            "SQLite/database error during Telegram-first purchase"
+        )
         return Response(
             {"error": str(exc)},
             status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
 
     except Exception as exc:
-        logger.exception("Immediate wallet purchase error")
+        logger.exception(
+            "Telegram-first immediate purchase error"
+        )
         return Response(
             {"error": str(exc)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1462,22 +1497,77 @@ def create_purchase(request):
 
 @api_view(["GET"])
 def list_purchases(request):
-    wallet_address = request.query_params.get("wallet")
-    if not wallet_address:
-        return Response({"error": "wallet param required"}, status=400)
+    """
+    Return purchases for the Telegram account.
 
-    user = AppUser.objects.filter(wallet_address=wallet_address).first()
+    Preferred:
+        GET /purchase/list/?telegram_id=<id>
+
+    Legacy wallet lookup remains as a fallback only.
+    """
+    raw_telegram_id = (
+        request.query_params.get("telegram_id")
+        or request.headers.get("X-Telegram-Id")
+    )
+
+    wallet_address = (
+        request.query_params.get("wallet")
+        or request.query_params.get("wallet_address")
+    )
+
+    user = None
+
+    if raw_telegram_id not in (None, ""):
+        try:
+            telegram_id = int(raw_telegram_id)
+        except (TypeError, ValueError):
+            return Response(
+                {"error": "Invalid telegram_id"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if telegram_id <= 0:
+            return Response(
+                {"error": "Invalid telegram_id"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = AppUser.objects.filter(
+            telegram_id=telegram_id
+        ).first()
+
+    elif wallet_address:
+        # Backward compatibility for old clients.
+        user = AppUser.objects.filter(
+            wallet_address=wallet_address
+        ).first()
+
+    else:
+        return Response(
+            {"error": "telegram_id required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     if not user:
-        return Response([], status=status.HTTP_200_OK)
+        return Response(
+            [],
+            status=status.HTTP_200_OK,
+        )
 
     qs = user.purchases.order_by("-created_at")
-    serialized = list(PurchaseSerializer(qs, many=True).data)
+    serialized = list(
+        PurchaseSerializer(qs, many=True).data
+    )
 
     for item, purchase in zip(serialized, qs):
         item["created_at"] = purchase.created_at
         item["lock_period_days"] = 365
+        item["telegram_id"] = user.telegram_id
 
-    return Response(serialized)
+    return Response(
+        serialized,
+        status=status.HTTP_200_OK,
+    )
 
 
 @api_view(["POST"])
@@ -3119,103 +3209,202 @@ def list_purchases_bnb(request):
 
 @csrf_exempt
 def create_ton_transaction(request):
+    """
+    Build the TON Connect transaction payload only.
 
+    IMPORTANT:
+    This endpoint MUST NOT create a Purchase row.
+    A Purchase is created later by create_purchase() only after TonConnect
+    returns a signed BOC.
+
+    Telegram ID is the application identity; wallet_address must match the
+    wallet already connected to that Telegram account.
+    """
     if request.method != "POST":
         return JsonResponse(
             {
                 "status": "error",
-                "message": "POST required"
+                "message": "POST required",
             },
-            status=405
+            status=405,
         )
 
     try:
-        body = json.loads(request.body)
+        body = json.loads(request.body or b"{}")
 
         logger.info("=" * 60)
-        logger.info("🚀 CREATE TON TRANSACTION")
-        logger.info("DATA: %s", body)
+        logger.info("🚀 CREATE TON TRANSACTION / TELEGRAM-FIRST")
+        logger.info("DATA KEYS: %s", list(body.keys()))
         logger.info("=" * 60)
 
         wallet_address = str(
-            body.get("wallet_address", "")
+            body.get("wallet_address", "") or ""
         ).strip()
 
-        amount = body.get("amount")
-
-        network = str(
-            body.get("network", "-239")
+        raw_telegram_id = (
+            body.get("telegram_id")
+            or request.headers.get("X-Telegram-Id")
         )
 
-        if not wallet_address or not amount:
-            logger.warning(
-                "Missing data wallet=%s amount=%s",
-                wallet_address,
-                amount
-            )
+        amount_raw = body.get("amount")
+        network = str(
+            body.get("network", "-239") or "-239"
+        ).strip()
 
+        if not wallet_address:
             return JsonResponse(
                 {
                     "status": "error",
-                    "message": "missing data"
+                    "message": "wallet_address required",
+                    "code": "wallet_required",
                 },
-                status=400
+                status=400,
             )
 
-        user, _ = AppUser.objects.get_or_create(
-            wallet_address=wallet_address
-        )
+        if raw_telegram_id in (None, ""):
+            return JsonResponse(
+                {
+                    "status": "error",
+                    "message": "telegram_id required",
+                    "code": "telegram_id_required",
+                },
+                status=400,
+            )
 
-        invoice = uuid.uuid4().hex[:12].upper()
+        try:
+            telegram_id = int(raw_telegram_id)
+            if telegram_id <= 0:
+                raise ValueError()
+        except (TypeError, ValueError):
+            return JsonResponse(
+                {
+                    "status": "error",
+                    "message": "Invalid telegram_id",
+                },
+                status=400,
+            )
 
-        purchase = Purchase.objects.create(
-            user=user,
-            invoice_no=invoice,
-            ton_amount=Decimal(amount) / Decimal("1000000000"),
-            ton_tx_hash=invoice,
-            ton_usd_rate=0,
-            usd_value=0,
-            ecg_value=0,
-            self_profit_5=0,
-            principal_unlock_at=timezone.now(),
-            self_profit_unlock_at=timezone.now(),
-        )
+        try:
+            amount = int(str(amount_raw))
+            if amount <= 0:
+                raise ValueError()
+        except (TypeError, ValueError):
+            return JsonResponse(
+                {
+                    "status": "error",
+                    "message": "amount must be a positive nanoTON integer",
+                },
+                status=400,
+            )
+
+        if network not in {"-239", "-3"}:
+            return JsonResponse(
+                {
+                    "status": "error",
+                    "message": "Invalid TON network",
+                },
+                status=400,
+            )
+
+        gram_address = str(
+            getattr(settings, "GRAM_MERCHANT_ADDRESS", "") or ""
+        ).strip()
+
+        if not gram_address:
+            return JsonResponse(
+                {
+                    "status": "error",
+                    "message": "GRAM_MERCHANT_ADDRESS is not configured",
+                },
+                status=500,
+            )
+
+        user = AppUser.objects.filter(
+            telegram_id=telegram_id
+        ).first()
+
+        if not user:
+            return JsonResponse(
+                {
+                    "status": "error",
+                    "message":
+                        "Telegram account not found. Connect your wallet first.",
+                    "code": "telegram_user_not_found",
+                },
+                status=404,
+            )
+
+        connected_wallet = _public_wallet_address(user)
+
+        if not connected_wallet:
+            return JsonResponse(
+                {
+                    "status": "error",
+                    "message":
+                        "No TON wallet is connected to this Telegram account.",
+                    "code": "wallet_not_connected",
+                },
+                status=409,
+            )
+
+        if connected_wallet != wallet_address:
+            return JsonResponse(
+                {
+                    "status": "error",
+                    "message":
+                        "Connected wallet does not match this Telegram account.",
+                    "code": "wallet_mismatch",
+                },
+                status=409,
+            )
 
         logger.info(
-            "✅ PURCHASE CREATED id=%s invoice=%s wallet=%s amount=%s network=%s",
-            purchase.id,
-            invoice,
+            "[CREATE_TX] telegram_id=%s user=%s wallet=%s amount=%s network=%s",
+            telegram_id,
+            user.id,
             wallet_address,
             amount,
-            network
+            network,
         )
 
+        # No Purchase row is created here.
         return JsonResponse(
             {
                 "status": "ok",
-                "invoice_no": purchase.invoice_no,
-                "purchase_id": purchase.id,
-                "gram_address": settings.GRAM_MERCHANT_ADDRESS,
+                "telegram_id": telegram_id,
+                "wallet_address": wallet_address,
+                "gram_address": gram_address,
                 "gram_amount": str(amount),
                 "transaction": {
                     "validUntil": int(time.time()) + 300,
                     "messages": [
                         {
-                            "address": settings.GRAM_MERCHANT_ADDRESS,
+                            "address": gram_address,
                             "amount": str(amount),
                         }
-                    ]
-                }
+                    ],
+                },
             },
-            status=201
+            status=200,
         )
 
-    except Exception as e:
-        logger.exception("❌ CREATE TON TRANSACTION ERROR")
+    except json.JSONDecodeError:
         return JsonResponse(
             {
                 "status": "error",
-                "message": str(e)
+                "message": "Invalid JSON body",
             },
-            status=500
+            status=400,
+        )
+
+    except Exception as exc:
+        logger.exception(
+            "❌ CREATE TON TRANSACTION TELEGRAM-FIRST ERROR"
+        )
+        return JsonResponse(
+            {
+                "status": "error",
+                "message": str(exc),
+            },
+            status=500,
         )

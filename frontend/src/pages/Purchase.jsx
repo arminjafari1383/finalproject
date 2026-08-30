@@ -1,11 +1,83 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTonConnectUI, useTonWallet } from "@tonconnect/ui-react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import "./Purchase.css";
 import ecgLogo from "../assets/ecg-logo.png";
 import usdtLogo from "../assets/usdt-logo.png";
 
+const USER_DATA_KEY = "my_app_user_data";
+const WALLET_RETURN_TO_KEY = "wallet_return_to";
+const STAKE_DRAFT_KEY = "stake_draft";
+
+function readStakeDraft() {
+  try {
+    const raw = sessionStorage.getItem(STAKE_DRAFT_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+
+    return {
+      tonAmount: String(parsed?.tonAmount ?? "0"),
+      selectedOutput: parsed?.selectedOutput === "USDT" ? "USDT" : "ECG",
+    };
+  } catch {
+    return { tonAmount: "0", selectedOutput: "ECG" };
+  }
+}
+
+function readTelegramIdentity() {
+  try {
+    const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user || null;
+
+    const raw = localStorage.getItem(USER_DATA_KEY);
+    const stored = raw ? JSON.parse(raw) : {};
+
+    const telegramId = Number(
+      tgUser?.id ??
+        stored?.telegramId ??
+        localStorage.getItem("telegram_id") ??
+        0
+    );
+
+    if (!Number.isFinite(telegramId) || telegramId <= 0) {
+      return null;
+    }
+
+    const identity = {
+      telegram_id: telegramId,
+      telegram_username:
+        tgUser?.username || stored?.telegramUsername || null,
+      telegram_photo_url:
+        tgUser?.photo_url || stored?.telegramPhotoUrl || null,
+      first_name:
+        tgUser?.first_name || stored?.telegramFirstName || null,
+      last_name:
+        tgUser?.last_name || stored?.telegramLastName || null,
+      is_telegram: Boolean(tgUser?.id || stored?.isTelegram),
+    };
+
+    localStorage.setItem("telegram_id", String(telegramId));
+    localStorage.setItem(
+      USER_DATA_KEY,
+      JSON.stringify({
+        ...stored,
+        telegramId,
+        telegramUsername: identity.telegram_username,
+        telegramPhotoUrl: identity.telegram_photo_url,
+        telegramFirstName: identity.first_name,
+        telegramLastName: identity.last_name,
+        isTelegram: identity.is_telegram,
+      })
+    );
+
+    return identity;
+  } catch (error) {
+    console.error("[Purchase] Telegram identity read error:", error);
+    return null;
+  }
+}
+
 export default function Purchase() {
+  const navigate = useNavigate();
   const tonWallet = useTonWallet();
 
   const walletAddress = useMemo(
@@ -15,8 +87,18 @@ export default function Purchase() {
 
   const [tonConnectUI] = useTonConnectUI();
 
-  const [tonAmount, setTonAmount] = useState("0");
-  const [selectedOutput, setSelectedOutput] = useState("ECG");
+  const [telegramIdentity, setTelegramIdentity] = useState(() =>
+    readTelegramIdentity()
+  );
+
+  const telegramId = telegramIdentity?.telegram_id || null;
+  const telegramUsername = telegramIdentity?.telegram_username || null;
+  const telegramPhotoUrl = telegramIdentity?.telegram_photo_url || null;
+
+  const initialStakeDraft = useMemo(() => readStakeDraft(), []);
+
+  const [tonAmount, setTonAmount] = useState(initialStakeDraft.tonAmount);
+  const [selectedOutput, setSelectedOutput] = useState(initialStakeDraft.selectedOutput);
   const [invoices, setInvoices] = useState([]);
   const [successMessage, setSuccessMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -52,6 +134,23 @@ export default function Purchase() {
       setSuccessMessage("");
     }, 4000);
   }
+
+  // =========================
+  // TELEGRAM IDENTITY
+  // =========================
+
+  useEffect(() => {
+    const tg = window.Telegram?.WebApp;
+
+    try {
+      tg?.ready?.();
+      tg?.expand?.();
+    } catch (error) {
+      console.warn("[Purchase] Telegram WebApp init warning:", error);
+    }
+
+    setTelegramIdentity(readTelegramIdentity());
+  }, []);
 
   // =========================
   // TON PRICE
@@ -90,15 +189,25 @@ export default function Purchase() {
   // =========================
 
   async function loadInvoices() {
-    if (!walletAddress) {
+    if (!telegramId) {
+      setInvoices([]);
       return;
     }
 
     try {
       setLoading(true);
 
-      const res = await api.get(`/purchase/list/?wallet=${walletAddress}`);
-      setInvoices(res.data || []);
+      const res = await api.get("/purchase/list/", {
+        params: {
+          telegram_id: telegramId,
+        },
+        headers: {
+          "X-Telegram-Id": String(telegramId),
+          "X-Telegram": "true",
+        },
+      });
+
+      setInvoices(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       console.error("load invoices error", error);
     } finally {
@@ -108,7 +217,7 @@ export default function Purchase() {
 
   useEffect(() => {
     loadInvoices();
-  }, [walletAddress]);
+  }, [telegramId]);
 
   // =========================
   // CALCULATIONS
@@ -268,6 +377,10 @@ export default function Purchase() {
 
     const confirmPayload = {
       wallet_address: payment.wallet_address,
+      telegram_id: payment.telegram_id || telegramId,
+      telegram_username: payment.telegram_username || telegramUsername,
+      telegram_photo_url: payment.telegram_photo_url || telegramPhotoUrl,
+      is_telegram: true,
       output_asset: payment.output_asset || "ECG",
       output_amount: String(
         payment.output_amount ||
@@ -282,7 +395,18 @@ export default function Purchase() {
     };
 
     try {
-      const response = await api.post("/purchase/create/", confirmPayload);
+      const response = await api.post("/purchase/create/", confirmPayload, {
+        params: {
+          telegram_id: telegramId || undefined,
+          is_telegram: telegramId ? "true" : undefined,
+        },
+        headers: telegramId
+          ? {
+              "X-Telegram-Id": String(telegramId),
+              "X-Telegram": "true",
+            }
+          : undefined,
+      });
 
       const data = response?.data || {};
 
@@ -363,8 +487,31 @@ export default function Purchase() {
   }, [walletAddress]);
 
   async function payAndRegister() {
+    if (!telegramId) {
+      alert("Telegram ID was not detected. Please open the Mini App inside Telegram.");
+      return;
+    }
+
     if (!walletAddress) {
-      alert("Wallet is not connected.");
+      try {
+        sessionStorage.setItem(
+          STAKE_DRAFT_KEY,
+          JSON.stringify({
+            tonAmount,
+            selectedOutput,
+          })
+        );
+        sessionStorage.setItem(WALLET_RETURN_TO_KEY, "/stake");
+      } catch (error) {
+        console.warn("Could not save Stake return state:", error);
+      }
+
+      navigate("/wallet", {
+        state: {
+          returnTo: "/stake",
+          reason: "stake_requires_wallet",
+        },
+      });
       return;
     }
 
@@ -408,6 +555,10 @@ export default function Purchase() {
       const createTxPayload = {
         amount: nano.toString(),
         wallet_address: walletAddress,
+        telegram_id: telegramId,
+        telegram_username: telegramUsername,
+        telegram_photo_url: telegramPhotoUrl,
+        is_telegram: true,
         network: walletNetwork,
       };
 
@@ -453,6 +604,10 @@ export default function Purchase() {
 
       const paymentContext = {
         wallet_address: walletAddress,
+        telegram_id: telegramId,
+        telegram_username: telegramUsername,
+        telegram_photo_url: telegramPhotoUrl,
+        is_telegram: true,
         network: walletNetwork,
         output_asset: selectedOutput,
         gram_address: backendGramAddress,
@@ -755,15 +910,46 @@ export default function Purchase() {
 
   return (
     <div className="dark-wrapper">
-      {!walletAddress ? (
-        <div className="center-box">
-          <h3>Connect your wallet first</h3>
-          <p>Please connect your TON wallet to continue.</p>
+      <div className="page-container dark-card">
+        <h2 className="title">Stake</h2>
+
+        <div
+          style={{
+            marginBottom: 14,
+            padding: 12,
+            borderRadius: 14,
+            border: "1px solid rgba(0, 217, 255, 0.18)",
+            background: "rgba(0, 217, 255, 0.05)",
+            fontSize: 12,
+            lineHeight: 1.6,
+          }}
+        >
+          {telegramId ? (
+            <>
+              <div style={{ fontWeight: 900, color: "#00d9ff" }}>
+                Telegram Account
+              </div>
+              <div>
+                {telegramUsername ? `@${telegramUsername}` : "Telegram User"}
+              </div>
+              <div style={{ opacity: 0.72 }}>ID: {telegramId}</div>
+              <div
+                style={{
+                  marginTop: 6,
+                  color: walletAddress ? "#66f5c7" : "#ffd166",
+                }}
+              >
+                {walletAddress
+                  ? "Wallet connected — ready for TON payment."
+                  : "Wallet is optional for browsing. Connect it only when you want to pay."}
+              </div>
+            </>
+          ) : (
+            <div style={{ color: "#ff9a9a" }}>
+              Telegram ID was not detected. Open this Mini App inside Telegram.
+            </div>
+          )}
         </div>
-      ) : (
-        <>
-          <div className="page-container dark-card">
-            <h2 className="title">Stake</h2>
 
             {successMessage && (
               <div className="success-box">{successMessage}</div>
@@ -960,7 +1146,9 @@ export default function Purchase() {
                 ? "Processing..."
                 : confirmingPayment
                   ? "Confirming Previous Payment..."
-                  : `Stake TON → ${outputLabel}`}
+                  : !walletAddress
+                    ? "Connect Wallet to Stake"
+                    : `Stake TON → ${outputLabel}`}
             </button>
           </div>
 
@@ -1087,8 +1275,6 @@ export default function Purchase() {
               })}
             </div>
           </div>
-        </>
-      )}
     </div>
   );
 }
