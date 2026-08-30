@@ -2056,7 +2056,43 @@ const [totalRewards, setTotalRewards] =
     return code;
   };
 
+    const shareReferralOnTelegram = async () => {
+    if (inviteLoading) return;
 
+    setInviteLoading(true);
+    setInviteMessage("");
+
+    try {
+      const code = await getOwnReferralCode();
+
+      const referralLink =
+        `https://t.me/${BOT_USERNAME}/app?startapp=ref_${encodeURIComponent(code)}`;
+
+      const shareUrl =
+        `https://t.me/share/url?url=${encodeURIComponent(referralLink)}` +
+        `&text=${encodeURIComponent("Join AI POLIFY with my referral link")}`;
+
+      const tg = window.Telegram?.WebApp;
+
+      if (typeof tg?.openTelegramLink === "function") {
+        tg.openTelegramLink(shareUrl);
+      } else {
+        window.open(shareUrl, "_blank", "noopener,noreferrer");
+      }
+
+      setInviteMessage("Referral link opened in Telegram.");
+    } catch (error) {
+      console.error("[Timer] Invite referral error:", error);
+      setInviteMessage(
+        error?.response?.data?.error ||
+        error?.response?.data?.detail ||
+        error?.message ||
+        "Could not open the referral link."
+      );
+    } finally {
+      setInviteLoading(false);
+    }
+  };
 
   const goToStakePage = () => {
     window.location.href = "/stake";
