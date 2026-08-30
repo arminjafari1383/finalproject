@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React from "react";
 import { NavLink } from "react-router-dom";
-import { useTonWallet } from "@tonconnect/ui-react";
+
 import "./Navbar.css";
 
 import WalletIcon from "../assets/wallet.png";
@@ -9,93 +9,68 @@ import MineIcon from "../assets/mine.png";
 import FriendIcon from "../assets/friends.png";
 import AboutUsIcon from "../assets/aboutus.png";
 
+
 const navItems = [
-  { to: "/Timer", label: "Mine", icon: MineIcon, protected: true },
-  { to: "/stake", label: "Stake", icon: StakeIcon, protected: true },
-  { to: "/referrals", label: "Friends", icon: FriendIcon, protected: true },
-  { to: "/Aboutus", label: "About Us", icon: AboutUsIcon, protected: true },
-  { to: "/", label: "Wallets", icon: WalletIcon, protected: false },
+  {
+    to: "/Timer",
+    label: "Mine",
+    icon: MineIcon,
+  },
+  {
+    to: "/stake",
+    label: "Stake",
+    icon: StakeIcon,
+  },
+  {
+    to: "/referrals",
+    label: "Friends",
+    icon: FriendIcon,
+  },
+  {
+    to: "/Aboutus",
+    label: "About Us",
+    icon: AboutUsIcon,
+  },
+  {
+    to: "/wallet",
+    label: "Wallets",
+    icon: WalletIcon,
+  },
 ];
 
+
 const Navbar = () => {
-  const tonWallet = useTonWallet();
-  const walletAddress = tonWallet?.account?.address || "";
-  const isWalletConnected = Boolean(walletAddress);
-
-  const [popup, setPopup] = useState({ visible: false, message: "" });
-  const timerRef = useRef(null);
-
-  const closePopup = useCallback(() => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-
-    setPopup({ visible: false, message: "" });
-  }, []);
-
-  const showPopup = useCallback((message) => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-
-    setPopup({ visible: true, message });
-    timerRef.current = setTimeout(() => {
-      setPopup({ visible: false, message: "" });
-      timerRef.current = null;
-    }, 2500);
-  }, []);
-
-  const handleNavigation = useCallback(
-    (event, item) => {
-      if (item.protected && !isWalletConnected) {
-        event.preventDefault();
-        showPopup("Please connect your wallet first!");
-      }
-    },
-    [isWalletConnected, showPopup]
-  );
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, []);
-
   return (
-    <>
-      <nav className="navbar" aria-label="Main navigation">
-        {navItems.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.to === "/"}
-            className={({ isActive }) =>
-              [
-                "nav-item",
-                isActive ? "active" : "",
-                item.protected && !isWalletConnected ? "disabled" : "",
-              ]
-                .filter(Boolean)
-                .join(" ")
-            }
-            onClick={(event) => handleNavigation(event, item)}
-          >
-            <img src={item.icon} alt={`${item.label} icon`} />
-            <span>{item.label}</span>
-          </NavLink>
-        ))}
-      </nav>
+    <nav
+      className="navbar"
+      aria-label="Main navigation"
+    >
+      {navItems.map((item) => (
+        <NavLink
+          key={item.to}
+          to={item.to}
+          className={({ isActive }) =>
+            [
+              "nav-item",
+              isActive ? "active" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")
+          }
+        >
+          <img
+            src={item.icon}
+            alt={`${item.label} icon`}
+          />
 
-      {popup.visible && (
-        <div className="navbar-toast" role="alert">
-          <span className="navbar-toast-icon">⚠️</span>
-          <span>{popup.message}</span>
-          <button type="button" onClick={closePopup} aria-label="Close message">
-            ✕
-          </button>
-        </div>
-      )}
-    </>
+          <span>
+            {item.label}
+          </span>
+        </NavLink>
+      ))}
+    </nav>
   );
 };
+
 
 export default Navbar;
