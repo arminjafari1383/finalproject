@@ -2056,7 +2056,7 @@ const [totalRewards, setTotalRewards] =
     return code;
   };
 
-  
+
 
   const goToStakePage = () => {
     window.location.href = "/stake";
