@@ -3,11 +3,7 @@ import {
   Routes,
   Route,
   Navigate,
-  useNavigate,
-  useLocation
 } from "react-router-dom";
-
-import { useEffect, useRef } from "react";
 
 import Navbar from "./components/Navbar";
 
@@ -20,272 +16,125 @@ import AdminDashboard from "./pages/AdminDashboard";
 
 import useTgStartRedirect from "./hooks/useTgStartRedirect";
 
-import { useTonWallet } from "@tonconnect/ui-react";
-import { useWallet } from "./context/WalletContext";
-
-
-
-function ProtectedRoute({ children }) {
-
-  const tonWallet = useTonWallet();
-
-  const {
-    isWalletValid
-  } = useWallet();
-
-
-  if (
-    !tonWallet?.account?.address ||
-    !isWalletValid
-  ) {
-    return (
-      <Navigate
-        to="/"
-        replace
-      />
-    );
-  }
-
-
-  return children;
-}
-
-
-
-
 
 function AppContent() {
-
+  // Telegram start_param / referral logic
   useTgStartRedirect();
 
-
-  const navigate = useNavigate();
-
-  const location = useLocation();
-
-
-  const tonWallet = useTonWallet();
-
-
-  const {
-    validateWallet,
-    setIsWalletValid
-  } = useWallet();
-
-
-
-  const address =
-    tonWallet?.account?.address;
-
-
-
-  // فقط یک بار redirect اولیه
-  const hasRedirected =
-    useRef(false);
-
-
-
-
-  useEffect(() => {
-
-
-    // اگر ولت قطع شد
-    if (!address) {
-
-      setIsWalletValid(false);
-
-      hasRedirected.current = false;
-
-      return;
-    }
-
-
-
-    const telegramId =
-      localStorage.getItem(
-        "telegram_id"
-      );
-
-
-
-    localStorage.setItem(
-      "valid_wallet",
-      address
-    );
-
-
-
-
-    if (telegramId) {
-
-      validateWallet(
-        address,
-        Number(telegramId)
-      );
-
-    }
-
-
-
-    setIsWalletValid(true);
-
-
-
-
-    /*
-      فقط وقتی اپ تازه باز شده
-      و کاربر در صفحه اصلی است
-      برو Timer
-    */
-
-    if (
-      location.pathname === "/" &&
-      !hasRedirected.current
-    ) {
-
-      hasRedirected.current = true;
-
-
-      navigate(
-        "/Timer",
-        {
-          replace:true
-        }
-      );
-
-    }
-
-
-
-  }, [
-    address,
-    validateWallet,
-    setIsWalletValid,
-    navigate,
-    location.pathname
-  ]);
-
-
-
-
-
-
   return (
-
     <div
       style={{
-        padding:16,
-        paddingBottom:80
+        padding: 16,
+        paddingBottom: 80,
       }}
     >
-
-
       <Routes>
 
-
+        {/* =========================================
+            DEFAULT PAGE
+            وقتی اپ باز می‌شود مستقیم Timer
+        ========================================= */}
         <Route
           path="/"
           element={
-            <Wallet />
-          }
-        />
-
-
-
-        <Route
-          path="/referrals"
-          element={
-            <ProtectedRoute>
-              <Referrals />
-            </ProtectedRoute>
-          }
-        />
-
-
-
-        <Route
-          path="/stake"
-          element={
-            <ProtectedRoute>
-              <Purchase />
-            </ProtectedRoute>
-          }
-        />
-
-
-
-        <Route
-          path="/Aboutus"
-          element={
-            <ProtectedRoute>
-              <AboutUs />
-            </ProtectedRoute>
-          }
-        />
-
-
-
-        <Route
-          path="/Timer"
-          element={
-            <ProtectedRoute>
-              <Timer />
-            </ProtectedRoute>
-          }
-        />
-
-
-
-        <Route
-          path="/system-admin"
-          element={
-            <AdminDashboard />
-          }
-        />
-
-
-
-        <Route
-          path="*"
-          element={
             <Navigate
-              to="/"
+              to="/Timer"
               replace
             />
           }
         />
 
 
+        {/* =========================================
+            TIMER
+            بدون نیاز به اتصال Wallet
+        ========================================= */}
+        <Route
+          path="/Timer"
+          element={<Timer />}
+        />
+
+
+        {/* =========================================
+            WALLET
+            اتصال Wallet اختیاری است
+        ========================================= */}
+        <Route
+          path="/wallet"
+          element={<Wallet />}
+        />
+
+
+        {/* =========================================
+            REFERRALS
+            بدون نیاز به اتصال Wallet
+        ========================================= */}
+        <Route
+          path="/referrals"
+          element={<Referrals />}
+        />
+
+
+        {/* =========================================
+            STAKE / PURCHASE
+            بدون نیاز به اتصال Wallet
+        ========================================= */}
+        <Route
+          path="/stake"
+          element={<Purchase />}
+        />
+
+
+        {/* =========================================
+            ABOUT US
+            بدون نیاز به اتصال Wallet
+        ========================================= */}
+        <Route
+          path="/Aboutus"
+          element={<AboutUs />}
+        />
+
+
+        {/* =========================================
+            ADMIN
+        ========================================= */}
+        <Route
+          path="/system-admin"
+          element={<AdminDashboard />}
+        />
+
+
+        {/* =========================================
+            UNKNOWN ROUTE
+            هر آدرس اشتباه → Timer
+        ========================================= */}
+        <Route
+          path="*"
+          element={
+            <Navigate
+              to="/Timer"
+              replace
+            />
+          }
+        />
 
       </Routes>
 
 
-
+      {/* =========================================
+          NAVBAR
+      ========================================= */}
       <Navbar />
 
-
-
     </div>
-
   );
-
 }
 
 
-
-
-
 export default function App() {
-
-
   return (
-
     <BrowserRouter>
-
       <AppContent />
-
     </BrowserRouter>
-
   );
-
 }

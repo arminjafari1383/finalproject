@@ -385,13 +385,19 @@ export default function Wallet() {
 
 
       try {
+        // send a request post to backend with payload
         const response = await api.post("/connect/", payload);
-
+        
+        // set wallet lock 
         setWalletLocked(Boolean(response.data?.user?.wallet_locked));
 
+        // save return user from backend
         if (response.data?.user) {
+          // if backend information user exists
           const user = response.data.user;
+          // save inforamation backend with authoriative
           saveUserDataToStorage({
+            // means that backend important but if backend have empty fields use storage
             telegramId: user.telegram_id ?? telegramId,
             telegramUsername: user.telegram_username ?? telegramUsername,
             isTelegram: user.is_telegram ?? isTelegram,
@@ -399,24 +405,35 @@ export default function Wallet() {
           });
         }
 
+        // send request to backend for get information
         const walletResponse = await api.get(
           `/wallet/${address}/`
         );
-
+        // wallet response return json from backend
         setWallet(walletResponse.data);
 
+        // show error if exists
         setErrorType("none");
+        // if exists error in try enter this block
       } catch (e) {
+        // if axios get answer from backend , body insert in error data
         const errorData = e?.response?.data;
+        // get status code from backend
         const statusCode = e?.response?.status;
+        // review three mode , if one of them true return network error.
         const isNetworkError = e.message === "Network Error" || e.code === "ERR_NETWORK" || !e.response;
 
+        // if error is network error enter this condition
         if (isNetworkError) {
+          // it truns out type of error 
           setErrorType("network_error");
+          // it truns out word in ui
           setConnectError("Network Error! Please check your internet connection.");
+          // if error isn't network then reviews backend about this wallet previously connect another telegram user or not 
         } else if (errorData?.error?.includes("already linked") || errorData?.error?.includes("locked") || errorData?.detail?.includes("already linked")) {
           setErrorType("locked");
           setConnectError("This wallet is already linked to another Telegram account.");
+          // if doesn't previously error but http status equal 400 
         } else if (statusCode === 400) {
           setErrorType("bad_request");
           const msg = errorData?.error || errorData?.detail || "Invalid wallet address format.";
@@ -427,9 +444,14 @@ export default function Wallet() {
           setConnectError(`Server Error: ${errorMessage}`);
         }
 
+        // if error doesn't status code 400 and doesn't network code
+        // attempt get address wallet
         if (statusCode !== 400 && !isNetworkError) {
+          // maybe /connect/ get error but wallet exists in backend
           try {
+            // if discover address wallet , show on the page
             const r = await api.get(`/wallet/${address}/`);
+            // this state show on page in frontend
             setWallet(r.data);
           } catch {
             // ignore fallback error
@@ -437,10 +459,12 @@ export default function Wallet() {
         }
       }
     },
+    // in this part if address wallet change load again 
     [address]
   );
 
 
+  
   useEffect(() => {
     connectAndLoadWallet();
   }, [connectAndLoadWallet]);
@@ -450,42 +474,61 @@ export default function Wallet() {
   // LIVE WALLET VALUES
   // ====================================================
 
+  // duty get new inventory wallet from backend.
   const refreshWalletValues = useCallback(async () => {
+    // if doesn't wallet address , nothing send request.
     if (!address) {
       return;
     }
 
+    
     try {
+      // get new wallet from backend
       const response = await api.get(`/wallet/${address}/`);
+      // all before walletstate replace backend 
       setWallet(response.data);
+
     } catch (error) {
+      // if refresh fail print browser console.
       console.error("[WALLET VALUES] refresh error", error);
     }
+    // reference by address wallet
   }, [address]);
 
-
+  // if wallet disconnected , effect dosen't run.
   useEffect(() => {
     if (!address) {
       return undefined;
     }
 
+    
+    // as soon as run , once wallet refersh.
     refreshWalletValues();
 
+
+    // function refresh wallet run it.
     const timer = window.setInterval(refreshWalletValues, 15000);
 
+    // function for when browser tab visible.
     const onVisible = () => {
+      // reviewing before page observe or not.
       if (document.visibilityState === "visible") {
+        // when user tab , wallet refresh.
         refreshWalletValues();
       }
     };
 
+    // if window focus wallet refersh.
     const onFocus = () => {
       refreshWalletValues();
     };
 
+    // event about change visiblity on active page.
     document.addEventListener("visibilitychange", onVisible);
+    // event about activate focus
     window.addEventListener("focus", onFocus);
 
+    // run cleanup function 
     return () => {
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
@@ -498,42 +541,63 @@ export default function Wallet() {
   // DISCONNECT / REPLACE WALLET
   // ====================================================
 
+  // start disconnet function 
   const disconnectWallet = async () => {
+    // want tonwallet to disconnect wallet
     try {
       await tonConnectUI.disconnect();
     } catch (error) {
       console.error("TonConnect disconnect error:", error);
     }
 
+    // remove old telegram id from browser storage
     localStorage.removeItem("telegram_id");
+    // remove referral code saved.
     localStorage.removeItem("inviter_code");
+    // remove referral code by key on app.
     localStorage.removeItem(INVITER_CODE_KEY);
+    // function utility about referral run to remove referral
     clearInviterCode();
+    // remove unique information user
     localStorage.removeItem(USER_DATA_KEY);
-
+    
+    // remove wallet state
     setWallet(null);
+    // situation lock to false
     setWalletLocked(false);
+    // remove error connect
     setConnectError("");
+    // reset type error.
     setErrorType("none");
+    // clear error withdraw
     setWithdrawError("");
+    // close withdraw model
     setIsWithdrawOpen(false);
 
+    // flag that ignore repeat connect
     hasConnected.current = false;
 
+    // all page reload
     window.location.reload();
   };
+  
 
-
+  // this function for change wallet
   const replaceWallet = async () => {
+    // this condition for ignore Simultaneous operations
     if (isReplacingWallet || isWithdrawing || !address) {
       return;
     }
 
+    // change situation wallet is changeing
     setIsReplacingWallet(true);
+    // clear before error
     setConnectError("");
     setErrorType("none");
 
+    // start opreation replace 
     try {
+      
       console.log("[WALLET_CHANGE] disconnecting current wallet", address);
       await tonConnectUI.disconnect();
       removeStoredWalletOnly();
