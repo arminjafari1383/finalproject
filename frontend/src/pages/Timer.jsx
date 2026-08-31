@@ -502,6 +502,10 @@ export default function TimerPage() {
 
     console.log("[Timer] 📡 Loading user data for telegram_id:", telegramId);
     
+    // گرفتن آخرین مقادیر از state
+    const currentUsername = telegramUsername;
+    const currentPhotoUrl = telegramPhotoUrl;
+    
     let finalReferralCode = referralCode;
     if (finalReferralCode) {
       const usedReferral = localStorage.getItem(USED_REFERRAL_KEY);
@@ -525,12 +529,12 @@ export default function TimerPage() {
         'X-Telegram': 'true',
       };
       
-      if (telegramUsername) {
-        headers['X-Telegram-Username'] = telegramUsername;
+      if (currentUsername) {
+        headers['X-Telegram-Username'] = currentUsername;
       }
       
-      if (telegramPhotoUrl) {
-        headers['X-Telegram-Photo-Url'] = telegramPhotoUrl;
+      if (currentPhotoUrl) {
+        headers['X-Telegram-Photo-Url'] = currentPhotoUrl;
       }
 
       const statusResponse = await axios.get(statusUrl, { headers });
@@ -604,13 +608,13 @@ export default function TimerPage() {
       // حتی در صورت خطا، علامت‌گذاری می‌کنیم تا دوباره تلاش نکند
       loadedRef.current = true;
     }
-  }, [telegramUsername, telegramPhotoUrl, startTimerRef]);
+  }, [telegramUsername, telegramPhotoUrl]); // ✅ فقط به این دو وابسته است
 
   // =========================================================
   // ✅ TELEGRAM BOOTSTRAP & INITIAL LOAD - فقط یک بار
   // =========================================================
   useEffect(() => {
-    // ✅ جلوگیری با استفاده از ref و فلگ سراسری
+    // ✅ جلوگیری با استفاده از ref
     if (initializedRef.current) {
       console.log("[Timer] ⏳ Already initialized, skipping");
       return;
@@ -637,7 +641,7 @@ export default function TimerPage() {
     // پردازش رفرال
     const referralCode = processReferralParam();
     
-    // بارگذاری داده‌ها
+    // بارگذاری داده‌ها - فقط یک بار
     if (identity?.telegram_id) {
       // ✅ استفاده از setTimeout برای اطمینان از اینکه effect کامل شده
       const timerId = setTimeout(() => {
@@ -666,7 +670,7 @@ export default function TimerPage() {
     }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []); // ✅ آرایه خالی - فقط یک بار اجرا می‌شود
 
   // =========================================================
   // MENU
