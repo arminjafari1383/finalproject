@@ -22,6 +22,7 @@ import {
 
 const USER_DATA_KEY = "my_app_user_data";
 
+
 const BOT_USERNAME = "Aipolynetbot";
 
 // ======================================================
@@ -58,6 +59,34 @@ function saveUserData(data) {
 function getTelegramWebApp() {
   if (typeof window === "undefined") return null;
   return window.Telegram?.WebApp || null;
+}
+
+function getStartAppReferralCode() {
+  try {
+    const tg = window.Telegram?.WebApp;
+
+    const startParam = tg?.initDataUnsafe?.start_param;
+
+    if (startParam) {
+      return String(startParam).startsWith("ref_")
+        ? String(startParam).substring(4)
+        : String(startParam);
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const urlParam = params.get("startapp") || params.get("start_param");
+
+    if (urlParam) {
+      return String(urlParam).startsWith("ref_")
+        ? String(urlParam).substring(4)
+        : String(urlParam);
+    }
+
+    return localStorage.getItem("inviter_code") || null;
+  } catch (error) {
+    console.error("startapp parse error", error);
+    return null;
+  }
 }
 
 // ======================================================
@@ -227,16 +256,7 @@ export default function Referrals() {
         );
       }
 
-      let code = null;
-
-      const startParam =
-        tg?.initDataUnsafe?.start_param || null;
-
-      if (startParam) {
-        code = String(startParam).startsWith("ref_")
-          ? String(startParam).substring(4)
-          : String(startParam);
-      }
+      let code = getStartAppReferralCode();
 
       if (!code) {
         try {
