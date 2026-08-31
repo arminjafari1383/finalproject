@@ -422,6 +422,24 @@ export default function TimerPage() {
   const telegramBootRef = useRef(false);
   const dataLoadedRef = useRef(false);
 
+  // ✅ استفاده از useRef برای stopTimer و startTimer به جای useCallback
+  const stopTimerRef = useRef(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  });
+
+  const startTimerRef = useRef(() => {
+    if (intervalRef.current) return;
+    intervalRef.current = setInterval(() => {
+      setRemaining((sec) => {
+        if (sec === null || sec === undefined) return sec;
+        return sec > 0 ? sec - 1 : 0;
+      });
+    }, 1000);
+  });
+
   /* =========================================================
      TELEGRAM BOOTSTRAP
   ========================================================= */
@@ -457,36 +475,11 @@ export default function TimerPage() {
   }, []);
 
   /* =========================================================
-     TIMER CONTROL
-  ========================================================= */
-  const stopTimer = useCallback(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-  }, []);
-
-  const startTimer = useCallback(() => {
-    if (intervalRef.current) return;
-    intervalRef.current = setInterval(() => {
-      setRemaining((sec) => {
-        if (sec === null || sec === undefined) return sec;
-        return sec > 0 ? sec - 1 : 0;
-      });
-    }, 1000);
-  }, []);
-
-  /* =========================================================
-     LOAD DATA — فقط یک بار (همه درخواست‌ها کامنت شده‌اند)
+     LOAD DATA — فقط یک بار با استفاده از useEffect خالی
   ========================================================= */
   useEffect(() => {
     // اگر قبلاً داده‌ها بارگذاری شده یا telegramId وجود ندارد
     if (dataLoadedRef.current || !telegramId) {
-      if (!telegramId) {
-        setRemaining(null);
-        setMessage("⚠️ Telegram identity not detected. Open the Mini App inside Telegram.");
-        setEplWallet(null);
-      }
       return;
     }
 
@@ -497,120 +490,13 @@ export default function TimerPage() {
     console.log("[Timer] ⚠️ All API calls to /api/wallet/reward_status/ have been disabled.");
 
     // توقف تایمر قبلی
-    stopTimer();
-
-    // ============================================================
-    // ✅ تمام درخواست‌های زیر کاملاً کامنت شده‌اند
-    // ============================================================
-
-    /*
-    // تابع بارگذاری وضعیت تایمر - کامنت شده
-    const loadData = async () => {
-      try {
-        const res = await axios.get(`${API}/reward_status/`, {
-          params: { telegram_id: telegramId },
-        });
-
-        console.log("[Timer] reward_status HTTP:", res.status);
-        console.log("[Timer] reward_status data:", res.data);
-
-        const data = res.data;
-
-        if (data && data.status === "ok") {
-          const serverCooldown = data.cooldown_seconds ?? 60 * 60;
-          const sec = Math.min(data.seconds_remaining ?? 0, serverCooldown);
-
-          setCooldownSeconds(serverCooldown);
-          setRemaining(sec);
-          setTotalRewards(data.total_rewards ?? "0");
-          setReferralBonus(data.referral_points ?? data.referral_bonus ?? "0");
-          setRewardCount(data.rewards_count ?? 0);
-          setEplWallet((prev) => ({ ...(prev || {}), ...(data || {}) }));
-
-          if (sec > 0) {
-            setMessage("⏳ Timer is running...");
-            startTimer();
-          } else {
-            setMessage("✅ Ready to claim hourly reward!");
-            stopTimer();
-          }
-        } else {
-          setMessage("❌ Invalid server response.");
-        }
-      } catch (error) {
-        console.error("[Timer] Error loading status:", error);
-        setMessage(
-          error?.response?.data?.message ||
-          error?.response?.data?.error ||
-          "❌ Cannot load timer status from server."
-        );
-      }
-    };
-
-    // بارگذاری داده‌ها - کامنت شده
-    loadData();
-    */
-
-    /*
-    // به‌روزرسانی دوره‌ای EPL data (هر 15 ثانیه) - کامنت شده
-    const eplRefresh = window.setInterval(() => {
-      if (telegramId && dataLoadedRef.current) {
-        setEplLoading(true);
-        axios.get(`${API}/reward_status/`, {
-          params: { telegram_id: telegramId },
-        })
-          .then((result) => {
-            setEplWallet(result?.data || null);
-          })
-          .catch((error) => {
-            console.error("[Timer] EPL data refresh error:", error);
-          })
-          .finally(() => {
-            setEplLoading(false);
-          });
-      }
-    }, 15000);
-    */
-
-    /*
-    // بارگذاری مجدد در صورت فوکوس - کامنت شده
-    const onFocus = () => {
-      const latestIdentity = readTelegramIdentity();
-      if (latestIdentity) {
-        setTelegramIdentity(latestIdentity);
-      }
-      if (telegramId && dataLoadedRef.current) {
-        setEplLoading(true);
-        axios.get(`${API}/reward_status/`, {
-          params: { telegram_id: telegramId },
-        })
-          .then((result) => {
-            setEplWallet(result?.data || null);
-          })
-          .catch((error) => {
-            console.error("[Timer] EPL data focus refresh error:", error);
-          })
-          .finally(() => {
-            setEplLoading(false);
-          });
-      }
-    };
-    window.addEventListener("focus", onFocus);
-    */
-
-    // ============================================================
-    // پایان بخش کامنت شده
-    // ============================================================
+    stopTimerRef.current();
 
     // فقط یک پیام نشان می‌دهیم که API غیرفعال است
     setMessage("ℹ️ Timer API is disabled. No data loaded from server.");
 
-    return () => {
-      stopTimer();
-      // window.clearInterval(eplRefresh);  // کامنت شده
-      // window.removeEventListener("focus", onFocus);  // کامنت شده
-    };
-  }, [telegramId, startTimer, stopTimer]);
+    // ✅ بدون وابستگی - فقط یک بار اجرا می‌شود
+  }, [telegramId]);
 
   /* =========================================================
      CLAIM REWARD
@@ -663,7 +549,7 @@ export default function TimerPage() {
         setCooldownSeconds(serverCooldown);
         setRemaining(sec);
         setMessage(`⏳ Please wait ${Math.floor(sec / 60)} minutes ${sec % 60} seconds`);
-        startTimer();
+        startTimerRef.current();
         return;
       }
 
