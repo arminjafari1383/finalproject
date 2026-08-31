@@ -19,9 +19,9 @@ const USER_DATA_KEY = "my_app_user_data";
 const OWN_REFERRAL_CODE_KEY = "my_referral_code";
 const USED_REFERRAL_KEY = "used_referral_code";
 
-// ✅ فلگ سراسری برای جلوگیری از اجرای مجدد در Strict Mode
-let GLOBAL_INITIALIZED = false;
-let GLOBAL_LOADED = false;
+// ✅ فلگ سراسری با استفاده از Symbol برای اطمینان از یکتایی
+const INIT_FLAG = Symbol.for("TIMER_INITIALIZED");
+const LOAD_FLAG = Symbol.for("TIMER_LOADED");
 
 /* =========================================================
    TELEGRAM IDENTITY
@@ -389,7 +389,7 @@ function CountdownHourglass({
 
 
 /* =========================================================
-   TIMER PAGE
+   TIMER PAGE - نسخه نهایی با جلوگیری از اجرای مجدد
 ========================================================= */
 
 export default function TimerPage() {
@@ -425,6 +425,7 @@ export default function TimerPage() {
   // ✅ refهای قوی برای جلوگیری از اجرای مجدد
   const initializedRef = useRef(false);
   const loadedRef = useRef(false);
+  const loadStartedRef = useRef(false);
 
   // توقف تایمر
   const stopTimerRef = useRef(() => {
@@ -481,7 +482,12 @@ export default function TimerPage() {
   // 📡 بارگذاری داده‌های کاربر - فقط یک بار
   // =========================================================
   const loadUserData = useCallback(async (telegramId, referralCode = null) => {
-    // ✅ بررسی ref برای جلوگیری از اجرای مجدد
+    // ✅ بررسی کامل برای جلوگیری از اجرای مجدد
+    if (loadStartedRef.current) {
+      console.log("[Timer] ⏳ Load already started, skipping");
+      return;
+    }
+    
     if (loadedRef.current) {
       console.log("[Timer] ⏳ Data already loaded, skipping");
       return;
@@ -493,7 +499,7 @@ export default function TimerPage() {
     }
 
     // ✅ علامت‌گذاری بلافاصله
-    loadedRef.current = true;
+    loadStartedRef.current = true;
 
     console.log("[Timer] 📡 Loading user data for telegram_id:", telegramId);
     
@@ -570,6 +576,8 @@ export default function TimerPage() {
           localStorage.removeItem('referral_code');
         }
         
+        // ✅ علامت‌گذاری بارگذاری موفق
+        loadedRef.current = true;
         console.log("[Timer] ✅ Data loaded successfully");
         setMessage("");
       } else {
@@ -583,6 +591,7 @@ export default function TimerPage() {
         console.log("[Timer] ℹ️ New user, starting fresh");
         setRemaining(0);
         setMessage("Welcome! Start mining to earn rewards.");
+        loadedRef.current = true;
         return;
       }
       
@@ -593,6 +602,8 @@ export default function TimerPage() {
                            "Could not connect to server";
       
       setMessage(`❌ ${errorMessage}`);
+      // حتی در صورت خطا، علامت‌گذاری می‌کنیم تا دوباره تلاش نکند
+      loadedRef.current = true;
     }
   }, [telegramUsername, telegramPhotoUrl, startTimerRef]);
 
@@ -601,13 +612,13 @@ export default function TimerPage() {
   // =========================================================
   useEffect(() => {
     // ✅ جلوگیری با استفاده از ref و فلگ سراسری
-    if (initializedRef.current || GLOBAL_INITIALIZED) {
+    if (initializedRef.current || window[INIT_FLAG]) {
       console.log("[Timer] ⏳ Already initialized, skipping");
       return;
     }
     
     initializedRef.current = true;
-    GLOBAL_INITIALIZED = true;
+    window[INIT_FLAG] = true;
 
     console.log("[Timer] 🚀 Initializing...");
 
@@ -628,11 +639,14 @@ export default function TimerPage() {
     // پردازش رفرال
     const referralCode = processReferralParam();
     
-    // بارگذاری داده‌ها با تاخیر کم برای اطمینان
+    // بارگذاری داده‌ها
     if (identity?.telegram_id) {
-      setTimeout(() => {
+      // ✅ استفاده از setTimeout برای اطمینان از اینکه effect کامل شده
+      const timerId = setTimeout(() => {
         loadUserData(identity.telegram_id, referralCode);
       }, 50);
+      
+      return () => clearTimeout(timerId);
     } else {
       console.log("[Timer] ⚠️ No Telegram identity, retrying...");
       const timeoutId = setTimeout(() => {
@@ -645,6 +659,8 @@ export default function TimerPage() {
           loadUserData(retryIdentity.telegram_id, finalReferral);
         } else {
           setMessage("⚠️ Please open this app from Telegram.");
+          // علامت‌گذاری برای جلوگیری از تلاش مجدد
+          loadedRef.current = true;
         }
       }, 500);
       
@@ -720,7 +736,9 @@ export default function TimerPage() {
 
         // ریست refها برای بارگذاری مجدد
         loadedRef.current = false;
-        GLOBAL_LOADED = false;
+        loadStartedRef.current = false;
+        window[LOAD_FLAG] = false;
+        
         setTimeout(() => {
           window.location.reload();
         }, 1000);
