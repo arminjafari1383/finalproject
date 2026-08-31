@@ -17,6 +17,8 @@ const API = "/api/wallet";
 const BOT_USERNAME = "Aipolynetbot";
 const USER_DATA_KEY = "my_app_user_data";
 const OWN_REFERRAL_CODE_KEY = "my_referral_code";
+const USED_REFERRAL_KEY = "used_referral_code";
+const REFERRAL_PROCESSED_KEY = "referral_processed";
 
 
 /* =========================================================
@@ -78,7 +80,7 @@ function readTelegramIdentity() {
 
 
 /* =========================================================
-   HOURGLASS COMPONENT (بدون تغییر)
+   HOURGLASS COMPONENT
 ========================================================= */
 
 function CountdownHourglass({
@@ -385,7 +387,7 @@ function CountdownHourglass({
 
 
 /* =========================================================
-   TIMER PAGE - نسخه اصلاح شده
+   TIMER PAGE - نسخه نهایی با ذخیره‌سازی فقط یک بار
 ========================================================= */
 
 export default function TimerPage() {
@@ -420,6 +422,7 @@ export default function TimerPage() {
   const menuRef = useRef(null);
   const telegramBootRef = useRef(false);
   const dataLoadedRef = useRef(false);
+  const referralProcessedRef = useRef(false);
 
   // توقف تایمر
   const stopTimerRef = useRef(() => {
@@ -441,9 +444,15 @@ export default function TimerPage() {
   });
 
   // =========================================================
-  // 🔍 پردازش پارامترهای URL (رفرال)
+  // 🔍 پردازش پارامترهای URL (رفرال) - فقط یک بار
   // =========================================================
   const processReferralParam = useCallback(() => {
+    // اگر قبلاً پردازش شده، دیگر پردازش نکن
+    if (referralProcessedRef.current) {
+      console.log("[Timer] ⏳ Referral already processed, skipping");
+      return null;
+    }
+
     try {
       const urlParams = new URLSearchParams(window.location.search);
       const startParam = urlParams.get('startapp');
@@ -456,9 +465,29 @@ export default function TimerPage() {
         const referralCode = match[1];
         console.log("[Timer] ✅ Referral code detected:", referralCode);
         
-        // ذخیره در localStorage برای استفاده بعدی
+        // ✅ بررسی: آیا این کد قبلاً استفاده شده؟
+        const usedReferral = localStorage.getItem(USED_REFERRAL_KEY);
+        if (usedReferral === referralCode) {
+          console.log("[Timer] ⏳ Referral code already used, skipping");
+          referralProcessedRef.current = true;
+          return null;
+        }
+        
+        // ✅ بررسی: آیا قبلاً پردازش شده؟
+        const processed = localStorage.getItem(REFERRAL_PROCESSED_KEY);
+        if (processed === "true") {
+          console.log("[Timer] ⏳ Referral already processed in this session, skipping");
+          referralProcessedRef.current = true;
+          return null;
+        }
+        
+        // ذخیره در localStorage
         localStorage.setItem('referral_code', referralCode);
         localStorage.setItem('pending_referral', referralCode);
+        
+        // علامت‌گذاری برای جلوگیری از پردازش مجدد
+        referralProcessedRef.current = true;
+        localStorage.setItem(REFERRAL_PROCESSED_KEY, "true");
         
         return referralCode;
       }
@@ -469,7 +498,7 @@ export default function TimerPage() {
   }, []);
 
   // =========================================================
-  // 📡 بارگذاری داده‌های کاربر از اندپوینت reward_status
+  // 📡 بارگذاری داده‌های کاربر - با مدیریت رفرال فقط یک بار
   // =========================================================
   const loadUserData = useCallback(async (telegramId, referralCode = null) => {
     // اگر قبلاً بارگذاری شده، اجرا نکن
@@ -488,17 +517,27 @@ export default function TimerPage() {
 
     console.log("[Timer] 📡 Loading user data for telegram_id:", telegramId);
     
-    if (referralCode) {
-      console.log("[Timer] 📡 With referral code:", referralCode);
+    // بررسی مجدد برای رفرال
+    let finalReferralCode = referralCode;
+    
+    // اگر رفرال کد داریم و قبلاً استفاده نشده، از آن استفاده کن
+    if (finalReferralCode) {
+      const usedReferral = localStorage.getItem(USED_REFERRAL_KEY);
+      if (usedReferral === finalReferralCode) {
+        console.log("[Timer] ⏳ Referral code already used, not sending again");
+        finalReferralCode = null;
+      } else {
+        console.log("[Timer] 📤 Sending referral code to server:", finalReferralCode);
+      }
     }
 
     try {
       // ساخت URL با پارامترهای مورد نیاز
       let statusUrl = `${API}/reward_status/?telegram_id=${telegramId}`;
       
-      // اگر رفرال کد داریم، به عنوان inviter_code ارسال می‌کنیم
-      if (referralCode) {
-        statusUrl += `&inviter_code=${encodeURIComponent(referralCode)}`;
+      // اگر رفرال کد داریم و قبلاً استفاده نشده، ارسال کن
+      if (finalReferralCode) {
+        statusUrl += `&inviter_code=${encodeURIComponent(finalReferralCode)}`;
       }
 
       // هدرهای مورد نیاز برای بک‌اند
@@ -515,13 +554,19 @@ export default function TimerPage() {
         headers['X-Telegram-Photo-Url'] = telegramPhotoUrl;
       }
 
-      // دریافت وضعیت پاداش (این اندپوینت خودش کاربر را ایجاد می‌کند)
+      // دریافت وضعیت پاداش
       const statusResponse = await axios.get(statusUrl, { headers });
       console.log("[Timer] ✅ Reward status response:", statusResponse.data);
 
       const data = statusResponse.data;
       
       if (data && data.status !== "error") {
+        // ✅ اگر رفرال با موفقیت اعمال شد، علامت بزن
+        if (finalReferralCode) {
+          localStorage.setItem(USED_REFERRAL_KEY, finalReferralCode);
+          console.log("[Timer] ✅ Referral code marked as used:", finalReferralCode);
+        }
+        
         setTotalRewards(data.total_rewards ?? "0");
         setReferralBonus(data.referral_bonus ?? "0");
         setRewardCount(data.rewards_count ?? 0);
@@ -550,8 +595,8 @@ export default function TimerPage() {
           localStorage.setItem(OWN_REFERRAL_CODE_KEY, data.referral_code);
         }
         
-        // پاک کردن رفرال pending بعد از استفاده
-        if (referralCode) {
+        // پاک کردن رفرال pending بعد از استفاده موفق
+        if (finalReferralCode) {
           localStorage.removeItem('pending_referral');
           localStorage.removeItem('referral_code');
         }
@@ -574,6 +619,17 @@ export default function TimerPage() {
         setMessage("Welcome! Start mining to earn rewards.");
         setInitialLoadDone(true);
         return;
+      }
+      
+      // اگر خطای 400 باشد و دلیل آن رفرال باشد
+      if (error?.response?.status === 400) {
+        const errorMsg = error?.response?.data?.error || "";
+        if (errorMsg.includes("referral") || errorMsg.includes("inviter")) {
+          console.log("[Timer] ⚠️ Referral error, marking as used to prevent retry");
+          if (finalReferralCode) {
+            localStorage.setItem(USED_REFERRAL_KEY, finalReferralCode);
+          }
+        }
       }
       
       // نمایش پیام خطای دقیق از سرور
@@ -610,7 +666,7 @@ export default function TimerPage() {
       setTelegramIdentity(identity);
     }
 
-    // پردازش پارامتر رفرال
+    // پردازش پارامتر رفرال - فقط یک بار
     const referralCode = processReferralParam();
     
     // اگر هویت وجود دارد، داده‌ها را بارگذاری کن
@@ -623,8 +679,11 @@ export default function TimerPage() {
         const retryIdentity = readTelegramIdentity();
         if (retryIdentity?.telegram_id) {
           setTelegramIdentity(retryIdentity);
+          // فقط اگر هنوز پردازش نشده باشد، رفرال را ارسال کن
           const retryReferral = localStorage.getItem('pending_referral');
-          loadUserData(retryIdentity.telegram_id, retryReferral);
+          const usedReferral = localStorage.getItem(USED_REFERRAL_KEY);
+          const finalReferral = (retryReferral && retryReferral !== usedReferral) ? retryReferral : null;
+          loadUserData(retryIdentity.telegram_id, finalReferral);
         } else {
           setMessage("⚠️ Please open this app from Telegram to continue.");
           dataLoadedRef.current = true;
