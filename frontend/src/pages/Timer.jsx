@@ -1446,7 +1446,7 @@ const [totalRewards, setTotalRewards] =
      TIMER CONTROL
   ========================================================= */
 
-  const stopTimer = () => {
+  const stopTimer = useCallback(() => {
 
     if (intervalRef.current) {
 
@@ -1458,10 +1458,10 @@ const [totalRewards, setTotalRewards] =
 
     }
 
-  };
+  }, []);
 
 
-  const startTimer = () => {
+  const startTimer = useCallback(() => {
 
     if (intervalRef.current)
       return;
@@ -1495,7 +1495,7 @@ const [totalRewards, setTotalRewards] =
 
       }, 1000);
 
-  };
+  }, []);
 
 
 
@@ -1503,166 +1503,162 @@ const [totalRewards, setTotalRewards] =
      FETCH STATUS — TELEGRAM ID FIRST
   ========================================================= */
 
- if (fetchStatusInProgress.current) {
-  console.log(
-    "[Timer] reward_status skipped: request already running"
-  );
-  return;
-}
+  const fetchStatus = useCallback(async () => {
 
+    // جلوگیری از اجرای همزمان چندین درخواست
+    if (fetchStatusInProgress.current) {
+      console.log(
+        "[Timer] reward_status skipped: request already running"
+      );
+      return;
+    }
 
-if (window.__timerFetchedUsers?.[telegramId]) {
+    // جلوگیری از بارگذاری مجدد برای یک کاربر
+    if (window.__timerFetchedUsers?.[telegramId]) {
+      console.log(
+        "[Timer] reward_status already loaded:",
+        telegramId
+      );
+      return;
+    }
 
-  console.log(
-    "[Timer] reward_status already loaded:",
-    telegramId
-  );
+    fetchStatusInProgress.current = true;
 
-  return;
+    window.__timerFetchedUsers =
+      window.__timerFetchedUsers || {};
 
-}
+    window.__timerFetchedUsers[telegramId] = true;
 
+    if (!telegramId) {
+      console.log("[Timer] Telegram ID is not available");
+      setRemaining(null);
+      setMessage("⚠️ Please open this Mini App inside Telegram.");
+      fetchStatusInProgress.current = false;
+      return;
+    }
 
-fetchStatusInProgress.current = true;
+    const url = `${API}/reward_status/`;
 
+    console.log(
+      "[Timer] fetchStatus =>",
+      url,
+      "telegram_id=",
+      telegramId
+    );
 
-window.__timerFetchedUsers =
-  window.__timerFetchedUsers || {};
+    try {
+      const res = await axios.get(url, {
+        params: {
+          telegram_id: telegramId,
+        },
+      });
 
+      console.log("[Timer] reward_status HTTP:", res.status);
+      console.log("[Timer] reward_status data:", res.data);
 
-window.__timerFetchedUsers[telegramId] = true;
+      const data = res.data;
 
-      if (!telegramId) {
-        console.log("[Timer] Telegram ID is not available");
-        setRemaining(null);
-        setMessage("⚠️ Please open this Mini App inside Telegram.");
+      if (data && data.status === "ok") {
+        const serverCooldown =
+          data.cooldown_seconds ?? 60 * 60;
+
+        const sec = Math.min(
+          data.seconds_remaining ?? 0,
+          serverCooldown
+        );
+
+        setCooldownSeconds(serverCooldown);
+        setRemaining(sec);
+        setTotalRewards(data.total_rewards ?? "0");
+        setReferralBonus(
+          data.referral_points ??
+          data.referral_bonus ??
+          "0"
+        );
+        setRewardCount(data.rewards_count ?? 0);
+
+        // Keep all server-returned EPL/user fields available to the UI.
+        setEplWallet((prev) => ({
+          ...(prev || {}),
+          ...(data || {}),
+        }));
+
+        if (sec > 0) {
+          setMessage("⏳ Timer is running...");
+          startTimer();
+        } else {
+          setMessage("✅ Ready to claim hourly reward!");
+          stopTimer();
+        }
+
         fetchStatusInProgress.current = false;
         return;
       }
 
-      const url = `${API}/reward_status/`;
+      if (data) {
+        const serverCooldown =
+          data.cooldown_seconds ?? 60 * 60;
 
-      console.log(
-        "[Timer] fetchStatus =>",
-        url,
-        "telegram_id=",
-        telegramId
-      );
-
-      try {
-        const res = await axios.get(url, {
-          params: {
-            telegram_id: telegramId,
-          },
-        });
-
-        console.log("[Timer] reward_status HTTP:", res.status);
-        console.log("[Timer] reward_status data:", res.data);
-
-        const data = res.data;
-
-        if (data && data.status === "ok") {
-          const serverCooldown =
-            data.cooldown_seconds ?? 60 * 60;
-
-          const sec = Math.min(
-            data.seconds_remaining ?? 0,
-            serverCooldown
-          );
-
-          setCooldownSeconds(serverCooldown);
-          setRemaining(sec);
-          setTotalRewards(data.total_rewards ?? "0");
-          setReferralBonus(
-            data.referral_points ??
-            data.referral_bonus ??
-            "0"
-          );
-          setRewardCount(data.rewards_count ?? 0);
-
-          // Keep all server-returned EPL/user fields available to the UI.
-          setEplWallet((prev) => ({
-            ...(prev || {}),
-            ...(data || {}),
-          }));
-
-          if (sec > 0) {
-            setMessage("⏳ Timer is running...");
-            startTimer();
-          } else {
-            setMessage("✅ Ready to claim hourly reward!");
-            stopTimer();
-          }
-
-          fetchStatusInProgress.current = false;
-          return;
-        }
-
-        if (data) {
-          const serverCooldown =
-            data.cooldown_seconds ?? 60 * 60;
-
-          const sec = Math.min(
-            data.seconds_remaining ??
-            data.seconds ??
-            0,
-            serverCooldown
-          );
-
-          setCooldownSeconds(serverCooldown);
-          setRemaining(sec);
-          setTotalRewards(
-            data.total_rewards ??
-            data.totalRewards ??
-            data.withdrawable_total ??
-            "0"
-          );
-          setReferralBonus(
-            data.referral_points ??
-            data.referralBonus ??
-            data.referral_bonus ??
-            "0"
-          );
-          setRewardCount(
-            data.rewards_count ??
-            data.rewardCount ??
-            0
-          );
-
-          setEplWallet((prev) => ({
-            ...(prev || {}),
-            ...(data || {}),
-          }));
-
-          if (sec > 0) {
-            setMessage("⏳ Timer is running...");
-            startTimer();
-          } else {
-            setMessage("✅ Ready to claim hourly reward!");
-            stopTimer();
-          }
-
-          fetchStatusInProgress.current = false;
-          return;
-        }
-
-        setMessage("❌ Invalid server response.");
-      } catch (e) {
-        console.error("[Timer] fetchStatus ERROR:", e);
-        console.error("[Timer] fetchStatus status:", e.response?.status);
-        console.error("[Timer] fetchStatus data:", e.response?.data);
-
-        setMessage(
-          e.response?.data?.message ||
-          e.response?.data?.error ||
-          e.response?.data?.detail ||
-          "❌ Cannot load timer status from server."
+        const sec = Math.min(
+          data.seconds_remaining ??
+          data.seconds ??
+          0,
+          serverCooldown
         );
-      } finally {
-        fetchStatusInProgress.current = false;
-      }
-    }, [telegramId]);
 
+        setCooldownSeconds(serverCooldown);
+        setRemaining(sec);
+        setTotalRewards(
+          data.total_rewards ??
+          data.totalRewards ??
+          data.withdrawable_total ??
+          "0"
+        );
+        setReferralBonus(
+          data.referral_points ??
+          data.referralBonus ??
+          data.referral_bonus ??
+          "0"
+        );
+        setRewardCount(
+          data.rewards_count ??
+          data.rewardCount ??
+          0
+        );
+
+        setEplWallet((prev) => ({
+          ...(prev || {}),
+          ...(data || {}),
+        }));
+
+        if (sec > 0) {
+          setMessage("⏳ Timer is running...");
+          startTimer();
+        } else {
+          setMessage("✅ Ready to claim hourly reward!");
+          stopTimer();
+        }
+
+        fetchStatusInProgress.current = false;
+        return;
+      }
+
+      setMessage("❌ Invalid server response.");
+    } catch (e) {
+      console.error("[Timer] fetchStatus ERROR:", e);
+      console.error("[Timer] fetchStatus status:", e.response?.status);
+      console.error("[Timer] fetchStatus data:", e.response?.data);
+
+      setMessage(
+        e.response?.data?.message ||
+        e.response?.data?.error ||
+        e.response?.data?.detail ||
+        "❌ Cannot load timer status from server."
+      );
+    } finally {
+      fetchStatusInProgress.current = false;
+    }
+  }, [telegramId, startTimer, stopTimer]);
 
 
 
@@ -1922,7 +1918,7 @@ window.__timerFetchedUsers[telegramId] = true;
       window.removeEventListener("focus", onFocus);
     };
 
-  }, [telegramId, fetchStatus, fetchEplData]);
+  }, [telegramId, fetchStatus, fetchEplData, stopTimer]);
 
 
 
