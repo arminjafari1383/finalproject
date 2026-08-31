@@ -501,8 +501,8 @@ export default function TimerPage() {
     // تابع بارگذاری وضعیت تایمر
     const loadData = async () => {
       try {
-        // const url = `${API}/reward_status/`;
-        // console.log("[Timer] Fetching reward_status for:", telegramId);
+        const url = `${API}/reward_status/`;
+        console.log("[Timer] Fetching reward_status for:", telegramId);
 
         const res = await axios.get(url, {
           params: { telegram_id: telegramId },
@@ -547,24 +547,24 @@ export default function TimerPage() {
     // بارگذاری داده‌ها
     loadData();
 
-    // // به‌روزرسانی EPL data هر 15 ثانیه
-    // const eplRefresh = window.setInterval(() => {
-    //   if (telegramId && dataLoadedRef.current) {
-    //     setEplLoading(true);
-    //     axios.get(`${API}/reward_status/`, {
-    //       params: { telegram_id: telegramId },
-    //     })
-    //       .then((result) => {
-    //         setEplWallet(result?.data || null);
-    //       })
-    //       .catch((error) => {
-    //         console.error("[Timer] EPL data refresh error:", error);
-    //       })
-    //       .finally(() => {
-    //         setEplLoading(false);
-    //       });
-    //   }
-    // }, 15000);
+    // به‌روزرسانی EPL data هر 15 ثانیه
+    const eplRefresh = window.setInterval(() => {
+      if (telegramId && dataLoadedRef.current) {
+        setEplLoading(true);
+        axios.get(`${API}/reward_status/`, {
+          params: { telegram_id: telegramId },
+        })
+          .then((result) => {
+            setEplWallet(result?.data || null);
+          })
+          .catch((error) => {
+            console.error("[Timer] EPL data refresh error:", error);
+          })
+          .finally(() => {
+            setEplLoading(false);
+          });
+      }
+    });
 
     // بارگذاری مجدد در صورت فوکوس
     const onFocus = () => {
