@@ -1361,30 +1361,48 @@ const [totalRewards, setTotalRewards] =
   const menuRef =
     useRef(null);
 
-  // ✅ Fix: Declare the statusLoadedRef here
+  // prevent duplicate Telegram reload fetch
   const statusLoadedRef = useRef(false);
-  
-  // ✅ Fix: Use ref for fetch status flag instead of window
+
   const fetchStatusInProgress = useRef(false);
+
+  const telegramBootRef = useRef(false);
 
 
   /* =========================================================
      TELEGRAM BOOTSTRAP
   ========================================================= */
 
-  useEffect(() => {
-    const tg = window.Telegram?.WebApp;
+ useEffect(() => {
 
-    try {
-      tg?.ready?.();
-      tg?.expand?.();
-    } catch (error) {
-      console.log("[Timer] Telegram WebApp init error:", error);
-    }
+  if (telegramBootRef.current) {
+    return;
+  }
 
-    const identity = readTelegramIdentity();
+  telegramBootRef.current = true;
+
+
+  const tg = window.Telegram?.WebApp;
+
+
+  try {
+    tg?.ready?.();
+    tg?.expand?.();
+  } catch (error) {
+    console.log(
+      "[Timer] Telegram WebApp init error:",
+      error
+    );
+  }
+
+
+  const identity = readTelegramIdentity();
+
+  if (identity) {
     setTelegramIdentity(identity);
-  }, []);
+  }
+
+}, []);
 
 
 
@@ -1485,15 +1503,34 @@ const [totalRewards, setTotalRewards] =
      FETCH STATUS — TELEGRAM ID FIRST
   ========================================================= */
 
-  const fetchStatus =
-    useCallback(async () => {
-      // ✅ Fix: Use ref instead of window
-      if (fetchStatusInProgress.current) {
-        console.log("[Timer] reward_status skipped: request already running");
-        return;
-      }
+ if (fetchStatusInProgress.current) {
+  console.log(
+    "[Timer] reward_status skipped: request already running"
+  );
+  return;
+}
 
-      fetchStatusInProgress.current = true;
+
+if (window.__timerFetchedUsers?.[telegramId]) {
+
+  console.log(
+    "[Timer] reward_status already loaded:",
+    telegramId
+  );
+
+  return;
+
+}
+
+
+fetchStatusInProgress.current = true;
+
+
+window.__timerFetchedUsers =
+  window.__timerFetchedUsers || {};
+
+
+window.__timerFetchedUsers[telegramId] = true;
 
       if (!telegramId) {
         console.log("[Timer] Telegram ID is not available");
