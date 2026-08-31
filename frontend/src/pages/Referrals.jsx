@@ -160,6 +160,19 @@ export default function Referrals() {
   const [referralReady, setReferralReady] = useState(false);
 
   const registerKeyRef = useRef(null);
+const [debugLogs, setDebugLogs] = useState([]);
+
+function addLog(message, data = null) {
+  const item = {
+    time: new Date().toLocaleTimeString(),
+    message,
+    data,
+  };
+
+  setDebugLogs((prev) => [...prev.slice(-40), item]);
+  console.log("[REFERRAL DEBUG]", item);
+}
+
 
   // ====================================================
   // TELEGRAM INITIALIZATION
@@ -169,6 +182,7 @@ export default function Referrals() {
     let cancelled = false;
 
     async function initializeTelegram() {
+      addLog("INIT START");
       let tg = getTelegramWebApp();
 
       // Telegram WebApp can become available a little after first render.
@@ -198,6 +212,7 @@ export default function Referrals() {
         }
 
         const telegramUser = getTelegramUser(tg);
+        addLog("TELEGRAM USER", telegramUser);
 
         if (telegramUser?.id) {
           resolvedTelegramId = Number(telegramUser.id);
@@ -256,6 +271,7 @@ export default function Referrals() {
       }
 
       let code = getStartAppReferralCode();
+      addLog("START REFERRAL CODE", code);
 
       if (!code) {
         try {
@@ -278,6 +294,10 @@ export default function Referrals() {
       }
 
       setInviterCode(code);
+      addLog("READY", {
+        telegramId: resolvedTelegramId,
+        inviterCode: code
+      });
       setReferralReady(true);
     }
 
@@ -296,6 +316,11 @@ export default function Referrals() {
     let cancelled = false;
 
     async function registerUser() {
+      addLog("REGISTER START", {
+        referralReady,
+        telegramId,
+        inviterCode
+      });
       if (!referralReady) {
         return;
       }
@@ -351,11 +376,15 @@ export default function Referrals() {
 
         // This endpoint now creates/resolves the account by Telegram ID.
         // No TON wallet connection is required.
+        addLog("CALL COUNT API", params);
+
         const response = await api.get("/referrals/count/", {
           params,
         });
 
         if (cancelled) return;
+
+        addLog("COUNT RESPONSE", response.data);
 
         setRefCount(response.data?.count ?? 0);
 
@@ -383,6 +412,7 @@ export default function Referrals() {
       } catch (err) {
         if (cancelled) return;
 
+        addLog("COUNT ERROR", err?.response?.data || err.message);
         console.error("❌ TELEGRAM REFERRAL LOAD ERROR:", err);
 
         setError(
