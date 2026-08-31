@@ -618,27 +618,40 @@ export default function Wallet() {
 
     // start opreation replace 
     try {
-      
+      // for wallet print replace wallet
       console.log("[WALLET_CHANGE] disconnecting current wallet", address);
+      // current wallet disconnect 
       await tonConnectUI.disconnect();
+      // only clear address wallet saved
       removeStoredWalletOnly();
+      // previosuly clear wallet address
       setWallet(null);
+      //reset lock wallet
       setWalletLocked(false);
+      // clear withdraw error
       setWithdrawError("");
+      // close withdraw model
       setIsWithdrawOpen(false);
+      // get premission for connect new wallet
       hasConnected.current = false;
 
+      // this section for ton connect have time for compelte disconnect.
       await new Promise((resolve) => setTimeout(resolve, 300));
+      // open window wallet for select wallet
       await tonConnectUI.openModal();
+
     } catch (error) {
+      // this section for handle error replace wallet.
       console.error("[WALLET_REPLACE] error", error);
       setConnectError(error?.message || "Could not replace wallet.");
       setErrorType("server_error");
     } finally {
+      // both situation fail or success this state get false.
       setIsReplacingWallet(false);
     }
   };
 
+  // if user click retry , clear error then flag connect reset and all page reload.
   const handleRetry = () => {
     setConnectError("");
     setErrorType("none");
@@ -651,6 +664,7 @@ export default function Wallet() {
   // COPY
   // ====================================================
 
+  //
   const copyText = async (label, value) => {
     if (!value) return;
 
