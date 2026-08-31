@@ -520,7 +520,9 @@ function addLog(message, data = null) {
     return () => {
       cancelled = true;
       if (intervalId) {
+        if (intervalId) {
         window.clearInterval(intervalId);
+      }
       }
       window.removeEventListener("focus", refreshOnFocus);
       document.removeEventListener(
