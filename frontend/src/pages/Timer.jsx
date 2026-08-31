@@ -13,10 +13,6 @@ import Logo from "../assets/2.png";
 import Blade from "../assets/1.png";
 import eplLogo from "../assets/epl-logo.png";
 
-// ✅ استفاده از متغیرهای سراسری برای جلوگیری از اجرای مجدد
-let telegramInitialized = false;
-let timerStatusLoaded = false;
-
 // ✅ استفاده از آدرس نسبی برای جلوگیری از مشکل CORS و Nginx
 const API = "/api/wallet";
 const BOT_USERNAME = "Aipolynetbot";
@@ -1368,6 +1364,9 @@ const [totalRewards, setTotalRewards] =
   const statusLoadedRef = useRef(false);
 
   const fetchStatusInProgress = useRef(false);
+  
+  // ✅ استفاده از ref برای جلوگیری از درخواست‌های تکراری
+  const hasFetchedStatus = useRef(false);
 
   const telegramBootRef = useRef(false);
 
@@ -1378,28 +1377,31 @@ const [totalRewards, setTotalRewards] =
 
  useEffect(() => {
 
-  // ✅ جلوگیری از اجرای مجدد با متغیر سراسری
-  if (telegramInitialized) {
+  if (telegramBootRef.current) {
     return;
   }
 
-  telegramInitialized = true;
+  telegramBootRef.current = true;
+
+
+  const tg = window.Telegram?.WebApp;
+
 
   try {
-    const tg = window.Telegram?.WebApp;
-
-    if (tg) {
-      tg.ready?.();
-      tg.expand?.();
-    }
-
-    const identity = readTelegramIdentity();
-
-    if (identity) {
-      setTelegramIdentity(identity);
-    }
+    tg?.ready?.();
+    tg?.expand?.();
   } catch (error) {
-    console.error("[Timer] Telegram WebApp init error:", error);
+    console.log(
+      "[Timer] Telegram WebApp init error:",
+      error
+    );
+  }
+
+
+  const identity = readTelegramIdentity();
+
+  if (identity) {
+    setTelegramIdentity(identity);
   }
 
 }, []);
@@ -1500,42 +1502,27 @@ const [totalRewards, setTotalRewards] =
 
 
   /* =========================================================
-     FETCH STATUS — TELEGRAM ID FIRST
+     FETCH STATUS — TELEGRAM ID FIRST (اصلاح شده)
   ========================================================= */
 
   const fetchStatus = useCallback(async () => {
-
-    // جلوگیری از اجرای همزمان چندین درخواست
-    if (fetchStatusInProgress.current) {
-      console.log(
-        "[Timer] reward_status skipped: request already running"
-      );
+    // ✅ اگر قبلاً درخواست داده شده، یا در حال انجام است، از اجرا جلوگیری کن
+    if (fetchStatusInProgress.current || hasFetchedStatus.current) {
+      console.log("[Timer] fetchStatus skipped: already fetched or in progress");
       return;
     }
 
-    // جلوگیری از بارگذاری مجدد برای یک کاربر
-    if (window.__timerFetchedUsers?.[telegramId]) {
-      console.log(
-        "[Timer] reward_status already loaded:",
-        telegramId
-      );
-      return;
-    }
-
-    fetchStatusInProgress.current = true;
-
-    window.__timerFetchedUsers =
-      window.__timerFetchedUsers || {};
-
-    window.__timerFetchedUsers[telegramId] = true;
-
+    // اگر telegramId وجود نداشت، خطا بده
     if (!telegramId) {
       console.log("[Timer] Telegram ID is not available");
       setRemaining(null);
       setMessage("⚠️ Please open this Mini App inside Telegram.");
-      fetchStatusInProgress.current = false;
       return;
     }
+
+    // علامت‌گذاری برای جلوگیری از درخواست‌های همزمان
+    fetchStatusInProgress.current = true;
+    hasFetchedStatus.current = true;
 
     const url = `${API}/reward_status/`;
 
@@ -1557,13 +1544,6 @@ const [totalRewards, setTotalRewards] =
       console.log("[Timer] reward_status data:", res.data);
 
       const data = res.data;
-
-      // ✅ بررسی وجود داده
-      if (!data) {
-        setMessage("❌ No data received from server.");
-        fetchStatusInProgress.current = false;
-        return;
-      }
 
       if (data && data.status === "ok") {
         const serverCooldown =
@@ -1602,7 +1582,6 @@ const [totalRewards, setTotalRewards] =
         return;
       }
 
-      // ✅ اگر وضعیت ok نبود ولی داده وجود داشت
       if (data) {
         const serverCooldown =
           data.cooldown_seconds ?? 60 * 60;
@@ -1657,19 +1636,12 @@ const [totalRewards, setTotalRewards] =
       console.error("[Timer] fetchStatus status:", e.response?.status);
       console.error("[Timer] fetchStatus data:", e.response?.data);
 
-      // ✅ نمایش پیام خطای مناسب
-      const errorMessage =
+      setMessage(
         e.response?.data?.message ||
         e.response?.data?.error ||
         e.response?.data?.detail ||
-        "❌ Cannot load timer status from server.";
-
-      setMessage(errorMessage);
-
-      // ✅ اگر خطای 404 بود، پیام خاص نشان بده
-      if (e.response?.status === 404) {
-        setMessage("❌ Timer data not found. Please try again later.");
-      }
+        "❌ Cannot load timer status from server."
+      );
     } finally {
       fetchStatusInProgress.current = false;
     }
@@ -1707,8 +1679,6 @@ const [totalRewards, setTotalRewards] =
           "[Timer] EPL Telegram account load error:",
           error
         );
-        // ✅ در صورت خطا، مقدار قبلی را نگه دار
-        setEplWallet((prev) => prev);
       } finally {
         setEplLoading(false);
       }
@@ -1884,7 +1854,7 @@ const [totalRewards, setTotalRewards] =
 
 
   /* =========================================================
-     TELEGRAM USER STATUS
+     TELEGRAM USER STATUS (اصلاح شده)
   ========================================================= */
 
   useEffect(() => {
@@ -1907,9 +1877,8 @@ const [totalRewards, setTotalRewards] =
       telegramId
     );
 
-    // ✅ فقط یک بار بارگذاری شود
-    if (!timerStatusLoaded) {
-      timerStatusLoaded = true;
+    // ✅ فقط در صورتی که قبلاً درخواستی ارسال نشده باشد، fetchStatus را صدا بزن
+    if (!hasFetchedStatus.current) {
       fetchStatus();
       fetchEplData();
     }
@@ -2060,60 +2029,55 @@ const [totalRewards, setTotalRewards] =
   ========================================================= */
 
   const getOwnReferralCode = async () => {
-    try {
-      const walletCode = String(
-        eplWallet?.referral_code ||
-        eplWallet?.user?.referral_code ||
-        ""
-      ).trim();
+    const walletCode = String(
+      eplWallet?.referral_code ||
+      eplWallet?.user?.referral_code ||
+      ""
+    ).trim();
 
-      if (walletCode) {
-        localStorage.setItem(OWN_REFERRAL_CODE_KEY, walletCode);
-        return walletCode;
-      }
-
-      const cachedCode = String(
-        localStorage.getItem(OWN_REFERRAL_CODE_KEY) || ""
-      ).trim();
-
-      if (cachedCode) {
-        return cachedCode;
-      }
-
-      const identity = readTelegramIdentity();
-
-      if (!identity) {
-        throw new Error(
-          "Telegram identity is not available. Please open the Mini App inside Telegram."
-        );
-      }
-
-      // Read this user's own referral code from the existing connect endpoint.
-      // IMPORTANT: inviter_code is intentionally NOT sent here.
-      const response = await axios.post(
-        "/api/connect/",
-        {
-          telegram_id: identity.telegram_id,
-          telegram_username: identity.telegram_username,
-          telegram_photo_url: identity.telegram_photo_url,
-          is_telegram: identity.is_telegram,
-        }
-      );
-
-      const code = String(
-        response?.data?.user?.referral_code || ""
-      ).trim();
-
-      if (!code) {
-        throw new Error("Referral code was not returned by the server.");
-      }
-
-      localStorage.setItem(OWN_REFERRAL_CODE_KEY, code);
-      return code;
-    } catch (error) {
-      console.error("[Timer] Error getting referral code:", error);
-      throw error;
+    if (walletCode) {
+      localStorage.setItem(OWN_REFERRAL_CODE_KEY, walletCode);
+      return walletCode;
     }
+
+    const cachedCode = String(
+      localStorage.getItem(OWN_REFERRAL_CODE_KEY) || ""
+    ).trim();
+
+    if (cachedCode) {
+      return cachedCode;
+    }
+
+    const identity = readTelegramIdentity();
+
+    if (!identity) {
+      throw new Error(
+        "Telegram identity is not available. Please open the Mini App inside Telegram."
+      );
+    }
+
+    // Read this user's own referral code from the existing connect endpoint.
+    // IMPORTANT: inviter_code is intentionally NOT sent here.
+    const response = await axios.post(
+      "/api/connect/",
+      {
+        telegram_id: identity.telegram_id,
+        telegram_username: identity.telegram_username,
+        telegram_photo_url: identity.telegram_photo_url,
+        is_telegram: identity.is_telegram,
+      }
+    );
+
+    const code = String(
+      response?.data?.user?.referral_code || ""
+    ).trim();
+
+    if (!code) {
+      throw new Error("Referral code was not returned by the server.");
+    }
+
+    localStorage.setItem(OWN_REFERRAL_CODE_KEY, code);
+    return code;
   };
 
   const shareReferralOnTelegram = async () => {
