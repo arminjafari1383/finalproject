@@ -420,7 +420,8 @@ export default function TimerPage() {
   const intervalRef = useRef(null);
   const menuRef = useRef(null);
   const telegramBootRef = useRef(false);
-  const hasLoadedRef = useRef(false); // ✅ فقط یک بار بارگذاری شود
+  const hasLoadedRef = useRef(false);
+  const isLoadingRef = useRef(false); // ✅ جلوگیری از بارگذاری همزمان
 
   /* =========================================================
      TELEGRAM BOOTSTRAP
@@ -477,11 +478,11 @@ export default function TimerPage() {
   }, []);
 
   /* =========================================================
-     LOAD DATA — فقط یک بار
+     LOAD DATA — فقط یک بار با استفاده از useEffect + useRef
   ========================================================= */
   useEffect(() => {
-    // اگر قبلاً بارگذاری شده یا telegramId وجود ندارد، کاری نکن
-    if (hasLoadedRef.current || !telegramId) {
+    // اگر قبلاً بارگذاری شده یا در حال بارگذاری است یا telegramId وجود ندارد
+    if (hasLoadedRef.current || isLoadingRef.current || !telegramId) {
       if (!telegramId) {
         setRemaining(null);
         setMessage("⚠️ Telegram identity not detected. Open the Mini App inside Telegram.");
@@ -491,12 +492,12 @@ export default function TimerPage() {
     }
 
     // علامت‌گذاری برای جلوگیری از اجرای مجدد
-    hasLoadedRef.current = true;
+    isLoadingRef.current = true;
+
+    console.log("[Timer] Loading data for telegram_id:", telegramId);
 
     // توقف تایمر قبلی
     stopTimer();
-
-    console.log("[Timer] Loading data for telegram_id:", telegramId);
 
     // بارگذاری وضعیت تایمر
     const loadTimerStatus = async () => {
@@ -559,6 +560,10 @@ export default function TimerPage() {
           error?.response?.data?.error ||
           "❌ Cannot load timer status from server."
         );
+      } finally {
+        // بعد از اتمام بارگذاری، علامت‌گذاری نهایی
+        hasLoadedRef.current = true;
+        isLoadingRef.current = false;
       }
     };
 
@@ -582,9 +587,9 @@ export default function TimerPage() {
     loadTimerStatus();
     loadEplData();
 
-    // به‌روزرسانی دوره‌ای EPL data
+    // به‌روزرسانی دوره‌ای EPL data (هر 15 ثانیه)
     const eplRefresh = window.setInterval(() => {
-      if (telegramId) {
+      if (telegramId && hasLoadedRef.current) {
         loadEplData();
       }
     }, 15000);
@@ -595,7 +600,7 @@ export default function TimerPage() {
       if (latestIdentity) {
         setTelegramIdentity(latestIdentity);
       }
-      if (telegramId) {
+      if (telegramId && hasLoadedRef.current) {
         loadEplData();
       }
     };
@@ -648,7 +653,6 @@ export default function TimerPage() {
         // بارگذاری مجدد داده‌ها
         hasLoadedRef.current = false;
         setTimeout(() => {
-          hasLoadedRef.current = true;
           window.location.reload();
         }, 500);
         return;
