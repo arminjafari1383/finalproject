@@ -477,7 +477,7 @@ export default function TimerPage() {
   }, []);
 
   /* =========================================================
-     LOAD DATA — فقط یک بار
+     LOAD DATA — فقط یک بار (همه درخواست‌ها کامنت شده‌اند)
   ========================================================= */
   useEffect(() => {
     // اگر قبلاً داده‌ها بارگذاری شده یا telegramId وجود ندارد
@@ -493,18 +493,21 @@ export default function TimerPage() {
     // علامت‌گذاری برای جلوگیری از اجرای مجدد
     dataLoadedRef.current = true;
 
-    console.log("[Timer] Loading data for telegram_id:", telegramId);
+    console.log("[Timer] Timer page loaded for telegram_id:", telegramId);
+    console.log("[Timer] ⚠️ All API calls to /api/wallet/reward_status/ have been disabled.");
 
     // توقف تایمر قبلی
     stopTimer();
 
-    // تابع بارگذاری وضعیت تایمر
+    // ============================================================
+    // ✅ تمام درخواست‌های زیر کاملاً کامنت شده‌اند
+    // ============================================================
+
+    /*
+    // تابع بارگذاری وضعیت تایمر - کامنت شده
     const loadData = async () => {
       try {
-        const url = `${API}/reward_status/`;
-        console.log("[Timer] Fetching reward_status for:", telegramId);
-
-        const res = await axios.get(url, {
+        const res = await axios.get(`${API}/reward_status/`, {
           params: { telegram_id: telegramId },
         });
 
@@ -544,10 +547,12 @@ export default function TimerPage() {
       }
     };
 
-    // بارگذاری داده‌ها
+    // بارگذاری داده‌ها - کامنت شده
     loadData();
+    */
 
-    // به‌روزرسانی EPL data هر 15 ثانیه
+    /*
+    // به‌روزرسانی دوره‌ای EPL data (هر 15 ثانیه) - کامنت شده
     const eplRefresh = window.setInterval(() => {
       if (telegramId && dataLoadedRef.current) {
         setEplLoading(true);
@@ -564,9 +569,11 @@ export default function TimerPage() {
             setEplLoading(false);
           });
       }
-    });
+    }, 15000);
+    */
 
-    // بارگذاری مجدد در صورت فوکوس
+    /*
+    // بارگذاری مجدد در صورت فوکوس - کامنت شده
     const onFocus = () => {
       const latestIdentity = readTelegramIdentity();
       if (latestIdentity) {
@@ -589,11 +596,19 @@ export default function TimerPage() {
       }
     };
     window.addEventListener("focus", onFocus);
+    */
+
+    // ============================================================
+    // پایان بخش کامنت شده
+    // ============================================================
+
+    // فقط یک پیام نشان می‌دهیم که API غیرفعال است
+    setMessage("ℹ️ Timer API is disabled. No data loaded from server.");
 
     return () => {
       stopTimer();
-      window.clearInterval(eplRefresh);
-      window.removeEventListener("focus", onFocus);
+      // window.clearInterval(eplRefresh);  // کامنت شده
+      // window.removeEventListener("focus", onFocus);  // کامنت شده
     };
   }, [telegramId, startTimer, stopTimer]);
 
