@@ -1354,17 +1354,6 @@ const [totalRewards, setTotalRewards] =
   const [menuOpen, setMenuOpen] =
     useState(false);
 
-  const [welcomePopup, setWelcomePopup] = useState({
-    open: false,
-    loading: true,
-    newReferrals: 0,
-    newRewards: 0,
-    totalReferrals: 0,
-    totalRewardsClaimed: 0,
-  });
-
-  const welcomeStatsLoadedRef = useRef(false);
-
 
   const intervalRef =
     useRef(null);
@@ -1391,154 +1380,6 @@ const [totalRewards, setTotalRewards] =
     setTelegramIdentity(identity);
   }, []);
 
-
-  /* =========================================================
-     WELCOME CELEBRATION POPUP
-     - opens on entry to this page
-     - new referrals are calculated since the previous visit
-     - reward claims are also compared with the previous visit
-  ========================================================= */
-
-  useEffect(() => {
-    if (!telegramId || welcomeStatsLoadedRef.current) {
-      return;
-    }
-
-    welcomeStatsLoadedRef.current = true;
-
-    setWelcomePopup((prev) => ({
-      ...prev,
-      open: true,
-      loading: true,
-    }));
-
-    let cancelled = false;
-
-    const loadWelcomeStats = async () => {
-      const identityParams = {
-        telegram_id: telegramId,
-        telegram_username: telegramUsername || undefined,
-        telegram_photo_url: telegramPhotoUrl || undefined,
-        is_telegram: true,
-      };
-
-      try {
-        const [rewardResult, referralResult] = await Promise.allSettled([
-          axios.get(`${API}/reward_status/`, {
-            params: {
-              ...identityParams,
-              inviter_code: localStorage.getItem("inviter_code") || undefined,
-            },
-          }),
-          axios.get("/api/referral/levels/", {
-            params: identityParams,
-          }),
-        ]);
-
-        if (cancelled) return;
-
-        const rewardData =
-          rewardResult.status === "fulfilled"
-            ? rewardResult.value?.data || {}
-            : {};
-
-        const referralData =
-          referralResult.status === "fulfilled"
-            ? referralResult.value?.data || {}
-            : {};
-
-        const currentReferrals = Math.max(
-          0,
-          Number(
-            referralData?.total_referrals ??
-            referralData?.count ??
-            rewardData?.total_referrals ??
-            rewardData?.referral_count ??
-            rewardData?.direct_referrals ??
-            0
-          ) || 0
-        );
-
-        const currentRewardsClaimed = Math.max(
-          0,
-          Number(
-            rewardData?.daily_claims ??
-            rewardData?.daily_rewards_count ??
-            rewardData?.rewards_count ??
-            rewardData?.hourly_claims ??
-            rewardData?.mining_days ??
-            0
-          ) || 0
-        );
-
-        const storageKey = `timer_welcome_stats:${telegramId}`;
-
-        let previousStats = null;
-        try {
-          const raw = localStorage.getItem(storageKey);
-          previousStats = raw ? JSON.parse(raw) : null;
-        } catch (error) {
-          console.warn("[Timer] welcome stats storage read error:", error);
-        }
-
-        const hasPreviousStats = Boolean(previousStats);
-
-        const previousReferrals = Number(
-          previousStats?.totalReferrals ?? currentReferrals
-        );
-
-        const previousRewards = Number(
-          previousStats?.totalRewardsClaimed ?? currentRewardsClaimed
-        );
-
-        const newReferrals = hasPreviousStats
-          ? Math.max(0, currentReferrals - previousReferrals)
-          : 0;
-
-        const newRewards = hasPreviousStats
-          ? Math.max(0, currentRewardsClaimed - previousRewards)
-          : 0;
-
-        try {
-          localStorage.setItem(
-            storageKey,
-            JSON.stringify({
-              totalReferrals: currentReferrals,
-              totalRewardsClaimed: currentRewardsClaimed,
-              seenAt: Date.now(),
-            })
-          );
-        } catch (error) {
-          console.warn("[Timer] welcome stats storage write error:", error);
-        }
-
-        setWelcomePopup({
-          open: true,
-          loading: false,
-          newReferrals,
-          newRewards,
-          totalReferrals: currentReferrals,
-          totalRewardsClaimed: currentRewardsClaimed,
-        });
-      } catch (error) {
-        console.error("[Timer] welcome popup stats error:", error);
-
-        if (!cancelled) {
-          setWelcomePopup((prev) => ({
-            ...prev,
-            open: true,
-            loading: false,
-          }));
-        }
-      }
-    };
-
-    loadWelcomeStats();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [telegramId, telegramUsername, telegramPhotoUrl]);
 
 
   /* =========================================================
@@ -1661,10 +1502,6 @@ const [totalRewards, setTotalRewards] =
         const res = await axios.get(url, {
           params: {
             telegram_id: telegramId,
-            telegram_username: telegramUsername || undefined,
-            telegram_photo_url: telegramPhotoUrl || undefined,
-            is_telegram: true,
-            inviter_code: localStorage.getItem("inviter_code") || undefined,
           },
         });
 
@@ -1794,10 +1631,6 @@ const [totalRewards, setTotalRewards] =
           {
             params: {
               telegram_id: telegramId,
-              telegram_username: telegramUsername || undefined,
-              telegram_photo_url: telegramPhotoUrl || undefined,
-              is_telegram: true,
-              inviter_code: localStorage.getItem("inviter_code") || undefined,
             },
           }
         );
@@ -1899,8 +1732,6 @@ const [totalRewards, setTotalRewards] =
             telegram_id: telegramId,
             telegram_username: telegramUsername,
             telegram_photo_url: telegramPhotoUrl,
-            is_telegram: true,
-            inviter_code: localStorage.getItem("inviter_code") || undefined,
           }
         );
 
@@ -2005,6 +1836,12 @@ const [totalRewards, setTotalRewards] =
       "[Timer] Telegram user detected:",
       telegramId
     );
+
+    if (statusLoadedRef.current) {
+      return;
+    }
+
+    statusLoadedRef.current = true;
 
     fetchStatus();
     fetchEplData();
@@ -2186,25 +2023,20 @@ const [totalRewards, setTotalRewards] =
       );
     }
 
-    // Telegram-first: reward_status creates/loads the Telegram user and
-    // returns the referral code. No wallet connection is required.
-    const response = await axios.get(
-      `${API}/reward_status/`,
+    // Read this user's own referral code from the existing connect endpoint.
+    // IMPORTANT: inviter_code is intentionally NOT sent here.
+    const response = await axios.post(
+      "/api/connect/",
       {
-        params: {
-          telegram_id: identity.telegram_id,
-          telegram_username: identity.telegram_username || undefined,
-          telegram_photo_url: identity.telegram_photo_url || undefined,
-          is_telegram: true,
-          inviter_code: localStorage.getItem("inviter_code") || undefined,
-        },
+        telegram_id: identity.telegram_id,
+        telegram_username: identity.telegram_username,
+        telegram_photo_url: identity.telegram_photo_url,
+        is_telegram: identity.is_telegram,
       }
     );
 
     const code = String(
-      response?.data?.referral_code ||
-      response?.data?.user?.referral_code ||
-      ""
+      response?.data?.user?.referral_code || ""
     ).trim();
 
     if (!code) {
@@ -2215,7 +2047,7 @@ const [totalRewards, setTotalRewards] =
     return code;
   };
 
-    const shareReferralOnTelegram = async () => {
+  const shareReferralOnTelegram = async () => {
     if (inviteLoading) return;
 
     setInviteLoading(true);
@@ -2251,23 +2083,6 @@ const [totalRewards, setTotalRewards] =
     } finally {
       setInviteLoading(false);
     }
-  };
-
-  const goToStakePage = () => {
-    window.location.href = "/stake";
-  };
-
-  const handleDailyBonusAction = () => {
-    const claimButton = document.querySelector(".claim-btn");
-
-    if (canClaim) {
-      claimReward();
-    }
-
-    claimButton?.scrollIntoView({
-      behavior: "smooth",
-      block: "center",
-    });
   };
 
 
@@ -2330,109 +2145,6 @@ const [totalRewards, setTotalRewards] =
   return (
 
     <div className="boost-page">
-
-      {welcomePopup.open && (
-        <div
-          className="welcome-celebration-overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Welcome rewards summary"
-          onClick={() =>
-            setWelcomePopup((prev) => ({ ...prev, open: false }))
-          }
-        >
-          <div className="welcome-confetti-layer" aria-hidden="true">
-            {Array.from({ length: 28 }).map((_, index) => (
-              <span
-                key={index}
-                className={`welcome-confetti welcome-confetti-${index % 6}`}
-                style={{
-                  "--confetti-x": `${(index * 37) % 100}%`,
-                  "--confetti-delay": `${(index % 9) * 0.12}s`,
-                  "--confetti-duration": `${2.2 + (index % 5) * 0.28}s`,
-                  "--confetti-rotate": `${(index * 53) % 360}deg`,
-                }}
-              />
-            ))}
-          </div>
-
-          <section
-            className="welcome-celebration-card"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <button
-              type="button"
-              className="welcome-popup-close"
-              aria-label="Close welcome popup"
-              onClick={() =>
-                setWelcomePopup((prev) => ({ ...prev, open: false }))
-              }
-            >
-              ×
-            </button>
-
-            <div className="welcome-party-icon" aria-hidden="true">
-              🎉
-            </div>
-
-            <div className="welcome-popup-kicker">WELCOME BACK</div>
-            <h2 className="welcome-popup-title">
-              {telegramDisplayName}
-            </h2>
-            <p className="welcome-popup-subtitle">
-              Here&apos;s what happened since your last visit.
-            </p>
-
-            {welcomePopup.loading ? (
-              <div className="welcome-popup-loading">
-                <span className="welcome-loading-dot" />
-                Loading your latest rewards...
-              </div>
-            ) : (
-              <>
-                <div className="welcome-stats-grid">
-                  <div className="welcome-stat-card welcome-stat-referrals">
-                    <div className="welcome-stat-icon">👥</div>
-                    <div className="welcome-stat-value">
-                      +{welcomePopup.newReferrals}
-                    </div>
-                    <div className="welcome-stat-label">New Referrals</div>
-                  </div>
-
-                  <div className="welcome-stat-card welcome-stat-rewards">
-                    <div className="welcome-stat-icon">🎁</div>
-                    <div className="welcome-stat-value">
-                      +{welcomePopup.newRewards}
-                    </div>
-                    <div className="welcome-stat-label">New Reward Claims</div>
-                  </div>
-                </div>
-
-                <div className="welcome-total-row">
-                  <span>
-                    Total referrals
-                    <strong>{welcomePopup.totalReferrals}</strong>
-                  </span>
-                  <span>
-                    Rewards collected
-                    <strong>{welcomePopup.totalRewardsClaimed}</strong>
-                  </span>
-                </div>
-              </>
-            )}
-
-            <button
-              type="button"
-              className="welcome-continue-btn"
-              onClick={() =>
-                setWelcomePopup((prev) => ({ ...prev, open: false }))
-              }
-            >
-              Let&apos;s go ✨
-            </button>
-          </section>
-        </div>
-      )}
 
       <main className="mining-shell">
 
@@ -2534,49 +2246,6 @@ const [totalRewards, setTotalRewards] =
                   <div className="drawer-buttons">
 
 
-                    <div
-                      className="drawer-main-btn drawer-profile-card"
-                      role="group"
-                      aria-label="Telegram profile"
-                    >
-                      <div className="drawer-profile-left">
-                        {telegramPhotoUrl ? (
-                          <img
-                            src={telegramPhotoUrl}
-                            alt="Telegram profile"
-                            className="drawer-profile-avatar"
-                            referrerPolicy="no-referrer"
-                            onError={(event) => {
-                              event.currentTarget.style.display = "none";
-                              const fallback = event.currentTarget.nextElementSibling;
-                              if (fallback) fallback.style.display = "grid";
-                            }}
-                          />
-                        ) : null}
-
-                        <div
-                          className="drawer-profile-avatar drawer-profile-avatar-fallback"
-                          style={{ display: telegramPhotoUrl ? "none" : "grid" }}
-                          aria-hidden="true"
-                        >
-                          👤
-                        </div>
-
-                        <div className="drawer-profile-info">
-                          <span className="drawer-profile-label">Profile</span>
-                          <strong className="drawer-profile-name">
-                            {telegramDisplayName}
-                          </strong>
-                          <span className="drawer-profile-id">
-                            Telegram ID: {telegramId || "Not detected"}
-                          </span>
-                        </div>
-                      </div>
-
-                      <span className="drawer-profile-status">Telegram</span>
-                    </div>
-
-
                     <button
                       type="button"
                       className="
@@ -2597,12 +2266,13 @@ const [totalRewards, setTotalRewards] =
                     </button>
 
 
+
                     <a
                       className="
                         drawer-main-btn
                         drawer-support-btn
                       "
-                      href="https://t.me/Ai_POLYFI"
+                      href="https://t.me/Ai_polyfi_support"
                       target="_blank"
                       rel="noreferrer"
                       onClick={() =>
@@ -2615,7 +2285,7 @@ const [totalRewards, setTotalRewards] =
                       </span>
 
                       <span className="drawer-telegram">
-                        @Ai_POLYFI
+                        @Ai_polyfi_support
                       </span>
 
                     </a>
@@ -2647,6 +2317,92 @@ const [totalRewards, setTotalRewards] =
 
 
         </header>
+
+
+        {/* =====================================================
+            TELEGRAM IDENTITY
+        ===================================================== */}
+
+        <section
+          className="glass-card"
+          style={{
+            marginTop: 14,
+            padding: 14,
+            borderRadius: 18,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+          }}
+        >
+          <div style={{ minWidth: 0 }}>
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 900,
+                letterSpacing: "0.12em",
+                color: "#00d9ff",
+                marginBottom: 5,
+              }}
+            >
+              TELEGRAM ACCOUNT
+            </div>
+
+            <div
+              style={{
+                fontSize: 15,
+                fontWeight: 900,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {telegramDisplayName}
+            </div>
+
+            <div
+              style={{
+                marginTop: 4,
+                fontSize: 12,
+                opacity: 0.72,
+              }}
+            >
+              Telegram ID: {telegramId || "Not detected"}
+            </div>
+          </div>
+
+          {telegramPhotoUrl ? (
+            <img
+              src={telegramPhotoUrl}
+              alt="Telegram profile"
+              style={{
+                width: 46,
+                height: 46,
+                borderRadius: "50%",
+                objectFit: "cover",
+                border: "1px solid rgba(0,217,255,.55)",
+              }}
+            />
+          ) : (
+            <div
+              aria-hidden="true"
+              style={{
+                width: 46,
+                height: 46,
+                flex: "0 0 46px",
+                borderRadius: "50%",
+                display: "grid",
+                placeItems: "center",
+                background: "rgba(0,217,255,.10)",
+                border: "1px solid rgba(0,217,255,.40)",
+                fontSize: 20,
+              }}
+            >
+              ✈️
+            </div>
+          )}
+        </section>
+
 
 
         {/* =====================================================
@@ -3071,7 +2827,7 @@ const [totalRewards, setTotalRewards] =
         {telegramId && (
 
           <button
-            className={`claim-btn claim-btn-primary ${!canClaim ? "claim-loading" : ""}`}
+            className={`claim-btn ${!canClaim ? "claim-loading" : ""}`}
             onClick={canClaim ? claimReward : undefined}
             disabled={!canClaim}
           >
@@ -3082,55 +2838,6 @@ const [totalRewards, setTotalRewards] =
 
 
         
-        <section className="glass-card action-panel">
-          <div className="section-kicker">EARN MORE EPL</div>
-
-          <div className="action-grid">
-            <button
-              type="button"
-              className="action-card-btn action-card-green"
-              onClick={shareReferralOnTelegram}
-              disabled={inviteLoading}
-            >
-              <span className="action-card-icon">👥</span>
-              <span className="action-card-content">
-                <span className="action-card-title">
-                  {inviteLoading ? "Opening Telegram..." : "Invite Friends"}
-                </span>
-                <span className="action-card-subtitle">Earn more with friends</span>
-              </span>
-              <span className="action-card-arrow">›</span>
-            </button>
-
-            <button
-              type="button"
-              className="action-card-btn action-card-purple"
-              onClick={goToStakePage}
-            >
-              <span className="action-card-icon">⚡</span>
-              <span className="action-card-content">
-                <span className="action-card-title">Stake EPL</span>
-                <span className="action-card-subtitle">Stake and earn more</span>
-              </span>
-              <span className="action-card-arrow">›</span>
-            </button>
-
-            <button
-              type="button"
-              className="action-card-btn action-card-gold action-card-wide"
-              onClick={handleDailyBonusAction}
-            >
-              <span className="action-card-icon">🎁</span>
-              <span className="action-card-content">
-                <span className="action-card-title">{canClaim ? "Daily Bonus" : "Hourly Bonus"}</span>
-                <span className="action-card-subtitle">
-                  {canClaim ? "Your reward is ready to claim" : "Open your mining reward section"}
-                </span>
-              </span>
-              <span className="action-card-arrow">›</span>
-            </button>
-          </div>
-        </section>
           {/* =====================================================
               REFERRAL MINING SAMPLE
           ===================================================== */}
@@ -3241,13 +2948,24 @@ const [totalRewards, setTotalRewards] =
     type="button"
     onClick={shareReferralOnTelegram}
     disabled={inviteLoading}
-    className="hero-action-btn hero-action-primary"
+    style={{
+      width: "100%",
+      marginTop: 14,
+      minHeight: 48,
+      border: "1px solid rgba(0,217,255,.55)",
+      borderRadius: 14,
+      background:
+        "linear-gradient(135deg, rgba(0,217,255,.22), rgba(30,104,255,.22))",
+      color: "#ffffff",
+      fontSize: 14,
+      fontWeight: 900,
+      letterSpacing: "0.03em",
+      cursor: inviteLoading ? "wait" : "pointer",
+      opacity: inviteLoading ? 0.7 : 1,
+      boxShadow: "0 10px 30px rgba(0,145,255,.15)",
+    }}
   >
-    <span className="hero-action-icon">🚀</span>
-    <span className="hero-action-label">
-      {inviteLoading ? "Opening Telegram..." : "Invite Me"}
-    </span>
-    <span className="hero-action-arrow">›</span>
+    {inviteLoading ? "Opening Telegram..." : "Invite Me"}
   </button>
 
   {inviteMessage && (
@@ -3389,14 +3107,39 @@ const [totalRewards, setTotalRewards] =
             <button
               type="button"
               disabled
-              className="hero-action-btn hero-action-ghost"
+              style={{
+                width: "100%",
+                marginTop: 15,
+                padding: "13px 14px",
+                borderRadius: 14,
+                border:
+                  "1px solid rgba(255,255,255,0.12)",
+                background:
+                  "rgba(255,255,255,0.05)",
+                color: "inherit",
+                cursor: "not-allowed",
+                opacity: 0.72,
+              }}
             >
-              <span className="hero-action-icon">🔒</span>
-              <span className="hero-action-stack">
-                <span className="hero-action-label">Withdraw EPL</span>
-                <span className="hero-action-note">Coming soon to withdraw</span>
+              <span
+                style={{
+                  display: "block",
+                  fontWeight: 900,
+                  fontSize: 14,
+                }}
+              >
+                Withdraw EPL
               </span>
-              <span className="hero-action-badge">Soon</span>
+              <span
+                style={{
+                  display: "block",
+                  marginTop: 3,
+                  fontSize: 11,
+                  opacity: 0.7,
+                }}
+              >
+                Coming soon to withdraw
+              </span>
             </button>
           </section>
         )}
