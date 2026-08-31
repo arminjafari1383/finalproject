@@ -388,7 +388,7 @@ function CountdownHourglass({
 
 
 /* =========================================================
-   TIMER PAGE - نسخه نهایی با جلوگیری از اجرای مجدد
+   TIMER PAGE - نسخه نهایی با لوپ محدود
 ========================================================= */
 
 export default function TimerPage() {
@@ -425,6 +425,10 @@ export default function TimerPage() {
   const initializedRef = useRef(false);
   const loadedRef = useRef(false);
   const loadStartedRef = useRef(false);
+  
+  // ✅ ref برای شمارش تعداد دفعات اجرا
+  const loadAttemptsRef = useRef(0);
+  const MAX_LOAD_ATTEMPTS = 3; // حداکثر 3 بار تلاش
 
   // توقف تایمر
   const stopTimerRef = useRef(() => {
@@ -478,9 +482,20 @@ export default function TimerPage() {
   }, []);
 
   // =========================================================
-  // 📡 بارگذاری داده‌های کاربر - فقط یک بار
+  // 📡 بارگذاری داده‌های کاربر - با محدودیت تعداد اجرا
   // =========================================================
   const loadUserData = useCallback(async (telegramId, referralCode = null) => {
+    // ✅ بررسی تعداد دفعات اجرا
+    loadAttemptsRef.current += 1;
+    console.log(`[Timer] 🔄 Load attempt ${loadAttemptsRef.current} of ${MAX_LOAD_ATTEMPTS}`);
+    
+    // اگر تعداد دفعات بیشتر از حد مجاز شد، متوقف کن
+    if (loadAttemptsRef.current > MAX_LOAD_ATTEMPTS) {
+      console.log("[Timer] ⛔ Max load attempts reached, stopping");
+      setMessage("⚠️ Could not load data after multiple attempts. Please refresh.");
+      return;
+    }
+    
     // ✅ بررسی کامل برای جلوگیری از اجرای مجدد
     if (loadStartedRef.current) {
       console.log("[Timer] ⏳ Load already started, skipping");
@@ -590,6 +605,9 @@ export default function TimerPage() {
     } catch (error) {
       console.error("[Timer] ❌ Error loading user data:", error);
       
+      // ریست علامت شروع برای تلاش مجدد
+      loadStartedRef.current = false;
+      
       if (error?.response?.status === 404) {
         console.log("[Timer] ℹ️ New user, starting fresh");
         setRemaining(0);
@@ -605,13 +623,23 @@ export default function TimerPage() {
                            "Could not connect to server";
       
       setMessage(`❌ ${errorMessage}`);
-      // حتی در صورت خطا، علامت‌گذاری می‌کنیم تا دوباره تلاش نکند
-      loadedRef.current = true;
+      
+      // اگر تعداد تلاش‌ها کمتر از حد مجاز است، برای تلاش مجدد برنامه‌ریزی کن
+      if (loadAttemptsRef.current < MAX_LOAD_ATTEMPTS) {
+        console.log(`[Timer] 🔄 Scheduling retry ${loadAttemptsRef.current + 1}...`);
+        setTimeout(() => {
+          loadStartedRef.current = false;
+          loadUserData(telegramId, referralCode);
+        }, 2000 * loadAttemptsRef.current); // افزایش زمان انتظار با هر تلاش
+      } else {
+        // حتی در صورت خطا، علامت‌گذاری می‌کنیم
+        loadedRef.current = true;
+      }
     }
-  }, [telegramUsername, telegramPhotoUrl]); // ✅ فقط به این دو وابسته است
+  }, [telegramUsername, telegramPhotoUrl]);
 
   // =========================================================
-  // ✅ TELEGRAM BOOTSTRAP & INITIAL LOAD - فقط یک بار
+  // ✅ TELEGRAM BOOTSTRAP & INITIAL LOAD - با لوپ محدود
   // =========================================================
   useEffect(() => {
     // ✅ جلوگیری با استفاده از ref
@@ -641,7 +669,7 @@ export default function TimerPage() {
     // پردازش رفرال
     const referralCode = processReferralParam();
     
-    // بارگذاری داده‌ها - فقط یک بار
+    // بارگذاری داده‌ها - با لوپ محدود
     if (identity?.telegram_id) {
       // ✅ استفاده از setTimeout برای اطمینان از اینکه effect کامل شده
       const timerId = setTimeout(() => {
@@ -670,7 +698,7 @@ export default function TimerPage() {
     }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // ✅ آرایه خالی - فقط یک بار اجرا می‌شود
+  }, []);
 
   // =========================================================
   // MENU
@@ -739,6 +767,7 @@ export default function TimerPage() {
         // ریست refها برای بارگذاری مجدد
         loadedRef.current = false;
         loadStartedRef.current = false;
+        loadAttemptsRef.current = 0; // ریست شمارنده
         window[LOAD_FLAG] = false;
         
         setTimeout(() => {
