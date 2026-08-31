@@ -420,8 +420,7 @@ export default function TimerPage() {
   const intervalRef = useRef(null);
   const menuRef = useRef(null);
   const telegramBootRef = useRef(false);
-  const hasLoadedRef = useRef(false);
-  const isLoadingRef = useRef(false); // ✅ جلوگیری از بارگذاری همزمان
+  const dataLoadedRef = useRef(false);
 
   /* =========================================================
      TELEGRAM BOOTSTRAP
@@ -478,11 +477,11 @@ export default function TimerPage() {
   }, []);
 
   /* =========================================================
-     LOAD DATA — فقط یک بار با استفاده از useEffect + useRef
+     LOAD DATA — فقط یک بار
   ========================================================= */
   useEffect(() => {
-    // اگر قبلاً بارگذاری شده یا در حال بارگذاری است یا telegramId وجود ندارد
-    if (hasLoadedRef.current || isLoadingRef.current || !telegramId) {
+    // اگر قبلاً داده‌ها بارگذاری شده یا telegramId وجود ندارد
+    if (dataLoadedRef.current || !telegramId) {
       if (!telegramId) {
         setRemaining(null);
         setMessage("⚠️ Telegram identity not detected. Open the Mini App inside Telegram.");
@@ -492,18 +491,18 @@ export default function TimerPage() {
     }
 
     // علامت‌گذاری برای جلوگیری از اجرای مجدد
-    isLoadingRef.current = true;
+    dataLoadedRef.current = true;
 
     console.log("[Timer] Loading data for telegram_id:", telegramId);
 
     // توقف تایمر قبلی
     stopTimer();
 
-    // بارگذاری وضعیت تایمر
-    const loadTimerStatus = async () => {
+    // تابع بارگذاری وضعیت تایمر
+    const loadData = async () => {
       try {
         const url = `${API}/reward_status/`;
-        console.log("[Timer] fetchStatus =>", url, "telegram_id=", telegramId);
+        console.log("[Timer] Fetching reward_status for:", telegramId);
 
         const res = await axios.get(url, {
           params: { telegram_id: telegramId },
@@ -532,24 +531,6 @@ export default function TimerPage() {
             setMessage("✅ Ready to claim hourly reward!");
             stopTimer();
           }
-        } else if (data) {
-          const serverCooldown = data.cooldown_seconds ?? 60 * 60;
-          const sec = Math.min(data.seconds_remaining ?? data.seconds ?? 0, serverCooldown);
-
-          setCooldownSeconds(serverCooldown);
-          setRemaining(sec);
-          setTotalRewards(data.total_rewards ?? data.totalRewards ?? data.withdrawable_total ?? "0");
-          setReferralBonus(data.referral_points ?? data.referralBonus ?? data.referral_bonus ?? "0");
-          setRewardCount(data.rewards_count ?? data.rewardCount ?? 0);
-          setEplWallet((prev) => ({ ...(prev || {}), ...(data || {}) }));
-
-          if (sec > 0) {
-            setMessage("⏳ Timer is running...");
-            startTimer();
-          } else {
-            setMessage("✅ Ready to claim hourly reward!");
-            stopTimer();
-          }
         } else {
           setMessage("❌ Invalid server response.");
         }
@@ -560,37 +541,28 @@ export default function TimerPage() {
           error?.response?.data?.error ||
           "❌ Cannot load timer status from server."
         );
-      } finally {
-        // بعد از اتمام بارگذاری، علامت‌گذاری نهایی
-        hasLoadedRef.current = true;
-        isLoadingRef.current = false;
       }
     };
 
-    // بارگذاری EPL data
-    const loadEplData = async () => {
-      if (!telegramId) return;
-      setEplLoading(true);
-      try {
-        const result = await axios.get(`${API}/reward_status/`, {
-          params: { telegram_id: telegramId },
-        });
-        setEplWallet(result?.data || null);
-      } catch (error) {
-        console.error("[Timer] EPL data load error:", error);
-      } finally {
-        setEplLoading(false);
-      }
-    };
+    // بارگذاری داده‌ها
+    loadData();
 
-    // اجرای بارگذاری‌ها
-    loadTimerStatus();
-    loadEplData();
-
-    // به‌روزرسانی دوره‌ای EPL data (هر 15 ثانیه)
+    // به‌روزرسانی EPL data هر 15 ثانیه
     const eplRefresh = window.setInterval(() => {
-      if (telegramId && hasLoadedRef.current) {
-        loadEplData();
+      if (telegramId && dataLoadedRef.current) {
+        setEplLoading(true);
+        axios.get(`${API}/reward_status/`, {
+          params: { telegram_id: telegramId },
+        })
+          .then((result) => {
+            setEplWallet(result?.data || null);
+          })
+          .catch((error) => {
+            console.error("[Timer] EPL data refresh error:", error);
+          })
+          .finally(() => {
+            setEplLoading(false);
+          });
       }
     }, 15000);
 
@@ -600,8 +572,20 @@ export default function TimerPage() {
       if (latestIdentity) {
         setTelegramIdentity(latestIdentity);
       }
-      if (telegramId && hasLoadedRef.current) {
-        loadEplData();
+      if (telegramId && dataLoadedRef.current) {
+        setEplLoading(true);
+        axios.get(`${API}/reward_status/`, {
+          params: { telegram_id: telegramId },
+        })
+          .then((result) => {
+            setEplWallet(result?.data || null);
+          })
+          .catch((error) => {
+            console.error("[Timer] EPL data focus refresh error:", error);
+          })
+          .finally(() => {
+            setEplLoading(false);
+          });
       }
     };
     window.addEventListener("focus", onFocus);
@@ -651,7 +635,7 @@ export default function TimerPage() {
         setMessage(`🎉 ${data.message || "Reward claimed!"}`);
 
         // بارگذاری مجدد داده‌ها
-        hasLoadedRef.current = false;
+        dataLoadedRef.current = false;
         setTimeout(() => {
           window.location.reload();
         }, 500);
@@ -670,14 +654,14 @@ export default function TimerPage() {
 
       setMessage("⚠️ " + (data?.message || data?.error || "Could not claim."));
       setTimeout(() => {
-        hasLoadedRef.current = false;
+        dataLoadedRef.current = false;
         window.location.reload();
       }, 5000);
     } catch (error) {
       console.error("[Timer] claimReward ERROR:", error);
       setMessage(`❌ ${error?.response?.data?.message || error?.response?.data?.error || "Error claiming reward."}`);
       setTimeout(() => {
-        hasLoadedRef.current = false;
+        dataLoadedRef.current = false;
         window.location.reload();
       }, 5000);
     }
