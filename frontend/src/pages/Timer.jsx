@@ -5,6 +5,8 @@ import React, {
   useState,
 } from "react";
 
+
+
 import axios from "axios";
 
 import "./Timer.css";
@@ -1871,11 +1873,7 @@ const [totalRewards, setTotalRewards] =
       window.removeEventListener("focus", onFocus);
     };
 
-  }, [
-    telegramId,
-    fetchStatus,
-    fetchEplData,
-  ]);
+  }, [telegramId]);
 
 
 
