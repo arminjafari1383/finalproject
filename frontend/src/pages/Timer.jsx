@@ -5,8 +5,6 @@ import React, {
   useState,
 } from "react";
 
-
-
 import axios from "axios";
 
 import "./Timer.css";
@@ -1363,9 +1361,11 @@ const [totalRewards, setTotalRewards] =
   const menuRef =
     useRef(null);
 
-  // Prevent duplicate reward_status calls after Telegram reload/navigation
-  const statusLoadedRef =
-    useRef(false);
+  // ✅ Fix: Declare the statusLoadedRef here
+  const statusLoadedRef = useRef(false);
+  
+  // ✅ Fix: Use ref for fetch status flag instead of window
+  const fetchStatusInProgress = useRef(false);
 
 
   /* =========================================================
@@ -1487,18 +1487,19 @@ const [totalRewards, setTotalRewards] =
 
   const fetchStatus =
     useCallback(async () => {
-
-      if (window.__timerStatusRequestRunning) {
+      // ✅ Fix: Use ref instead of window
+      if (fetchStatusInProgress.current) {
         console.log("[Timer] reward_status skipped: request already running");
         return;
       }
 
-      window.__timerStatusRequestRunning = true;
+      fetchStatusInProgress.current = true;
 
       if (!telegramId) {
         console.log("[Timer] Telegram ID is not available");
         setRemaining(null);
         setMessage("⚠️ Please open this Mini App inside Telegram.");
+        fetchStatusInProgress.current = false;
         return;
       }
 
@@ -1556,6 +1557,7 @@ const [totalRewards, setTotalRewards] =
             stopTimer();
           }
 
+          fetchStatusInProgress.current = false;
           return;
         }
 
@@ -1603,6 +1605,7 @@ const [totalRewards, setTotalRewards] =
             stopTimer();
           }
 
+          fetchStatusInProgress.current = false;
           return;
         }
 
@@ -1619,7 +1622,7 @@ const [totalRewards, setTotalRewards] =
           "❌ Cannot load timer status from server."
         );
       } finally {
-        window.__timerStatusRequestRunning = false;
+        fetchStatusInProgress.current = false;
       }
     }, [telegramId]);
 
@@ -1774,6 +1777,8 @@ const [totalRewards, setTotalRewards] =
             `🎉 ${data.message || "Reward claimed!"}`
           );
 
+          // Reset the loaded flag so we can fetch fresh data
+          statusLoadedRef.current = false;
           await fetchStatus();
           await fetchEplData();
           return;
@@ -1852,14 +1857,12 @@ const [totalRewards, setTotalRewards] =
       telegramId
     );
 
-    if (statusLoadedRef.current) {
-      return;
+    // ✅ Fix: Only fetch if not already loaded
+    if (!statusLoadedRef.current) {
+      statusLoadedRef.current = true;
+      fetchStatus();
+      fetchEplData();
     }
-
-    statusLoadedRef.current = true;
-
-    fetchStatus();
-    fetchEplData();
 
     const eplRefresh = window.setInterval(
       fetchEplData,
@@ -1882,7 +1885,7 @@ const [totalRewards, setTotalRewards] =
       window.removeEventListener("focus", onFocus);
     };
 
-  }, [telegramId]);
+  }, [telegramId, fetchStatus, fetchEplData]);
 
 
 
