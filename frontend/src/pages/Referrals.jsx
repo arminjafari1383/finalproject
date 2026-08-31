@@ -1,7 +1,6 @@
 // frontend/src/components/Referrals.jsx
 
 import {
-  useCallback,
   useEffect,
   useRef,
   useState,
@@ -329,7 +328,10 @@ export default function Referrals() {
         finalInviterCode || "",
       ].join("|");
 
-      if (registerKeyRef.current === currentRegisterKey) {
+      if (
+        registerKeyRef.current === currentRegisterKey &&
+        myCode
+      ) {
         return;
       }
 
@@ -420,6 +422,7 @@ export default function Referrals() {
 
     if (
       !referralReady ||
+      !myCode ||
       !Number.isInteger(finalTelegramId) ||
       finalTelegramId <= 0
     ) {
@@ -471,7 +474,7 @@ export default function Referrals() {
 
     fetchLevels();
 
-    const intervalId = window.setInterval(fetchLevels, 5000);
+    const intervalId = null;
 
     const refreshOnFocus = () => fetchLevels();
 
@@ -486,7 +489,9 @@ export default function Referrals() {
 
     return () => {
       cancelled = true;
-      window.clearInterval(intervalId);
+      if (intervalId) {
+        window.clearInterval(intervalId);
+      }
       window.removeEventListener("focus", refreshOnFocus);
       document.removeEventListener(
         "visibilitychange",
