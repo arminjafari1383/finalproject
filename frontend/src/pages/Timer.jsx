@@ -20,7 +20,6 @@ const OWN_REFERRAL_CODE_KEY = "my_referral_code";
 const USED_REFERRAL_KEY = "used_referral_code";
 
 // ✅ فلگ سراسری با استفاده از Symbol برای اطمینان از یکتایی
-
 const LOAD_FLAG = Symbol.for("TIMER_LOADED");
 
 /* =========================================================
