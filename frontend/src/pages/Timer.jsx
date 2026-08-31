@@ -611,14 +611,32 @@ export default function TimerPage() {
   // ✅ TELEGRAM BOOTSTRAP & INITIAL LOAD - فقط یک بار
   // =========================================================
   useEffect(() => {
-    // ✅ جلوگیری با استفاده از ref و فلگ سراسری
-    if (initializedRef.current || window[INIT_FLAG]) {
-      console.log("[Timer] ⏳ Already initialized, skipping");
-      return;
-    }
-    
-    initializedRef.current = true;
-    window[INIT_FLAG] = true;
+  if (initializedRef.current) {
+    return;
+  }
+
+  initializedRef.current = true;
+
+  console.log("[Timer] 🚀 Initializing...");
+
+  const tg = window.Telegram?.WebApp;
+
+  tg?.ready?.();
+  tg?.expand?.();
+
+  const identity = readTelegramIdentity();
+
+  if (identity) {
+    setTelegramIdentity(identity);
+  }
+
+  const referralCode = processReferralParam();
+
+  if (identity?.telegram_id) {
+    loadUserData(identity.telegram_id, referralCode);
+  }
+
+}, []);
 
     console.log("[Timer] 🚀 Initializing...");
 
