@@ -612,13 +612,12 @@ export default function TimerPage() {
   // =========================================================
   useEffect(() => {
     // ✅ جلوگیری با استفاده از ref و فلگ سراسری
-    if (initializedRef.current || window[INIT_FLAG]) {
+    if (initializedRef.current) {
       console.log("[Timer] ⏳ Already initialized, skipping");
       return;
     }
     
     initializedRef.current = true;
-    window[INIT_FLAG] = true;
 
     console.log("[Timer] 🚀 Initializing...");
 
