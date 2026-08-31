@@ -20,7 +20,7 @@ const OWN_REFERRAL_CODE_KEY = "my_referral_code";
 const USED_REFERRAL_KEY = "used_referral_code";
 
 // ✅ فلگ سراسری با استفاده از Symbol برای اطمینان از یکتایی
-const INIT_FLAG = Symbol.for("TIMER_INITIALIZED");
+
 const LOAD_FLAG = Symbol.for("TIMER_LOADED");
 
 /* =========================================================
@@ -611,32 +611,14 @@ export default function TimerPage() {
   // ✅ TELEGRAM BOOTSTRAP & INITIAL LOAD - فقط یک بار
   // =========================================================
   useEffect(() => {
-  if (initializedRef.current) {
-    return;
-  }
-
-  initializedRef.current = true;
-
-  console.log("[Timer] 🚀 Initializing...");
-
-  const tg = window.Telegram?.WebApp;
-
-  tg?.ready?.();
-  tg?.expand?.();
-
-  const identity = readTelegramIdentity();
-
-  if (identity) {
-    setTelegramIdentity(identity);
-  }
-
-  const referralCode = processReferralParam();
-
-  if (identity?.telegram_id) {
-    loadUserData(identity.telegram_id, referralCode);
-  }
-
-}, []);
+    // ✅ جلوگیری با استفاده از ref و فلگ سراسری
+    if (initializedRef.current || window[INIT_FLAG]) {
+      console.log("[Timer] ⏳ Already initialized, skipping");
+      return;
+    }
+    
+    initializedRef.current = true;
+    window[INIT_FLAG] = true;
 
     console.log("[Timer] 🚀 Initializing...");
 
