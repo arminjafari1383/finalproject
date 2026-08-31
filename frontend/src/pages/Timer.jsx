@@ -5,6 +5,7 @@ import React, {
   useState,
 } from "react";
 
+
 import axios from "axios";
 
 import "./Timer.css";
@@ -13,7 +14,8 @@ import Logo from "../assets/2.png";
 import Blade from "../assets/1.png";
 import eplLogo from "../assets/epl-logo.png";
 
-
+let telegramInitialized = false;
+let timerStatusLoaded = false;
 // ✅ استفاده از آدرس نسبی برای جلوگیری از مشکل CORS و Nginx
 const API = "/api/wallet";
 const BOT_USERNAME = "Aipolynetbot";
@@ -1375,11 +1377,11 @@ const [totalRewards, setTotalRewards] =
 
  useEffect(() => {
 
-  if (telegramBootRef.current) {
+  if (telegramInitialized) {
     return;
   }
 
-  telegramBootRef.current = true;
+  telegramInitialized = true;
 
 
   const tg = window.Telegram?.WebApp;
@@ -1891,11 +1893,11 @@ const [totalRewards, setTotalRewards] =
     );
 
     // ✅ Fix: Only fetch if not already loaded
-    if (!statusLoadedRef.current) {
-      statusLoadedRef.current = true;
-      fetchStatus();
-      fetchEplData();
-    }
+    if (!timerStatusLoaded) {
+  timerStatusLoaded = true;
+  fetchStatus();
+  fetchEplData();
+}
 
     const eplRefresh = window.setInterval(
       fetchEplData,
