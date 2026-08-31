@@ -1488,6 +1488,13 @@ const [totalRewards, setTotalRewards] =
   const fetchStatus =
     useCallback(async () => {
 
+      if (window.__timerStatusRequestRunning) {
+        console.log("[Timer] reward_status skipped: request already running");
+        return;
+      }
+
+      window.__timerStatusRequestRunning = true;
+
       if (!telegramId) {
         console.log("[Timer] Telegram ID is not available");
         setRemaining(null);
@@ -1611,6 +1618,8 @@ const [totalRewards, setTotalRewards] =
           e.response?.data?.detail ||
           "❌ Cannot load timer status from server."
         );
+      } finally {
+        window.__timerStatusRequestRunning = false;
       }
     }, [telegramId]);
 
