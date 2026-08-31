@@ -247,8 +247,6 @@ def _profit_bucket_snapshot(user, asset="ECG", authoritative_available=None):
     }
 
 
-
-
 def _reconcile_profit_asset_available(user, asset="ECG"):
     """
     Rebuild AssetBalance.available from the accounting ledgers.
@@ -2361,8 +2359,6 @@ def _get_or_create_telegram_user(request):
             user.wallet_locked = False
             update_fields.append("wallet_locked")
 
-        # These fields exist in the current project but are guarded to keep
-        # this helper compatible with older local database snapshots.
         if hasattr(user, "is_active") and not user.is_active:
             user.is_active = True
             update_fields.append("is_active")
@@ -2376,14 +2372,46 @@ def _get_or_create_telegram_user(request):
 
         Wallet.objects.get_or_create(user=user)
 
+        # ============================================================
+        # ✅ مدیریت رفرال با محدودیت فقط یک بار
+        # ============================================================
         inviter_code = identity.get("inviter_code")
+        
         if inviter_code and not user.inviter_id:
-            try:
-                apply_referral(inviter_code, user)
-                user.refresh_from_db()
-            except Exception:
-                logger.exception(
-                    "[TELEGRAM_IDENTITY] Could not apply inviter code user=%s code=%s",
+            # ✅ بررسی: آیا این کاربر قبلاً با این کد دعوت شده؟
+            existing_invite = ReferralLevel.objects.filter(
+                user__telegram_id=telegram_id,
+                referrer__referral_code=inviter_code
+            ).exists()
+            
+            if not existing_invite:
+                try:
+                    logger.info(
+                        "[TELEGRAM_IDENTITY] Applying referral: user=%s code=%s",
+                        user.id,
+                        inviter_code,
+                    )
+                    
+                    apply_referral(inviter_code, user)
+                    user.refresh_from_db()
+                    
+                    # ثبت لاگ موفقیت
+                    logger.info(
+                        "[TELEGRAM_IDENTITY] Referral applied successfully: user=%s code=%s",
+                        user.id,
+                        inviter_code,
+                    )
+                    
+                except Exception as exc:
+                    logger.exception(
+                        "[TELEGRAM_IDENTITY] Could not apply inviter code user=%s code=%s: %s",
+                        user.id,
+                        inviter_code,
+                        str(exc),
+                    )
+            else:
+                logger.info(
+                    "[TELEGRAM_IDENTITY] Referral already applied (skipping): user=%s code=%s",
                     user.id,
                     inviter_code,
                 )
@@ -2563,6 +2591,9 @@ def _timer_payload(user, *, now=None):
         "wallet_address": _public_wallet_address(user),
         "wallet_connected": bool(_public_wallet_address(user)),
         "user": _telegram_user_payload(user),
+        
+        # ✅ اضافه کردن فلگ برای نشان دادن اینکه رفرال اعمال شده است
+        "referral_applied": bool(user.inviter_id),
     }
 
 
@@ -2578,8 +2609,12 @@ def reward_status(request):
     """
     try:
         user, _identity = _get_or_create_telegram_user(request)
+        
+        # ساخت پاسخ
+        response_data = _timer_payload(user)
+        
         return Response(
-            _timer_payload(user),
+            response_data,
             status=status.HTTP_200_OK,
         )
 
