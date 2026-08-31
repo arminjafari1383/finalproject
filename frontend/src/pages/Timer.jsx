@@ -1361,6 +1361,10 @@ const [totalRewards, setTotalRewards] =
   const menuRef =
     useRef(null);
 
+  // Prevent duplicate reward_status calls after Telegram reload/navigation
+  const statusLoadedRef =
+    useRef(false);
+
 
   /* =========================================================
      TELEGRAM BOOTSTRAP
