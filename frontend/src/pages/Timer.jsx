@@ -13,7 +13,6 @@ import Logo from "../assets/2.png";
 import Blade from "../assets/1.png";
 import eplLogo from "../assets/epl-logo.png";
 
-// ✅ استفاده از آدرس نسبی برای جلوگیری از مشکل CORS و Nginx
 const API = "/api/wallet";
 const BOT_USERNAME = "Aipolynetbot";
 const USER_DATA_KEY = "my_app_user_data";
@@ -22,7 +21,6 @@ const OWN_REFERRAL_CODE_KEY = "my_referral_code";
 
 /* =========================================================
    TELEGRAM IDENTITY
-   Telegram ID is the primary user identity on this page.
 ========================================================= */
 
 function readTelegramIdentity() {
@@ -80,7 +78,7 @@ function readTelegramIdentity() {
 
 
 /* =========================================================
-   HOURGLASS
+   HOURGLASS COMPONENT (بدون تغییر)
 ========================================================= */
 
 function CountdownHourglass({
@@ -387,7 +385,7 @@ function CountdownHourglass({
 
 
 /* =========================================================
-   TIMER PAGE
+   TIMER PAGE - نسخه اصلاح شده
 ========================================================= */
 
 export default function TimerPage() {
@@ -423,7 +421,7 @@ export default function TimerPage() {
   const telegramBootRef = useRef(false);
   const dataLoadedRef = useRef(false);
 
-  // ✅ استفاده از useRef برای stopTimer و startTimer به جای useCallback
+  // توقف تایمر
   const stopTimerRef = useRef(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
@@ -431,6 +429,7 @@ export default function TimerPage() {
     }
   });
 
+  // شروع تایمر
   const startTimerRef = useRef(() => {
     if (intervalRef.current) return;
     intervalRef.current = setInterval(() => {
@@ -470,19 +469,22 @@ export default function TimerPage() {
   }, []);
 
   // =========================================================
-  // 📡 بارگذاری داده‌های کاربر (فقط یک بار)
+  // 📡 بارگذاری داده‌های کاربر از اندپوینت reward_status
   // =========================================================
   const loadUserData = useCallback(async (telegramId, referralCode = null) => {
-    if (!telegramId) {
-      console.log("[Timer] ❌ No telegram_id, skipping data load");
-      return;
-    }
-
     // اگر قبلاً بارگذاری شده، اجرا نکن
     if (dataLoadedRef.current) {
       console.log("[Timer] ⏳ Data already loaded, skipping");
       return;
     }
+
+    if (!telegramId) {
+      console.log("[Timer] ❌ No telegram_id, skipping data load");
+      return;
+    }
+
+    // علامت‌گذاری برای جلوگیری از اجرای مجدد
+    dataLoadedRef.current = true;
 
     console.log("[Timer] 📡 Loading user data for telegram_id:", telegramId);
     
@@ -491,75 +493,104 @@ export default function TimerPage() {
     }
 
     try {
-      // ۱. اتصال کاربر
-      const connectResponse = await axios.post("/api/connect/", {
-        telegram_id: telegramId,
-        telegram_username: telegramUsername,
-        telegram_photo_url: telegramPhotoUrl,
-        is_telegram: true,
-        referral_code: referralCode || undefined,
-      });
-
-      console.log("[Timer] ✅ Connect response:", connectResponse.data);
-
-      // ذخیره کد رفرال خود کاربر
-      if (connectResponse.data?.user?.referral_code) {
-        localStorage.setItem(OWN_REFERRAL_CODE_KEY, connectResponse.data.user.referral_code);
-      }
-
-      // پاک کردن رفرال pending بعد از استفاده
+      // ساخت URL با پارامترهای مورد نیاز
+      let statusUrl = `${API}/reward_status/?telegram_id=${telegramId}`;
+      
+      // اگر رفرال کد داریم، به عنوان inviter_code ارسال می‌کنیم
       if (referralCode) {
-        localStorage.removeItem('pending_referral');
-        localStorage.removeItem('referral_code');
+        statusUrl += `&inviter_code=${encodeURIComponent(referralCode)}`;
       }
 
-      // ۲. دریافت وضعیت پاداش
-      try {
-        const statusResponse = await axios.get(`${API}/reward_status/?telegram_id=${telegramId}`);
-        console.log("[Timer] ✅ Reward status response:", statusResponse.data);
+      // هدرهای مورد نیاز برای بک‌اند
+      const headers = {
+        'X-Telegram-Id': String(telegramId),
+        'X-Telegram': 'true',
+      };
+      
+      if (telegramUsername) {
+        headers['X-Telegram-Username'] = telegramUsername;
+      }
+      
+      if (telegramPhotoUrl) {
+        headers['X-Telegram-Photo-Url'] = telegramPhotoUrl;
+      }
 
-        const data = statusResponse.data;
+      // دریافت وضعیت پاداش (این اندپوینت خودش کاربر را ایجاد می‌کند)
+      const statusResponse = await axios.get(statusUrl, { headers });
+      console.log("[Timer] ✅ Reward status response:", statusResponse.data);
+
+      const data = statusResponse.data;
+      
+      if (data && data.status !== "error") {
+        setTotalRewards(data.total_rewards ?? "0");
+        setReferralBonus(data.referral_bonus ?? "0");
+        setRewardCount(data.rewards_count ?? 0);
         
-        if (data) {
-          setTotalRewards(data.total_rewards ?? "0");
-          setReferralBonus(data.referral_bonus ?? "0");
-          setRewardCount(data.rewards_count ?? 0);
-          
-          const serverCooldown = data.cooldown_seconds ?? 60 * 60;
-          setCooldownSeconds(serverCooldown);
-          
-          const secondsRemaining = data.seconds_remaining ?? 0;
-          setRemaining(secondsRemaining);
-          
-          if (secondsRemaining > 0) {
-            startTimerRef.current();
-          }
-          
-          // به‌روزرسانی کیف پول
-          if (data.epl_wallet) {
-            setEplWallet(data.epl_wallet);
-          }
-          
-          console.log("[Timer] ✅ Data loaded successfully");
+        const serverCooldown = data.cooldown_seconds ?? 60 * 60;
+        setCooldownSeconds(serverCooldown);
+        
+        const secondsRemaining = data.seconds_remaining ?? 0;
+        setRemaining(secondsRemaining);
+        
+        if (secondsRemaining > 0) {
+          startTimerRef.current();
         }
-      } catch (statusError) {
-        console.warn("[Timer] ⚠️ Could not fetch reward status:", statusError);
-        setMessage("ℹ️ Could not load reward status. Please try again later.");
+        
+        // به‌روزرسانی کیف پول EPL
+        setEplWallet({
+          epl_balance: data.epl_balance || "0",
+          hourly_reward_balance: data.hourly_reward_balance || data.total_rewards || "0",
+          referral_bonus: data.referral_bonus || "0",
+          hourly_claims: data.hourly_claims || data.rewards_count || 0,
+          referral_code: data.referral_code || null,
+        });
+        
+        // ذخیره کد رفرال کاربر
+        if (data.referral_code) {
+          localStorage.setItem(OWN_REFERRAL_CODE_KEY, data.referral_code);
+        }
+        
+        // پاک کردن رفرال pending بعد از استفاده
+        if (referralCode) {
+          localStorage.removeItem('pending_referral');
+          localStorage.removeItem('referral_code');
+        }
+        
+        console.log("[Timer] ✅ Data loaded successfully");
+        setMessage("");
+      } else {
+        setMessage("ℹ️ No data available");
       }
-
-      // علامت‌گذاری بارگذاری کامل
-      dataLoadedRef.current = true;
+      
       setInitialLoadDone(true);
 
     } catch (error) {
       console.error("[Timer] ❌ Error loading user data:", error);
-      setMessage(`❌ Error: ${error?.response?.data?.error || error.message || "Could not connect to server"}`);
+      
+      // اگر خطای 404 باشد، کاربر جدید است
+      if (error?.response?.status === 404) {
+        console.log("[Timer] ℹ️ New user, starting fresh");
+        setRemaining(0);
+        setMessage("Welcome! Start mining to earn rewards.");
+        setInitialLoadDone(true);
+        return;
+      }
+      
+      // نمایش پیام خطای دقیق از سرور
+      const errorMessage = error?.response?.data?.error || 
+                           error?.response?.data?.message || 
+                           error?.response?.data?.detail ||
+                           error.message || 
+                           "Could not connect to server";
+      
+      setMessage(`❌ ${errorMessage}`);
+      setInitialLoadDone(true);
     }
   }, [telegramUsername, telegramPhotoUrl, startTimerRef]);
 
-  /* =========================================================
-     TELEGRAM BOOTSTRAP & INITIAL LOAD
-  ========================================================= */
+  // =========================================================
+  // TELEGRAM BOOTSTRAP & INITIAL LOAD
+  // =========================================================
   useEffect(() => {
     // فقط یک بار اجرا شود
     if (telegramBootRef.current) return;
@@ -588,22 +619,27 @@ export default function TimerPage() {
     } else {
       console.log("[Timer] ⚠️ No Telegram identity found, waiting...");
       // اگر هویت وجود ندارد، یک بار دیگر بعد از ۱ ثانیه تلاش کن
-      setTimeout(() => {
+      const timeoutId = setTimeout(() => {
         const retryIdentity = readTelegramIdentity();
         if (retryIdentity?.telegram_id) {
           setTelegramIdentity(retryIdentity);
           const retryReferral = localStorage.getItem('pending_referral');
           loadUserData(retryIdentity.telegram_id, retryReferral);
+        } else {
+          setMessage("⚠️ Please open this app from Telegram to continue.");
+          dataLoadedRef.current = true;
         }
       }, 1000);
+      
+      return () => clearTimeout(timeoutId);
     }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // ✅ خالی = فقط یک بار اجرا می‌شود
+  }, []);
 
-  /* =========================================================
-     MENU
-  ========================================================= */
+  // =========================================================
+  // MENU
+  // =========================================================
   useEffect(() => {
     const closeMenu = (event) => {
       if (menuRef.current && !menuRef.current.contains(event.target)) {
@@ -614,9 +650,9 @@ export default function TimerPage() {
     return () => document.removeEventListener("pointerdown", closeMenu);
   }, []);
 
-  /* =========================================================
-     CLAIM REWARD
-  ========================================================= */
+  // =========================================================
+  // CLAIM REWARD
+  // =========================================================
   const claimReward = async () => {
     if (!telegramId) {
       setMessage("⚠️ Telegram identity is not available. Please open this Mini App inside Telegram.");
@@ -634,11 +670,25 @@ export default function TimerPage() {
 
     try {
       setMessage("⏳ Claiming reward...");
+      
+      const headers = {
+        'X-Telegram-Id': String(telegramId),
+        'X-Telegram': 'true',
+      };
+      
+      if (telegramUsername) {
+        headers['X-Telegram-Username'] = telegramUsername;
+      }
+      
+      if (telegramPhotoUrl) {
+        headers['X-Telegram-Photo-Url'] = telegramPhotoUrl;
+      }
+
       const res = await axios.post(url, {
         telegram_id: telegramId,
         telegram_username: telegramUsername,
         telegram_photo_url: telegramPhotoUrl,
-      });
+      }, { headers });
 
       console.log("[Timer] tick HTTP:", res.status);
       console.log("[Timer] tick data:", res.data);
@@ -655,7 +705,7 @@ export default function TimerPage() {
         dataLoadedRef.current = false;
         setTimeout(() => {
           window.location.reload();
-        }, 500);
+        }, 1000);
         return;
       }
 
@@ -670,23 +720,15 @@ export default function TimerPage() {
       }
 
       setMessage("⚠️ " + (data?.message || data?.error || "Could not claim."));
-      setTimeout(() => {
-        dataLoadedRef.current = false;
-        window.location.reload();
-      }, 5000);
     } catch (error) {
       console.error("[Timer] claimReward ERROR:", error);
-      setMessage(`❌ ${error?.response?.data?.message || error?.response?.data?.error || "Error claiming reward."}`);
-      setTimeout(() => {
-        dataLoadedRef.current = false;
-        window.location.reload();
-      }, 5000);
+      setMessage(`❌ ${error?.response?.data?.error || error?.response?.data?.message || "Error claiming reward."}`);
     }
   };
 
-  /* =========================================================
-     SAND PROGRESS
-  ========================================================= */
+  // =========================================================
+  // SAND PROGRESS
+  // =========================================================
   const canClaim = remaining === 0 || remaining === null;
   const rewardCycleSeconds = cooldownSeconds || 60 * 60;
   const remainingRatio = remaining === null ? 1 : Math.min(1, Math.max(0, remaining / rewardCycleSeconds));
@@ -699,12 +741,12 @@ export default function TimerPage() {
   const minutes = remaining == null ? "--" : String(Math.floor((remaining % 3600) / 60)).padStart(2, "0");
   const seconds = remaining == null ? "--" : String(Math.floor(remaining % 60)).padStart(2, "0");
 
-  /* =========================================================
-     REFERRAL INVITE
-  ========================================================= */
+  // =========================================================
+  // REFERRAL INVITE
+  // =========================================================
   const getOwnReferralCode = async () => {
     try {
-      const walletCode = String(eplWallet?.referral_code || eplWallet?.user?.referral_code || "").trim();
+      const walletCode = String(eplWallet?.referral_code || "").trim();
       if (walletCode) {
         localStorage.setItem(OWN_REFERRAL_CODE_KEY, walletCode);
         return walletCode;
@@ -720,14 +762,19 @@ export default function TimerPage() {
         throw new Error("Telegram identity is not available.");
       }
 
-      const response = await axios.post("/api/connect/", {
-        telegram_id: identity.telegram_id,
-        telegram_username: identity.telegram_username,
-        telegram_photo_url: identity.telegram_photo_url,
-        is_telegram: identity.is_telegram,
-      });
+      // استفاده از اندپوینت referral_count برای دریافت کد رفرال
+      const headers = {
+        'X-Telegram-Id': String(identity.telegram_id),
+        'X-Telegram': 'true',
+      };
+      
+      if (identity.telegram_username) {
+        headers['X-Telegram-Username'] = identity.telegram_username;
+      }
 
-      const code = String(response?.data?.user?.referral_code || "").trim();
+      const response = await axios.get(`${API}/referral_count/`, { headers });
+
+      const code = String(response?.data?.referral_code || "").trim();
       if (!code) {
         throw new Error("Referral code was not returned by the server.");
       }
@@ -765,19 +812,17 @@ export default function TimerPage() {
     }
   };
 
-  /* =========================================================
-     EPL CALCULATIONS
-  ========================================================= */
-  const eplReferralBalance = Number(eplWallet?.referral_bonus_balance ?? eplWallet?.referral_bonus ?? referralBonus ?? 0);
-  const eplReferralEarned = Number(eplWallet?.referral_bonus_total ?? eplWallet?.referral_bonus ?? referralBonus ?? 0);
-  const eplHourlyBalance = Number(eplWallet?.hourly_reward_balance ?? eplWallet?.daily_reward_unlocked ?? totalRewards ?? 0);
-  const eplHourlyClaims = Number(eplWallet?.hourly_claims ?? eplWallet?.mining_days ?? rewardCount ?? 0);
-  const calculatedEplBalance = eplReferralBalance + eplHourlyBalance;
-  const eplBalance = Number(eplWallet?.epl_balance ?? eplWallet?.withdrawable_epl ?? eplWallet?.epl_total ?? calculatedEplBalance);
+  // =========================================================
+  // EPL CALCULATIONS
+  // =========================================================
+  const eplReferralBalance = Number(eplWallet?.referral_bonus ?? referralBonus ?? 0);
+  const eplHourlyBalance = Number(eplWallet?.hourly_reward_balance ?? totalRewards ?? 0);
+  const eplHourlyClaims = Number(eplWallet?.hourly_claims ?? rewardCount ?? 0);
+  const eplBalance = Number(eplWallet?.epl_balance ?? eplHourlyBalance + eplReferralBalance);
 
-  /* =========================================================
-     UI
-  ========================================================= */
+  // =========================================================
+  // UI
+  // =========================================================
   return (
     <div className="boost-page">
       <main className="mining-shell">
@@ -1006,7 +1051,6 @@ export default function TimerPage() {
               {[
                 ["Hourly Reward Balance", `${eplHourlyBalance.toFixed(4)} EPL`],
                 ["Referral Bonus Balance", `${eplReferralBalance.toFixed(4)} EPL`],
-                ["Referral Bonus Earned", `${eplReferralEarned.toFixed(4)} EPL`],
                 ["Hourly Claims", String(eplHourlyClaims)],
               ].map(([label, value]) => (
                 <div key={label} style={{ padding: 12, borderRadius: 14, background: "rgba(255,255,255,0.035)", border: "1px solid rgba(255,255,255,0.08)" }}>
@@ -1073,9 +1117,6 @@ export default function TimerPage() {
             </div>
           ))}
         </section>
-
-        {/* MESSAGE */}
-        {message && <p className="server-message">{message}</p>}
       </nav>
     </div>
   );
