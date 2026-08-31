@@ -18,11 +18,10 @@ const BOT_USERNAME = "Aipolynetbot";
 const USER_DATA_KEY = "my_app_user_data";
 const OWN_REFERRAL_CODE_KEY = "my_referral_code";
 const USED_REFERRAL_KEY = "used_referral_code";
-const REFERRAL_PROCESSED_KEY = "referral_processed";
 
-// ✅ فلگ سراسری برای جلوگیری از اجرای مجدد
+// ✅ فلگ سراسری برای جلوگیری از اجرای مجدد در Strict Mode
+let GLOBAL_INITIALIZED = false;
 let GLOBAL_LOADED = false;
-
 
 /* =========================================================
    TELEGRAM IDENTITY
@@ -390,7 +389,7 @@ function CountdownHourglass({
 
 
 /* =========================================================
-   TIMER PAGE - نسخه با محدودیت شدید فقط یک بار
+   TIMER PAGE
 ========================================================= */
 
 export default function TimerPage() {
@@ -422,12 +421,10 @@ export default function TimerPage() {
 
   const intervalRef = useRef(null);
   const menuRef = useRef(null);
-  const telegramBootRef = useRef(false);
   
   // ✅ refهای قوی برای جلوگیری از اجرای مجدد
-  const dataLoadedRef = useRef(false);
-  const loadStartedRef = useRef(false);
-  const referralProcessedRef = useRef(false);
+  const initializedRef = useRef(false);
+  const loadedRef = useRef(false);
 
   // توقف تایمر
   const stopTimerRef = useRef(() => {
@@ -449,14 +446,9 @@ export default function TimerPage() {
   });
 
   // =========================================================
-  // 🔍 پردازش پارامترهای URL (رفرال) - فقط یک بار
+  // 🔍 پردازش پارامترهای URL (رفرال)
   // =========================================================
   const processReferralParam = useCallback(() => {
-    // اگر قبلاً پردازش شده، دیگر پردازش نکن
-    if (referralProcessedRef.current) {
-      return null;
-    }
-
     try {
       const urlParams = new URLSearchParams(window.location.search);
       const startParam = urlParams.get('startapp');
@@ -468,15 +460,12 @@ export default function TimerPage() {
         const referralCode = match[1];
         console.log("[Timer] ✅ Referral code detected:", referralCode);
         
-        // بررسی: آیا این کد قبلاً استفاده شده؟
         const usedReferral = localStorage.getItem(USED_REFERRAL_KEY);
         if (usedReferral === referralCode) {
           console.log("[Timer] ⏳ Referral code already used, skipping");
-          referralProcessedRef.current = true;
           return null;
         }
         
-        referralProcessedRef.current = true;
         localStorage.setItem('referral_code', referralCode);
         localStorage.setItem('pending_referral', referralCode);
         
@@ -492,13 +481,8 @@ export default function TimerPage() {
   // 📡 بارگذاری داده‌های کاربر - فقط یک بار
   // =========================================================
   const loadUserData = useCallback(async (telegramId, referralCode = null) => {
-    // ✅ بررسی‌های متعدد برای جلوگیری از اجرای مجدد
-    if (loadStartedRef.current) {
-      console.log("[Timer] ⏳ Load already started, skipping");
-      return;
-    }
-    
-    if (dataLoadedRef.current) {
+    // ✅ بررسی ref برای جلوگیری از اجرای مجدد
+    if (loadedRef.current) {
       console.log("[Timer] ⏳ Data already loaded, skipping");
       return;
     }
@@ -508,13 +492,11 @@ export default function TimerPage() {
       return;
     }
 
-    // ✅ علامت‌گذاری بلافاصله برای جلوگیری از اجرای همزمان
-    loadStartedRef.current = true;
-    dataLoadedRef.current = true;
+    // ✅ علامت‌گذاری بلافاصله
+    loadedRef.current = true;
 
     console.log("[Timer] 📡 Loading user data for telegram_id:", telegramId);
     
-    // بررسی نهایی رفرال
     let finalReferralCode = referralCode;
     if (finalReferralCode) {
       const usedReferral = localStorage.getItem(USED_REFERRAL_KEY);
@@ -552,7 +534,7 @@ export default function TimerPage() {
       const data = statusResponse.data;
       
       if (data && data.status !== "error") {
-        if (finalReferralCode) {
+        if (finalReferralCode && data.referral_applied) {
           localStorage.setItem(USED_REFERRAL_KEY, finalReferralCode);
           console.log("[Timer] ✅ Referral marked as used:", finalReferralCode);
         }
@@ -604,16 +586,6 @@ export default function TimerPage() {
         return;
       }
       
-      if (error?.response?.status === 400) {
-        const errorMsg = error?.response?.data?.error || "";
-        if (errorMsg.includes("referral") || errorMsg.includes("inviter")) {
-          console.log("[Timer] ⚠️ Referral error, marking as used");
-          if (finalReferralCode) {
-            localStorage.setItem(USED_REFERRAL_KEY, finalReferralCode);
-          }
-        }
-      }
-      
       const errorMessage = error?.response?.data?.error || 
                            error?.response?.data?.message || 
                            error?.response?.data?.detail ||
@@ -625,15 +597,17 @@ export default function TimerPage() {
   }, [telegramUsername, telegramPhotoUrl, startTimerRef]);
 
   // =========================================================
-  // TELEGRAM BOOTSTRAP & INITIAL LOAD - فقط یک بار
+  // ✅ TELEGRAM BOOTSTRAP & INITIAL LOAD - فقط یک بار
   // =========================================================
   useEffect(() => {
-    // ✅ جلوگیری با استفاده از ref
-    if (telegramBootRef.current) {
-      console.log("[Timer] ⏳ Already bootstrapped, skipping");
+    // ✅ جلوگیری با استفاده از ref و فلگ سراسری
+    if (initializedRef.current || GLOBAL_INITIALIZED) {
+      console.log("[Timer] ⏳ Already initialized, skipping");
       return;
     }
-    telegramBootRef.current = true;
+    
+    initializedRef.current = true;
+    GLOBAL_INITIALIZED = true;
 
     console.log("[Timer] 🚀 Initializing...");
 
@@ -654,12 +628,11 @@ export default function TimerPage() {
     // پردازش رفرال
     const referralCode = processReferralParam();
     
-    // بارگذاری داده‌ها
+    // بارگذاری داده‌ها با تاخیر کم برای اطمینان
     if (identity?.telegram_id) {
-      // ✅ با setTimeout کوچک برای اطمینان از اینکه useEffect کامل شده
       setTimeout(() => {
         loadUserData(identity.telegram_id, referralCode);
-      }, 100);
+      }, 50);
     } else {
       console.log("[Timer] ⚠️ No Telegram identity, retrying...");
       const timeoutId = setTimeout(() => {
@@ -678,7 +651,6 @@ export default function TimerPage() {
       return () => clearTimeout(timeoutId);
     }
 
-  // ✅ وابستگی‌های خالی = فقط یک بار اجرا
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -746,9 +718,9 @@ export default function TimerPage() {
         setRewardCount(data.rewards_count ?? 0);
         setMessage(`🎉 ${data.message || "Reward claimed!"}`);
 
-        // بارگذاری مجدد
-        dataLoadedRef.current = false;
-        loadStartedRef.current = false;
+        // ریست refها برای بارگذاری مجدد
+        loadedRef.current = false;
+        GLOBAL_LOADED = false;
         setTimeout(() => {
           window.location.reload();
         }, 1000);
@@ -866,7 +838,7 @@ export default function TimerPage() {
   const eplBalance = Number(eplWallet?.epl_balance ?? eplHourlyBalance + eplReferralBalance);
 
   // =========================================================
-  // UI - بدون تغییر
+  // UI
   // =========================================================
   return (
     <div className="boost-page">
