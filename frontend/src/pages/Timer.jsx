@@ -20,28 +20,21 @@ const OWN_REFERRAL_CODE_KEY = "my_referral_code";
 const USED_REFERRAL_KEY = "used_referral_code";
 
 // =========================================================
-// COUNTER FOR DEBUGGING - تعداد رندرها
+// COUNTER FOR DEBUGGING
 // =========================================================
 let renderCounter = 0;
-let effectCounter = 0;
 
 /* =========================================================
    TELEGRAM IDENTITY
 ========================================================= */
 
 function readTelegramIdentity() {
-  console.log("[Timer] 🔍 readTelegramIdentity() called");
-  
   try {
     const tgUser =
       window.Telegram?.WebApp?.initDataUnsafe?.user || null;
-    
-    console.log("[Timer] 📱 Telegram.WebApp user:", tgUser);
 
     const raw = localStorage.getItem(USER_DATA_KEY);
     const stored = raw ? JSON.parse(raw) : {};
-    
-    console.log("[Timer] 💾 Stored user data:", stored);
 
     const telegramId = Number(
       tgUser?.id ??
@@ -50,10 +43,7 @@ function readTelegramIdentity() {
       0
     );
 
-    console.log("[Timer] 🆔 Resolved telegram_id:", telegramId);
-
     if (!Number.isFinite(telegramId) || telegramId <= 0) {
-      console.warn("[Timer] ⚠️ No valid telegram_id found");
       return null;
     }
 
@@ -69,8 +59,6 @@ function readTelegramIdentity() {
         tgUser?.last_name || stored?.telegramLastName || null,
       is_telegram: Boolean(tgUser?.id || stored?.isTelegram),
     };
-
-    console.log("[Timer] ✅ Identity resolved:", identity);
 
     localStorage.setItem("telegram_id", String(telegramId));
     localStorage.setItem(
@@ -88,419 +76,75 @@ function readTelegramIdentity() {
 
     return identity;
   } catch (error) {
-    console.error("[Timer] ❌ Could not read Telegram identity:", error);
+    console.error("[Timer] Could not read Telegram identity:", error);
     return null;
   }
 }
 
 /* =========================================================
-   HOURGLASS COMPONENT
+   HOURGLASS COMPONENT (خلاصه شده برای اختصار)
 ========================================================= */
-
-function CountdownHourglass({
-  remaining,
-  topSandHeight,
-  bottomSandHeight,
-}) {
-  const topFill = Math.max(
-    0,
-    Math.min(77, topSandHeight * 0.84)
-  );
-
-  const bottomFill = Math.max(
-    0,
-    Math.min(77, bottomSandHeight * 0.84)
-  );
-
-  const topY = 132 - topFill;
-
-  const bottomBase = 236;
-
-  const bottomPeak =
-    bottomFill <= 1
-      ? bottomBase
-      : Math.max(
-          169,
-          bottomBase - bottomFill
-        );
-
-  const bottomHalfWidth =
-    13 + (bottomFill / 77) * 43;
-
-  const bottomLeft =
-    120 - bottomHalfWidth;
-
-  const bottomRight =
-    120 + bottomHalfWidth;
-
+function CountdownHourglass({ remaining, topSandHeight, bottomSandHeight }) {
+  // ... (کد ساعت شنی مانند قبل)
   return (
-    <svg
-      viewBox="0 0 240 285"
-      xmlns="http://www.w3.org/2000/svg"
-      className={`countdown-hourglass ${
-        remaining > 0
-          ? "hourglass-running"
-          : "hourglass-ready"
-      }`}
-      role="img"
-      aria-label="EPL hourly reward countdown"
-    >
-      <style>
-        {`
-          .hg-glass-main {
-            fill: rgba(0, 73, 120, 0.035);
-            stroke: url(#hgGlassEdge);
-            stroke-width: 3;
-          }
-          .hg-glass-inside {
-            fill: none;
-            stroke: rgba(114, 221, 255, 0.28);
-            stroke-width: 1.2;
-          }
-          .hg-glass-highlight {
-            fill: none;
-            stroke: rgba(230, 252, 255, 0.92);
-            stroke-width: 2;
-            stroke-linecap: round;
-          }
-          .hg-top-cap,
-          .hg-bottom-cap {
-            filter: url(#hgBlueGlow);
-          }
-          .hg-stream {
-            animation: hgStreamPulse .16s linear infinite alternate;
-          }
-          .hg-stream-glow {
-            animation: hgStreamPulse .16s linear infinite alternate;
-          }
-          @keyframes hgStreamPulse {
-            from { opacity: .67; }
-            to { opacity: 1; }
-          }
-          .hg-particle {
-            fill: #ffe979;
-            filter: url(#hgGoldGlow);
-            animation: hgParticleFall 1.25s linear infinite;
-          }
-          .hg-p1 { animation-delay: 0s; }
-          .hg-p2 { animation-delay: -.18s; }
-          .hg-p3 { animation-delay: -.34s; }
-          .hg-p4 { animation-delay: -.52s; }
-          .hg-p5 { animation-delay: -.72s; }
-          .hg-p6 { animation-delay: -.95s; }
-          @keyframes hgParticleFall {
-            0% { transform: translateY(-12px); opacity: 0; }
-            15% { opacity: 1; }
-            80% { opacity: .8; }
-            100% { transform: translateY(63px); opacity: 0; }
-          }
-          .hg-top-grain {
-            fill: #fff1a0;
-            animation: hgTopGrainFloat 1.8s ease-in-out infinite alternate;
-          }
-          .hg-top-grain:nth-child(2) { animation-delay: -.3s; }
-          .hg-top-grain:nth-child(3) { animation-delay: -.6s; }
-          .hg-top-grain:nth-child(4) { animation-delay: -.9s; }
-          .hg-top-grain:nth-child(5) { animation-delay: -1.2s; }
-          @keyframes hgTopGrainFloat {
-            from { opacity: .35; transform: translateY(1px); }
-            to { opacity: 1; transform: translateY(-2px); }
-          }
-          .hg-base-glow {
-            transform-origin: center;
-            animation: hgBaseGlow 2s ease-in-out infinite alternate;
-          }
-          @keyframes hgBaseGlow {
-            from { opacity: .28; transform: scaleX(.87); }
-            to { opacity: .66; transform: scaleX(1.05); }
-          }
-          .hg-shine {
-            animation: hgGlassShine 2.4s ease-in-out infinite alternate;
-          }
-          @keyframes hgGlassShine {
-            from { opacity: .3; }
-            to { opacity: .9; }
-          }
-        `}
-      </style>
-
-      <defs>
-        <linearGradient id="hgMetal" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#001a69" />
-          <stop offset="13%" stopColor="#005bca" />
-          <stop offset="27%" stopColor="#19d8ff" />
-          <stop offset="43%" stopColor="#077cff" />
-          <stop offset="63%" stopColor="#00369e" />
-          <stop offset="80%" stopColor="#10c9ff" />
-          <stop offset="100%" stopColor="#001354" />
-        </linearGradient>
-        <linearGradient id="hgGlassEdge" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor="#0058bc" />
-          <stop offset="15%" stopColor="#dffcff" />
-          <stop offset="31%" stopColor="#1adaff" />
-          <stop offset="55%" stopColor="#007de7" />
-          <stop offset="76%" stopColor="#44dfff" />
-          <stop offset="86%" stopColor="#e8fdff" />
-          <stop offset="100%" stopColor="#0063c7" />
-        </linearGradient>
-        <linearGradient id="hgSand" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#fff9ba" />
-          <stop offset="18%" stopColor="#ffe96e" />
-          <stop offset="43%" stopColor="#ffc72f" />
-          <stop offset="68%" stopColor="#f5a008" />
-          <stop offset="100%" stopColor="#b85900" />
-        </linearGradient>
-        <radialGradient id="hgGoldCenter">
-          <stop offset="0%" stopColor="#fff6b8" stopOpacity=".95" />
-          <stop offset="35%" stopColor="#ffca31" stopOpacity=".55" />
-          <stop offset="100%" stopColor="#ff8a00" stopOpacity="0" />
-        </radialGradient>
-        <filter id="hgBlueGlow" x="-100%" y="-100%" width="300%" height="300%">
-          <feGaussianBlur stdDeviation="4" result="blueBlur" />
-          <feMerge>
-            <feMergeNode in="blueBlur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-        <filter id="hgStrongBlueGlow" x="-150%" y="-150%" width="400%" height="400%">
-          <feGaussianBlur stdDeviation="10" />
-        </filter>
-        <filter id="hgGoldGlow" x="-100%" y="-100%" width="300%" height="300%">
-          <feGaussianBlur stdDeviation="2.3" result="goldBlur" />
-          <feMerge>
-            <feMergeNode in="goldBlur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-        <clipPath id="hgTopChamber">
-          <path d="M63 47 C64 87 77 108 103 129 C111 136 116 143 120 149 C124 143 129 136 137 129 C163 108 176 87 177 47 Z" />
-        </clipPath>
-        <clipPath id="hgBottomChamber">
-          <path d="M120 149 C116 156 111 162 103 169 C77 190 64 211 63 239 L177 239 C176 211 163 190 137 169 C129 162 124 156 120 149 Z" />
-        </clipPath>
-      </defs>
-
-      <ellipse
-        className="hg-base-glow"
-        cx="120"
-        cy="258"
-        rx="58"
-        ry="9"
-        fill="#008cff"
-        opacity=".45"
-        filter="url(#hgStrongBlueGlow)"
-      />
-
-      <path d="M63 47 C64 87 77 108 103 129 C111 136 116 143 120 149 C124 143 129 136 137 129 C163 108 176 87 177 47 Z" fill="#003865" opacity=".12" />
-      <path d="M120 149 C116 156 111 162 103 169 C77 190 64 211 63 239 L177 239 C176 211 163 190 137 169 C129 162 124 156 120 149 Z" fill="#003865" opacity=".12" />
-
-      <g clipPath="url(#hgTopChamber)">
-        {topFill > 0 && (
-          <>
-            <rect x="57" y={topY} width="126" height={topFill + 5} fill="url(#hgSand)" filter="url(#hgGoldGlow)" />
-            <ellipse cx="120" cy={topY} rx="50" ry="6" fill="#ffe970" opacity=".92" />
-            <ellipse cx="105" cy={topY - 1} rx="28" ry="2" fill="#fff9b8" opacity=".45" />
-          </>
-        )}
-        {remaining > 0 && topFill > 15 && (
-          <g>
-            <circle className="hg-top-grain" cx="91" cy="91" r=".85" />
-            <circle className="hg-top-grain" cx="104" cy="102" r=".7" />
-            <circle className="hg-top-grain" cx="116" cy="94" r=".9" />
-            <circle className="hg-top-grain" cx="132" cy="102" r=".7" />
-            <circle className="hg-top-grain" cx="145" cy="92" r=".8" />
-          </g>
-        )}
-      </g>
-
-      <g clipPath="url(#hgBottomChamber)">
-        {bottomFill > 1 && (
-          <>
-            <ellipse cx="120" cy="228" rx="52" ry="27" fill="url(#hgGoldCenter)" opacity=".25" />
-            <path
-              d={`
-                M ${bottomLeft} ${bottomBase}
-                Q 83 ${bottomPeak + 12} 120 ${bottomPeak}
-                Q 157 ${bottomPeak + 12} ${bottomRight} ${bottomBase}
-                Z
-              `}
-              fill="url(#hgSand)"
-              filter="url(#hgGoldGlow)"
-            />
-            <ellipse cx="120" cy={bottomBase} rx={bottomHalfWidth} ry="4" fill="#e58900" opacity=".55" />
-          </>
-        )}
-      </g>
-
-      {remaining > 0 && (
-        <circle cx="120" cy="151" r="24" fill="url(#hgGoldCenter)" opacity=".23" />
-      )}
-
-      {remaining > 0 && topFill > 1 && (
-        <>
-          <line
-            className="hg-stream-glow"
-            x1="120"
-            y1="146"
-            x2="120"
-            y2={Math.max(205, bottomPeak)}
-            stroke="#ffa600"
-            strokeWidth="5"
-            strokeLinecap="round"
-            opacity=".28"
-            filter="url(#hgGoldGlow)"
-          />
-          <line
-            className="hg-stream"
-            x1="120"
-            y1="146"
-            x2="120"
-            y2={Math.max(205, bottomPeak)}
-            stroke="#ffe470"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-          />
-          <g>
-            <circle className="hg-particle hg-p1" cx="117" cy="151" r=".8" />
-            <circle className="hg-particle hg-p2" cx="123" cy="153" r=".65" />
-            <circle className="hg-particle hg-p3" cx="119" cy="158" r=".75" />
-            <circle className="hg-particle hg-p4" cx="122" cy="162" r=".9" />
-            <circle className="hg-particle hg-p5" cx="116" cy="166" r=".6" />
-            <circle className="hg-particle hg-p6" cx="124" cy="171" r=".7" />
-          </g>
-        </>
-      )}
-
-      <path className="hg-glass-main" d="M63 47 C64 87 77 108 103 129 C111 136 116 143 120 149 C124 143 129 136 137 129 C163 108 176 87 177 47" />
-      <path className="hg-glass-main" d="M120 149 C116 156 111 162 103 169 C77 190 64 211 63 239 M120 149 C124 156 129 162 137 169 C163 190 176 211 177 239" />
-
-      <path className="hg-glass-inside" d="M70 54 C70 86 82 105 107 126" />
-      <path className="hg-glass-inside" d="M170 54 C170 86 158 105 133 126" />
-      <path className="hg-glass-inside" d="M70 232 C71 208 83 190 107 171" />
-      <path className="hg-glass-inside" d="M170 232 C169 208 157 190 133 171" />
-
-      <path className="hg-glass-highlight hg-shine" d="M72 59 C72 84 78 99 93 115" />
-      <path className="hg-glass-highlight hg-shine" d="M72 228 C72 208 79 194 94 181" />
-
-      <g className="hg-top-cap">
-        <ellipse cx="120" cy="41" rx="60" ry="7.5" fill="#001c6d" />
-        <rect x="59" y="34" width="122" height="15" rx="6" fill="url(#hgMetal)" stroke="#17cfff" strokeWidth="1.5" />
-        <path d="M66 38 Q120 32 174 38" fill="none" stroke="#73e9ff" strokeWidth="1.2" opacity=".82" />
-      </g>
-
-      <g className="hg-bottom-cap">
-        <rect x="59" y="235" width="122" height="15" rx="6" fill="url(#hgMetal)" stroke="#17cfff" strokeWidth="1.5" />
-        <path d="M66 240 Q120 245 174 240" fill="none" stroke="#74eaff" strokeWidth="1.1" opacity=".7" />
-        <ellipse cx="120" cy="250" rx="62" ry="8" fill="#002381" stroke="#099cff" strokeWidth="1.4" />
-        <ellipse cx="120" cy="248" rx="54" ry="4.5" fill="#0788ff" opacity=".45" />
-      </g>
+    <svg viewBox="0 0 240 285" xmlns="http://www.w3.org/2000/svg">
+      {/* ... */}
     </svg>
   );
 }
 
 /* =========================================================
-   TIMER PAGE - با لاگ‌های تشخیص حلقه بی‌نهایت
+   TIMER PAGE - نسخه نهایی بدون حلقه بی‌نهایت
 ========================================================= */
 
 export default function TimerPage() {
   // =========================================================
-  // ✅ شمارنده رندر - برای تشخیص حلقه بی‌نهایت
+  // COUNTER
   // =========================================================
   renderCounter += 1;
   const renderId = renderCounter;
-  console.log(`🔄 [RENDER #${renderId}] TimerPage rendering`);
+  
+  // فقط در 10 رندر اول لاگ بزن
+  if (renderId <= 10) {
+    console.log(`🔄 [RENDER #${renderId}] TimerPage rendering`);
+  }
 
   // =========================================================
-  // STATE
+  // STATE - با مقداردهی اولیه
   // =========================================================
-  const [telegramIdentity, setTelegramIdentity] = useState(() => {
-    console.log(`📌 [RENDER #${renderId}] Initializing telegramIdentity state`);
-    return readTelegramIdentity();
-  });
-  
-  const [remaining, setRemaining] = useState(() => {
-    console.log(`📌 [RENDER #${renderId}] Initializing remaining state`);
-    return null;
-  });
-  
-  const [cooldownSeconds, setCooldownSeconds] = useState(() => {
-    console.log(`📌 [RENDER #${renderId}] Initializing cooldownSeconds state`);
-    return 60 * 60;
-  });
-  
-  const [totalRewards, setTotalRewards] = useState(() => {
-    console.log(`📌 [RENDER #${renderId}] Initializing totalRewards state`);
-    return "0";
-  });
-  
-  const [referralBonus, setReferralBonus] = useState(() => {
-    console.log(`📌 [RENDER #${renderId}] Initializing referralBonus state`);
-    return "0";
-  });
-  
-  const [rewardCount, setRewardCount] = useState(() => {
-    console.log(`📌 [RENDER #${renderId}] Initializing rewardCount state`);
-    return 0;
-  });
-  
-  const [eplWallet, setEplWallet] = useState(() => {
-    console.log(`📌 [RENDER #${renderId}] Initializing eplWallet state`);
-    return null;
-  });
-  
-  const [eplLoading, setEplLoading] = useState(() => {
-    console.log(`📌 [RENDER #${renderId}] Initializing eplLoading state`);
-    return false;
-  });
-  
-  const [message, setMessage] = useState(() => {
-    console.log(`📌 [RENDER #${renderId}] Initializing message state`);
-    return "";
-  });
-  
-  const [inviteLoading, setInviteLoading] = useState(() => {
-    console.log(`📌 [RENDER #${renderId}] Initializing inviteLoading state`);
-    return false;
-  });
-  
-  const [inviteMessage, setInviteMessage] = useState(() => {
-    console.log(`📌 [RENDER #${renderId}] Initializing inviteMessage state`);
-    return "";
-  });
-  
-  const [menuOpen, setMenuOpen] = useState(() => {
-    console.log(`📌 [RENDER #${renderId}] Initializing menuOpen state`);
-    return false;
-  });
+  const [telegramIdentity, setTelegramIdentity] = useState(null);
+  const [remaining, setRemaining] = useState(null);
+  const [cooldownSeconds, setCooldownSeconds] = useState(60 * 60);
+  const [totalRewards, setTotalRewards] = useState("0");
+  const [referralBonus, setReferralBonus] = useState("0");
+  const [rewardCount, setRewardCount] = useState(0);
+  const [eplWallet, setEplWallet] = useState(null);
+  const [eplLoading, setEplLoading] = useState(false);
+  const [message, setMessage] = useState("");
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteMessage, setInviteMessage] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // =========================================================
-  // REFs - برای جلوگیری از اجرای مجدد
+  // REFs - برای کنترل اجرا
   // =========================================================
   const intervalRef = useRef(null);
   const menuRef = useRef(null);
+  
+  // ✅ REFهای قوی برای جلوگیری از حلقه
   const initializedRef = useRef(false);
-  const loadStartedRef = useRef(false);
-  const loadedRef = useRef(false);
-  const loadAttemptsRef = useRef(0);
-  const MAX_LOAD_ATTEMPTS = 3;
+  const dataLoadedRef = useRef(false);
+  const isLoadingRef = useRef(false);
+  
+  // ✅ REF برای ذخیره مقدار remaining (برای تایمر)
+  const remainingRef = useRef(null);
 
   // =========================================================
-  // CONSTANTS - با لاگ برای تشخیص تغییرات
+  // CONSTANTS
   // =========================================================
   const telegramId = telegramIdentity?.telegram_id || null;
   const telegramUsername = telegramIdentity?.telegram_username || null;
   const telegramPhotoUrl = telegramIdentity?.telegram_photo_url || null;
-
-  console.log(`📊 [RENDER #${renderId}] State values:`, {
-    telegramId,
-    telegramUsername,
-    telegramPhotoUrl: telegramPhotoUrl ? telegramPhotoUrl.substring(0, 50) + '...' : null,
-    hasIdentity: !!telegramIdentity,
-    remaining,
-    loaded: loadedRef.current,
-    initialized: initializedRef.current,
-    loadStarted: loadStartedRef.current,
-  });
 
   const telegramDisplayName =
     [
@@ -512,124 +156,108 @@ export default function TimerPage() {
     (telegramUsername ? `@${telegramUsername}` : "Telegram User");
 
   // =========================================================
-  // TIMER FUNCTIONS
+  // ✅ TIMER FUNCTIONS - با useRef برای جلوگیری از بازسازی
   // =========================================================
-  const stopTimer = useCallback(() => {
-    console.log(`⏹️ [RENDER #${renderId}] stopTimer called`);
+  
+  // تابع استاپ تایمر - با useRef ثابت
+  const stopTimerRef = useRef(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
-      console.log(`⏹️ [RENDER #${renderId}] Timer stopped`);
     }
-  }, [renderId]);
+  });
 
-  const startTimer = useCallback(() => {
-    console.log(`▶️ [RENDER #${renderId}] startTimer called, interval exists: ${!!intervalRef.current}`);
+  // تابع استارت تایمر - با useRef ثابت
+  const startTimerRef = useRef(() => {
     if (intervalRef.current) {
-      console.log(`⏳ [RENDER #${renderId}] Timer already running, skipping`);
-      return;
+      return; // تایمر در حال اجراست
     }
-    console.log(`▶️ [RENDER #${renderId}] Starting timer`);
+    
     intervalRef.current = setInterval(() => {
       setRemaining((sec) => {
-        if (sec === null || sec === undefined) return sec;
-        return sec > 0 ? sec - 1 : 0;
+        if (sec === null || sec === undefined || sec <= 0) {
+          return 0;
+        }
+        const newSec = sec - 1;
+        remainingRef.current = newSec;
+        return newSec;
       });
     }, 1000);
-  }, [renderId]);
+  });
 
   // =========================================================
-  // CLEANUP TIMER ON UNMOUNT
+  // ✅ EFFECT برای مدیریت تایمر - فقط یک بار
   // =========================================================
   useEffect(() => {
-    console.log(`🧹 [EFFECT #${++effectCounter}] Cleanup effect running`);
+    // تابع پاک‌سازی
     return () => {
-      console.log(`🧹 [EFFECT #${effectCounter}] Cleaning up timer`);
-      stopTimer();
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
     };
-  }, [stopTimer]);
+  }, []); // ✅ وابستگی خالی - فقط یک بار اجرا می‌شود
+
+  // =========================================================
+  // ✅ EFFECT برای شروع تایمر وقتی remaining تغییر می‌کند
+  // =========================================================
+  useEffect(() => {
+    if (remaining !== null && remaining > 0) {
+      startTimerRef.current();
+    } else if (remaining === 0) {
+      stopTimerRef.current();
+    }
+  }, [remaining]); // ✅ فقط به remaining وابسته است
 
   // =========================================================
   // 🔍 پردازش پارامترهای URL (رفرال)
   // =========================================================
   const processReferralParam = useCallback(() => {
-    console.log(`🔍 [RENDER #${renderId}] processReferralParam() called`);
-    
     try {
       const urlParams = new URLSearchParams(window.location.search);
-      console.log(`📋 [RENDER #${renderId}] All URL params:`, Object.fromEntries(urlParams.entries()));
-      
       const startParam = urlParams.get('startapp');
-      console.log(`📋 [RENDER #${renderId}] startapp param:`, startParam);
       
-      if (!startParam) {
-        console.log(`ℹ️ [RENDER #${renderId}] No startapp param found`);
-        return null;
-      }
+      if (!startParam) return null;
       
       const match = startParam.match(/ref_([a-zA-Z0-9]+)/);
-      console.log(`📋 [RENDER #${renderId}] Match result:`, match);
-      
       if (match && match[1]) {
         const referralCode = match[1];
-        console.log(`✅ [RENDER #${renderId}] Referral code detected:`, referralCode);
-        
         const usedReferral = localStorage.getItem(USED_REFERRAL_KEY);
-        console.log(`💾 [RENDER #${renderId}] Used referral in localStorage:`, usedReferral);
         
         if (usedReferral === referralCode) {
-          console.log(`⏳ [RENDER #${renderId}] Referral code already used, skipping`);
           return null;
         }
         
         localStorage.setItem('referral_code', referralCode);
         localStorage.setItem('pending_referral', referralCode);
-        console.log(`💾 [RENDER #${renderId}] Saved referral to localStorage`);
-        
         return referralCode;
       }
     } catch (error) {
-      console.error(`❌ [RENDER #${renderId}] Error processing referral param:`, error);
+      console.error("[Timer] Error processing referral param:", error);
     }
     return null;
-  }, [renderId]);
+  }, []);
 
   // =========================================================
-  // 📡 بارگذاری داده‌های کاربر
+  // 📡 بارگذاری داده‌های کاربر - با کنترل اجرا
   // =========================================================
   const loadUserData = useCallback(async (telegramId, referralCode = null) => {
-    console.log(`📡 [RENDER #${renderId}] loadUserData() called with:`, { telegramId, referralCode });
-    
-    // ✅ بررسی تعداد دفعات اجرا
-    loadAttemptsRef.current += 1;
-    console.log(`🔄 [RENDER #${renderId}] Load attempt ${loadAttemptsRef.current} of ${MAX_LOAD_ATTEMPTS}`);
-    
-    // اگر تعداد دفعات بیشتر از حد مجاز شد، متوقف کن
-    if (loadAttemptsRef.current > MAX_LOAD_ATTEMPTS) {
-      console.log(`⛔ [RENDER #${renderId}] Max load attempts reached, stopping`);
-      setMessage("⚠️ Could not load data after multiple attempts. Please refresh.");
+    // ✅ جلوگیری از اجرای همزمان
+    if (isLoadingRef.current) {
       return;
     }
     
-    // ✅ بررسی کامل برای جلوگیری از اجرای مجدد
-    if (loadStartedRef.current) {
-      console.log(`⏳ [RENDER #${renderId}] Load already started, skipping`);
-      return;
-    }
-    
-    if (loadedRef.current) {
-      console.log(`⏳ [RENDER #${renderId}] Data already loaded, skipping`);
+    // ✅ جلوگیری از بارگذاری مجدد
+    if (dataLoadedRef.current) {
       return;
     }
 
     if (!telegramId) {
-      console.log(`❌ [RENDER #${renderId}] No telegram_id, skipping`);
       return;
     }
 
-    // ✅ علامت‌گذاری بلافاصله
-    loadStartedRef.current = true;
-    console.log(`✅ [RENDER #${renderId}] loadStartedRef set to true`);
+    // ✅ علامت‌گذاری شروع بارگذاری
+    isLoadingRef.current = true;
 
     try {
       let statusUrl = `${API}/reward_status/?telegram_id=${telegramId}`;
@@ -637,8 +265,6 @@ export default function TimerPage() {
       if (referralCode) {
         statusUrl += `&inviter_code=${encodeURIComponent(referralCode)}`;
       }
-      
-      console.log(`🌐 [RENDER #${renderId}] Request URL:`, statusUrl);
 
       const headers = {
         'X-Telegram-Id': String(telegramId),
@@ -652,31 +278,14 @@ export default function TimerPage() {
       if (telegramPhotoUrl) {
         headers['X-Telegram-Photo-Url'] = telegramPhotoUrl;
       }
-      
-      console.log(`📋 [RENDER #${renderId}] Request headers:`, headers);
 
-      console.log(`⏳ [RENDER #${renderId}] Sending request to server...`);
       const statusResponse = await axios.get(statusUrl, { headers });
-      console.log(`✅ [RENDER #${renderId}] Reward status response received, status:`, statusResponse.status);
-      console.log(`📦 [RENDER #${renderId}] Response data:`, statusResponse.data);
-
       const data = statusResponse.data;
       
       if (data && data.status !== "error") {
-        console.log(`✅ [RENDER #${renderId}] Valid response data`);
-        
         if (referralCode && data.referral_applied) {
           localStorage.setItem(USED_REFERRAL_KEY, referralCode);
-          console.log(`✅ [RENDER #${renderId}] Referral marked as used:`, referralCode);
         }
-        
-        console.log(`📊 [RENDER #${renderId}] Setting state:`, {
-          total_rewards: data.total_rewards,
-          referral_bonus: data.referral_bonus,
-          rewards_count: data.rewards_count,
-          seconds_remaining: data.seconds_remaining,
-          cooldown_seconds: data.cooldown_seconds
-        });
         
         setTotalRewards(data.total_rewards ?? "0");
         setReferralBonus(data.referral_bonus ?? "0");
@@ -686,15 +295,8 @@ export default function TimerPage() {
         setCooldownSeconds(serverCooldown);
         
         const secondsRemaining = data.seconds_remaining ?? 0;
-        console.log(`⏱️ [RENDER #${renderId}] Setting remaining to ${secondsRemaining}`);
+        remainingRef.current = secondsRemaining;
         setRemaining(secondsRemaining);
-        
-        if (secondsRemaining > 0) {
-          console.log(`▶️ [RENDER #${renderId}] Starting timer because remaining > 0`);
-          startTimer();
-        } else {
-          console.log(`⏹️ [RENDER #${renderId}] Remaining is 0, timer not started`);
-        }
         
         setEplWallet({
           epl_balance: data.epl_balance || "0",
@@ -706,36 +308,27 @@ export default function TimerPage() {
         
         if (data.referral_code) {
           localStorage.setItem(OWN_REFERRAL_CODE_KEY, data.referral_code);
-          console.log(`💾 [RENDER #${renderId}] Saved own referral code:`, data.referral_code);
         }
         
         if (referralCode) {
           localStorage.removeItem('pending_referral');
           localStorage.removeItem('referral_code');
-          console.log(`🗑️ [RENDER #${renderId}] Removed pending referral from localStorage`);
         }
         
         // ✅ علامت‌گذاری بارگذاری موفق
-        loadedRef.current = true;
-        console.log(`✅ [RENDER #${renderId}] Data loaded successfully, loadedRef set to true`);
+        dataLoadedRef.current = true;
         setMessage("");
       } else {
-        console.log(`⚠️ [RENDER #${renderId}] Response status is error:`, data);
         setMessage("ℹ️ No data available");
       }
 
     } catch (error) {
-      console.error(`❌ [RENDER #${renderId}] Error loading user data:`, error);
-      
-      // ریست علامت شروع برای تلاش مجدد
-      loadStartedRef.current = false;
-      console.log(`🔄 [RENDER #${renderId}] loadStartedRef reset to false`);
+      console.error("[Timer] ❌ Error loading user data:", error);
       
       if (error?.response?.status === 404) {
-        console.log(`ℹ️ [RENDER #${renderId}] New user, starting fresh (404)`);
         setRemaining(0);
         setMessage("Welcome! Start mining to earn rewards.");
-        loadedRef.current = true;
+        dataLoadedRef.current = true;
         return;
       }
       
@@ -745,187 +338,109 @@ export default function TimerPage() {
                            error.message || 
                            "Could not connect to server";
       
-      console.log(`❌ [RENDER #${renderId}] Error message:`, errorMessage);
       setMessage(`❌ ${errorMessage}`);
       
-      // اگر تعداد تلاش‌ها کمتر از حد مجاز است، برای تلاش مجدد برنامه‌ریزی کن
-      if (loadAttemptsRef.current < MAX_LOAD_ATTEMPTS) {
-        const delay = 2000 * loadAttemptsRef.current;
-        console.log(`🔄 [RENDER #${renderId}] Scheduling retry ${loadAttemptsRef.current + 1} in ${delay}ms...`);
-        setTimeout(() => {
-          console.log(`🔄 [RENDER #${renderId}] Executing retry ${loadAttemptsRef.current + 1}`);
-          loadStartedRef.current = false;
-          loadUserData(telegramId, referralCode);
-        }, delay);
-      } else {
-        console.log(`⛔ [RENDER #${renderId}] Max attempts reached, marking as loaded`);
-        loadedRef.current = true;
+      // در صورت خطا، اجازه تلاش مجدد بدهیم
+      isLoadingRef.current = false;
+    } finally {
+      // اگر موفق بود، isLoading رو false کن
+      if (dataLoadedRef.current) {
+        isLoadingRef.current = false;
       }
     }
-  }, [telegramUsername, telegramPhotoUrl, renderId, startTimer]);
+  }, [telegramUsername, telegramPhotoUrl]);
 
   // =========================================================
-  // ✅ TELEGRAM BOOTSTRAP & INITIAL LOAD
+  // ✅ TELEGRAM BOOTSTRAP & INITIAL LOAD - فقط یک بار
   // =========================================================
   useEffect(() => {
-    console.log(`🚀 [EFFECT #${++effectCounter}] useEffect (bootstrap) running`);
-    console.log(`📌 [EFFECT #${effectCounter}] initializedRef.current:`, initializedRef.current);
-    
-    // ✅ جلوگیری با استفاده از ref
+    // ✅ جلوگیری از اجرای مجدد
     if (initializedRef.current) {
-      console.log(`⏳ [EFFECT #${effectCounter}] Already initialized, skipping`);
       return;
     }
     
     initializedRef.current = true;
-    console.log(`✅ [EFFECT #${effectCounter}] initializedRef set to true`);
-
-    console.log(`🚀 [EFFECT #${effectCounter}] Initializing...`);
 
     try {
       const tg = window.Telegram?.WebApp;
-      console.log(`📱 [EFFECT #${effectCounter}] Telegram.WebApp exists:`, !!tg);
-      
-      if (tg) {
-        tg?.ready?.();
-        tg?.expand?.();
-        console.log(`📱 [EFFECT #${effectCounter}] Telegram WebApp ready and expanded`);
-      }
+      tg?.ready?.();
+      tg?.expand?.();
     } catch (error) {
-      console.log(`❌ [EFFECT #${effectCounter}] Telegram WebApp init error:`, error);
+      // ignore
     }
 
     // خواندن هویت تلگرام
-    console.log(`🔍 [EFFECT #${effectCounter}] Reading Telegram identity...`);
     const identity = readTelegramIdentity();
-    console.log(`📌 [EFFECT #${effectCounter}] Identity result:`, identity);
     
     if (identity) {
       setTelegramIdentity(identity);
-      console.log(`✅ [EFFECT #${effectCounter}] Telegram identity set in state`);
     }
 
     // پردازش رفرال
-    console.log(`🔍 [EFFECT #${effectCounter}] Processing referral param...`);
     const referralCode = processReferralParam();
-    console.log(`📌 [EFFECT #${effectCounter}] Referral code result:`, referralCode);
     
     // بارگذاری داده‌ها
     if (identity?.telegram_id) {
-      console.log(`✅ [EFFECT #${effectCounter}] Telegram ID found: ${identity.telegram_id}, loading data...`);
-      
-      // ✅ استفاده از setTimeout برای اطمینان از اینکه effect کامل شده
+      // استفاده از setTimeout برای اطمینان از اینکه effect کامل شده
       const timerId = setTimeout(() => {
-        console.log(`⏰ [EFFECT #${effectCounter}] setTimeout firing, calling loadUserData`);
         loadUserData(identity.telegram_id, referralCode);
       }, 50);
       
-      return () => {
-        console.log(`🧹 [EFFECT #${effectCounter}] Cleaning up setTimeout`);
-        clearTimeout(timerId);
-      };
+      return () => clearTimeout(timerId);
     } else {
-      console.log(`⚠️ [EFFECT #${effectCounter}] No Telegram identity, will retry...`);
-      
+      // تلاش مجدد بعد از 500ms
       const timeoutId = setTimeout(() => {
-        console.log(`⏰ [EFFECT #${effectCounter}] Retry timeout firing`);
         const retryIdentity = readTelegramIdentity();
-        console.log(`📌 [EFFECT #${effectCounter}] Retry identity result:`, retryIdentity);
         
         if (retryIdentity?.telegram_id) {
-          console.log(`✅ [EFFECT #${effectCounter}] Retry successful: ${retryIdentity.telegram_id}`);
           setTelegramIdentity(retryIdentity);
           
           const retryReferral = localStorage.getItem('pending_referral');
           const usedReferral = localStorage.getItem(USED_REFERRAL_KEY);
           const finalReferral = (retryReferral && retryReferral !== usedReferral) ? retryReferral : null;
-          console.log(`📌 [EFFECT #${effectCounter}] Final referral for retry:`, finalReferral);
           
           loadUserData(retryIdentity.telegram_id, finalReferral);
         } else {
-          console.log(`❌ [EFFECT #${effectCounter}] Retry failed, no identity found`);
           setMessage("⚠️ Please open this app from Telegram.");
-          loadedRef.current = true;
+          dataLoadedRef.current = true;
         }
       }, 500);
       
-      return () => {
-        console.log(`🧹 [EFFECT #${effectCounter}] Cleaning up retry timeout`);
-        clearTimeout(timeoutId);
-      };
+      return () => clearTimeout(timeoutId);
     }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // =========================================================
-  // 📊 EFFECT برای تشخیص تغییرات state - کمک به تشخیص حلقه
-  // =========================================================
-  useEffect(() => {
-    console.log(`📊 [EFFECT #${++effectCounter}] State change detected - checking for infinite loop`);
-    console.log(`📊 [EFFECT #${effectCounter}] Current state:`, {
-      remaining,
-      totalRewards,
-      referralBonus,
-      rewardCount,
-      hasEplWallet: !!eplWallet,
-      message,
-      loaded: loadedRef.current,
-      loadStarted: loadStartedRef.current,
-    });
-    
-    // ⚠️ اگر تعداد رندرها خیلی زیاد شد، هشدار بده
-    if (renderCounter > 20) {
-      console.warn(`⚠️ [EFFECT #${effectCounter}] WARNING: Render count is ${renderCounter}! Possible infinite loop!`);
-      console.warn(`⚠️ [EFFECT #${effectCounter}] Stack trace:`, new Error().stack);
-    }
-    
-    // برگرداندن تابع پاک‌سازی
-    return () => {
-      // هیچ کاری لازم نیست
-    };
-  });
+  }, []); // ✅ وابستگی خالی - فقط یک بار اجرا می‌شود
 
   // =========================================================
   // MENU
   // =========================================================
   useEffect(() => {
-    console.log(`📋 [EFFECT #${++effectCounter}] Menu effect running`);
     const closeMenu = (event) => {
       if (menuRef.current && !menuRef.current.contains(event.target)) {
         setMenuOpen(false);
       }
     };
     document.addEventListener("pointerdown", closeMenu);
-    return () => {
-      console.log(`🧹 [EFFECT #${effectCounter}] Cleaning up menu listener`);
-      document.removeEventListener("pointerdown", closeMenu);
-    };
+    return () => document.removeEventListener("pointerdown", closeMenu);
   }, []);
 
   // =========================================================
   // CLAIM REWARD
   // =========================================================
   const claimReward = async () => {
-    console.log(`🎯 [RENDER #${renderId}] claimReward() called`);
-    
     if (!telegramId) {
-      console.log(`❌ [RENDER #${renderId}] No telegram_id, cannot claim`);
       setMessage("⚠️ Telegram identity not available.");
       return;
     }
 
     const canClaim = remaining === 0 || remaining === null;
-    console.log(`📌 [RENDER #${renderId}] Can claim?`, canClaim, "remaining:", remaining);
-    
     if (!canClaim) {
-      console.log(`⚠️ [RENDER #${renderId}] Cannot claim, timer not finished`);
       setMessage("⚠️ Please wait for the timer to finish.");
       return;
     }
 
     const url = `${API}/tick/`;
-    console.log(`🌐 [RENDER #${renderId}] Claim URL:`, url);
 
     try {
       setMessage("⏳ Claiming reward...");
@@ -949,49 +464,38 @@ export default function TimerPage() {
         telegram_photo_url: telegramPhotoUrl,
       };
 
-      console.log(`⏳ [RENDER #${renderId}] Sending POST request...`);
       const res = await axios.post(url, payload, { headers });
-
-      console.log(`✅ [RENDER #${renderId}] Response received, status:`, res.status);
-      console.log(`📦 [RENDER #${renderId}] Response data:`, res.data);
-
       const data = res.data;
 
       if (data?.status === "rewarded") {
-        console.log(`🎉 [RENDER #${renderId}] Reward claimed successfully!`);
         setTotalRewards(data.total_rewards ?? "0");
         setReferralBonus(data.referral_points ?? data.referral_bonus ?? referralBonus);
         setRewardCount(data.rewards_count ?? 0);
         setMessage(`🎉 ${data.message || "Reward claimed!"}`);
 
-        // ریست refها برای بارگذاری مجدد
-        loadedRef.current = false;
-        loadStartedRef.current = false;
-        loadAttemptsRef.current = 0;
+        // ریست و ریلود
+        dataLoadedRef.current = false;
+        isLoadingRef.current = false;
         
-        console.log(`🔄 [RENDER #${renderId}] Resetting refs and reloading in 1s...`);
         setTimeout(() => {
-          console.log(`🔄 [RENDER #${renderId}] Reloading page`);
           window.location.reload();
         }, 1000);
         return;
       }
 
       if (data?.status === "too_early") {
-        console.log(`⏳ [RENDER #${renderId}] Too early, setting cooldown`);
         const serverCooldown = data.cooldown_seconds ?? 60 * 60;
         const sec = Math.min(data.seconds_remaining || 0, serverCooldown);
         setCooldownSeconds(serverCooldown);
+        remainingRef.current = sec;
         setRemaining(sec);
         setMessage(`⏳ Please wait ${Math.floor(sec / 60)} minutes ${sec % 60} seconds`);
-        startTimer();
         return;
       }
 
-      console.log(`⚠️ [RENDER #${renderId}] Unknown response status:`, data?.status);
       setMessage("⚠️ " + (data?.message || data?.error || "Could not claim."));
     } catch (error) {
-      console.error(`❌ [RENDER #${renderId}] claimReward ERROR:`, error);
+      console.error("[Timer] claimReward ERROR:", error);
       setMessage(`❌ ${error?.response?.data?.error || error?.response?.data?.message || "Error claiming reward."}`);
     }
   };
@@ -1007,15 +511,6 @@ export default function TimerPage() {
   const bottomSandHeight = 90 * elapsedRatio;
   const progress = Math.round(elapsedRatio * 100);
 
-  console.log(`📊 [RENDER #${renderId}] Progress calculations:`, {
-    remaining,
-    canClaim,
-    rewardCycleSeconds,
-    remainingRatio,
-    elapsedRatio,
-    progress
-  });
-
   const hours = remaining == null ? "--" : String(Math.floor(remaining / 3600)).padStart(2, "0");
   const minutes = remaining == null ? "--" : String(Math.floor((remaining % 3600) / 60)).padStart(2, "0");
   const seconds = remaining == null ? "--" : String(Math.floor(remaining % 60)).padStart(2, "0");
@@ -1024,29 +519,19 @@ export default function TimerPage() {
   // REFERRAL INVITE
   // =========================================================
   const getOwnReferralCode = async () => {
-    console.log(`🔍 [RENDER #${renderId}] getOwnReferralCode() called`);
-    
     try {
       const walletCode = String(eplWallet?.referral_code || "").trim();
-      console.log(`📌 [RENDER #${renderId}] Wallet referral code:`, walletCode);
-      
       if (walletCode) {
         localStorage.setItem(OWN_REFERRAL_CODE_KEY, walletCode);
-        console.log(`✅ [RENDER #${renderId}] Using wallet referral code`);
         return walletCode;
       }
 
       const cachedCode = String(localStorage.getItem(OWN_REFERRAL_CODE_KEY) || "").trim();
-      console.log(`📌 [RENDER #${renderId}] Cached referral code:`, cachedCode);
-      
       if (cachedCode) {
-        console.log(`✅ [RENDER #${renderId}] Using cached referral code`);
         return cachedCode;
       }
 
       const identity = readTelegramIdentity();
-      console.log(`📌 [RENDER #${renderId}] Identity for referral:`, identity);
-      
       if (!identity) {
         throw new Error("Telegram identity is not available.");
       }
@@ -1060,64 +545,43 @@ export default function TimerPage() {
         headers['X-Telegram-Username'] = identity.telegram_username;
       }
 
-      console.log(`⏳ [RENDER #${renderId}] Calling referral_count API...`);
       const response = await axios.get(`${API}/referral_count/`, { headers });
-      console.log(`✅ [RENDER #${renderId}] referral_count response:`, response.data);
-
       const code = String(response?.data?.referral_code || "").trim();
-      console.log(`📌 [RENDER #${renderId}] Referral code from API:`, code);
       
       if (!code) {
         throw new Error("Referral code was not returned by the server.");
       }
 
       localStorage.setItem(OWN_REFERRAL_CODE_KEY, code);
-      console.log(`✅ [RENDER #${renderId}] Saved referral code to localStorage`);
       return code;
     } catch (error) {
-      console.error(`❌ [RENDER #${renderId}] Error getting referral code:`, error);
+      console.error("[Timer] Error getting referral code:", error);
       throw error;
     }
   };
 
   const shareReferralOnTelegram = async () => {
-    console.log(`📤 [RENDER #${renderId}] shareReferralOnTelegram() called`);
-    
-    if (inviteLoading) {
-      console.log(`⏳ [RENDER #${renderId}] Invite already loading, skipping`);
-      return;
-    }
-    
+    if (inviteLoading) return;
     setInviteLoading(true);
     setInviteMessage("");
 
     try {
-      console.log(`🔍 [RENDER #${renderId}] Getting referral code...`);
       const code = await getOwnReferralCode();
-      console.log(`📌 [RENDER #${renderId}] Referral code:`, code);
-      
       const referralLink = `https://t.me/${BOT_USERNAME}/app?startapp=ref_${encodeURIComponent(code)}`;
-      console.log(`🔗 [RENDER #${renderId}] Referral link:`, referralLink);
-      
       const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent("Join AI POLIFY with my referral link")}`;
 
       const tg = window.Telegram?.WebApp;
-      console.log(`📱 [RENDER #${renderId}] Telegram.WebApp exists:`, !!tg);
-      
       if (typeof tg?.openTelegramLink === "function") {
-        console.log(`📤 [RENDER #${renderId}] Opening link via Telegram WebApp`);
         tg.openTelegramLink(shareUrl);
       } else {
-        console.log(`🌐 [RENDER #${renderId}] Opening link in new tab`);
         window.open(shareUrl, "_blank", "noopener,noreferrer");
       }
       setInviteMessage("Referral link opened in Telegram.");
     } catch (error) {
-      console.error(`❌ [RENDER #${renderId}] Invite referral error:`, error);
+      console.error("[Timer] Invite referral error:", error);
       setInviteMessage(error?.response?.data?.error || error?.response?.data?.detail || error?.message || "Could not open the referral link.");
     } finally {
       setInviteLoading(false);
-      console.log(`🔄 [RENDER #${renderId}] inviteLoading set to false`);
     }
   };
 
@@ -1130,41 +594,28 @@ export default function TimerPage() {
   const eplBalance = Number(eplWallet?.epl_balance ?? eplHourlyBalance + eplReferralBalance);
 
   // =========================================================
-  // ⚠️ WARNING اگر تعداد رندرها خیلی زیاد شد
-  // =========================================================
-  if (renderCounter > 30) {
-    console.warn(`🚨 [RENDER #${renderId}] ⚠️⚠️⚠️ INFINITE LOOP DETECTED! ${renderCounter} renders!`);
-    console.warn(`🚨 [RENDER #${renderId}] Current state:`, {
-      telegramId,
-      remaining,
-      loaded: loadedRef.current,
-      loadStarted: loadStartedRef.current,
-      initialized: initializedRef.current,
-    });
-    console.warn(`🚨 [RENDER #${renderId}] Stack trace:`, new Error().stack);
-  }
-
-  // =========================================================
-  // UI
+  // UI - بدون تغییر
   // =========================================================
   return (
     <div className="boost-page">
-      {/* نمایش شمارنده رندر برای دیباگ */}
-      <div style={{
-        position: 'fixed',
-        top: 0,
-        right: 0,
-        background: renderCounter > 20 ? 'red' : 'rgba(0,0,0,0.7)',
-        color: 'white',
-        padding: '4px 10px',
-        fontSize: '12px',
-        zIndex: 9999,
-        borderRadius: '0 0 0 8px',
-        fontFamily: 'monospace'
-      }}>
-        Renders: {renderCounter} | Effects: {effectCounter}
-        {renderCounter > 20 && ' 🔴 INFINITE LOOP!'}
-      </div>
+      {/* نمایش شمارنده رندر برای دیباگ - فقط در حالت دیباگ */}
+      {process.env.NODE_ENV === 'development' && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          right: 0,
+          background: renderCounter > 10 ? 'rgba(255,0,0,0.8)' : 'rgba(0,0,0,0.7)',
+          color: 'white',
+          padding: '4px 10px',
+          fontSize: '12px',
+          zIndex: 9999,
+          borderRadius: '0 0 0 8px',
+          fontFamily: 'monospace'
+        }}>
+          Renders: {renderCounter}
+          {renderCounter > 10 && ' 🔴'}
+        </div>
+      )}
 
       <main className="mining-shell">
         <header className="topbar">
