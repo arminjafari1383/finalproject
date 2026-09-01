@@ -1,3 +1,5 @@
+# backend/core/views.py
+
 from django.conf import settings
 import time
 import json
@@ -2298,6 +2300,10 @@ def _telegram_identity_from_request(request):
     }
 
 
+# ============================================================
+# ✅ تابع اصلاح شده _get_or_create_telegram_user
+# ============================================================
+
 def _get_or_create_telegram_user(request):
     """
     Resolve the application user by Telegram ID.
@@ -2373,18 +2379,16 @@ def _get_or_create_telegram_user(request):
         Wallet.objects.get_or_create(user=user)
 
         # ============================================================
-        # ✅ مدیریت رفرال با محدودیت فقط یک بار
+        # ✅ مدیریت رفرال با محدودیت فقط یک بار (اصلاح شده)
         # ============================================================
         inviter_code = identity.get("inviter_code")
         
         if inviter_code and not user.inviter_id:
-            # ✅ بررسی: آیا این کاربر قبلاً با این کد دعوت شده؟
-            existing_invite = ReferralLevel.objects.filter(
-                user__telegram_id=telegram_id,
-                referrer__referral_code=inviter_code
-            ).exists()
+            # ✅ بررسی ساده: آیا این کاربر قبلاً در ReferralLevel ثبت شده است؟
+            # از referrer استفاده نمی‌کنیم چون در مدل وجود ندارد
+            existing_level = ReferralLevel.objects.filter(user=user).exists()
             
-            if not existing_invite:
+            if not existing_level:
                 try:
                     logger.info(
                         "[TELEGRAM_IDENTITY] Applying referral: user=%s code=%s",
@@ -2392,10 +2396,10 @@ def _get_or_create_telegram_user(request):
                         inviter_code,
                     )
                     
+                    # فراخوانی تابع apply_referral
                     apply_referral(inviter_code, user)
                     user.refresh_from_db()
                     
-                    # ثبت لاگ موفقیت
                     logger.info(
                         "[TELEGRAM_IDENTITY] Referral applied successfully: user=%s code=%s",
                         user.id,
