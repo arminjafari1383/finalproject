@@ -18,7 +18,7 @@ import Maintenance from "./pages/Maintenance";
 import useTgStartRedirect from "./hooks/useTgStartRedirect";
 
 
-const MAINTENANCE_MODE = false;
+const MAINTENANCE_MODE = true;
 
 
 function AppContent() {
