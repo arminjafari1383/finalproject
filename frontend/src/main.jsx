@@ -1,16 +1,32 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+
 import App from "./App.jsx";
 import { TonConnectUIProvider } from "@tonconnect/ui-react";
 import { WalletProvider } from "./context/WalletContext";
+
 import "./index.css";
 
-ReactDOM.createRoot(document.getElementById("root")).render(
-  <React.StrictMode>
-    <TonConnectUIProvider manifestUrl="https://aipolynet.com/tonconnect-manifest.json">
+
+// جلوگیری از اجرای دوباره React Root
+const ROOT_KEY = "__AI_POLIFY_ROOT_STARTED__";
+
+if (!window[ROOT_KEY]) {
+  window[ROOT_KEY] = true;
+
+  ReactDOM.createRoot(
+    document.getElementById("root")
+  ).render(
+
+    <TonConnectUIProvider
+      manifestUrl="https://aipolynet.com/tonconnect-manifest.json"
+    >
+
       <WalletProvider>
         <App />
       </WalletProvider>
+
     </TonConnectUIProvider>
-  </React.StrictMode>
-);
+
+  );
+}
