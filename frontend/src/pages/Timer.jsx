@@ -11,7 +11,7 @@ const USER_DATA_KEY = "my_app_user_data";
 const OWN_REFERRAL_CODE_KEY = "my_referral_code";
 
 /* =========================================================
-   HOURGLASS COMPONENT - ساده شده
+   HOURGLASS COMPONENT
 ========================================================= */
 function CountdownHourglass({ remaining, topSandHeight, bottomSandHeight }) {
   const topFill = Math.max(0, Math.min(77, topSandHeight * 0.84));
@@ -72,11 +72,11 @@ function CountdownHourglass({ remaining, topSandHeight, bottomSandHeight }) {
 }
 
 /* =========================================================
-   TIMER PAGE - نسخه ساده و مستقل
+   TIMER PAGE
 ========================================================= */
 export default function TimerPage() {
   // =========================================================
-  // STATE - ساده
+  // STATE
   // =========================================================
   const [telegramId, setTelegramId] = useState(null);
   const [telegramUsername, setTelegramUsername] = useState(null);
@@ -138,10 +138,8 @@ export default function TimerPage() {
   // 📡 بارگذاری داده‌ها از سرور
   // =========================================================
   const loadData = async () => {
-    // اگر قبلاً بارگذاری شده، نادیده بگیر
     if (loadedRef.current) return;
 
-    // خواندن اطلاعات کاربر
     const user = loadUserFromStorage();
     if (!user || !user.telegramId) {
       setMessage("⚠️ Telegram ID not found. Please login.");
@@ -153,7 +151,6 @@ export default function TimerPage() {
     setTelegramUsername(user.telegramUsername);
     setTelegramPhotoUrl(user.telegramPhotoUrl);
 
-    // دریافت کد رفرال از URL
     const referralCode = getReferralFromUrl();
 
     try {
@@ -189,7 +186,6 @@ export default function TimerPage() {
           localStorage.setItem(OWN_REFERRAL_CODE_KEY, data.referral_code);
         }
 
-        // شروع تایمر
         if (secs > 0) {
           startTimer(secs);
         }
@@ -275,7 +271,6 @@ export default function TimerPage() {
         setEplBalance(parseFloat(data.epl_balance || 0));
         setMessage(`🎉 ${data.message || "Reward claimed!"}`);
         
-        // ریست و ریلود
         loadedRef.current = false;
         setTimeout(() => window.location.reload(), 1500);
         return;
@@ -305,7 +300,6 @@ export default function TimerPage() {
     setInviteMessage("");
 
     try {
-      // دریافت کد رفرال
       let code = referralCode;
       if (!code) {
         const cached = localStorage.getItem(OWN_REFERRAL_CODE_KEY);
@@ -331,7 +325,6 @@ export default function TimerPage() {
       const link = `https://t.me/${BOT_USERNAME}/app?startapp=ref_${code}`;
       const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent("Join AI POLIFY with my referral link!")}`;
 
-      // تلاش برای باز کردن در تلگرام
       if (window.Telegram?.WebApp?.openTelegramLink) {
         window.Telegram.WebApp.openTelegramLink(shareUrl);
       } else {
@@ -365,7 +358,7 @@ export default function TimerPage() {
   };
 
   // =========================================================
-  // 🚀 INIT - فقط یک بار
+  // 🚀 INIT
   // =========================================================
   useEffect(() => {
     loadData();
