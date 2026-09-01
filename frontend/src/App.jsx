@@ -18,7 +18,7 @@ import Maintenance from "./pages/Maintenance";
 import useTgStartRedirect from "./hooks/useTgStartRedirect";
 
 
-const MAINTENANCE_MODE = true;
+const MAINTENANCE_MODE = flase;
 
 
 function AppContent() {
