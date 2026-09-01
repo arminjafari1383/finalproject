@@ -27,12 +27,18 @@ const LOAD_FLAG = Symbol.for("TIMER_LOADED");
 ========================================================= */
 
 function readTelegramIdentity() {
+  console.log("[Timer] 🔍 readTelegramIdentity() called");
+  
   try {
     const tgUser =
       window.Telegram?.WebApp?.initDataUnsafe?.user || null;
+    
+    console.log("[Timer] 📱 Telegram.WebApp user:", tgUser);
 
     const raw = localStorage.getItem(USER_DATA_KEY);
     const stored = raw ? JSON.parse(raw) : {};
+    
+    console.log("[Timer] 💾 Stored user data:", stored);
 
     const telegramId = Number(
       tgUser?.id ??
@@ -41,7 +47,10 @@ function readTelegramIdentity() {
       0
     );
 
+    console.log("[Timer] 🆔 Resolved telegram_id:", telegramId);
+
     if (!Number.isFinite(telegramId) || telegramId <= 0) {
+      console.warn("[Timer] ⚠️ No valid telegram_id found");
       return null;
     }
 
@@ -57,6 +66,8 @@ function readTelegramIdentity() {
         tgUser?.last_name || stored?.telegramLastName || null,
       is_telegram: Boolean(tgUser?.id || stored?.isTelegram),
     };
+
+    console.log("[Timer] ✅ Identity resolved:", identity);
 
     localStorage.setItem("telegram_id", String(telegramId));
     localStorage.setItem(
@@ -74,7 +85,7 @@ function readTelegramIdentity() {
 
     return identity;
   } catch (error) {
-    console.error("[Timer] Could not read Telegram identity:", error);
+    console.error("[Timer] ❌ Could not read Telegram identity:", error);
     return null;
   }
 }
@@ -388,14 +399,27 @@ function CountdownHourglass({
 
 
 /* =========================================================
-   TIMER PAGE - نسخه نهایی با لوپ محدود
+   TIMER PAGE - نسخه نهایی با لاگ‌های کامل
 ========================================================= */
 
 export default function TimerPage() {
-  const [telegramIdentity, setTelegramIdentity] = useState(() => readTelegramIdentity());
+  console.log("[Timer] 🚀 TimerPage component rendered");
+
+  const [telegramIdentity, setTelegramIdentity] = useState(() => {
+    console.log("[Timer] 📌 Initializing telegramIdentity state");
+    return readTelegramIdentity();
+  });
+  
   const telegramId = telegramIdentity?.telegram_id || null;
   const telegramUsername = telegramIdentity?.telegram_username || null;
   const telegramPhotoUrl = telegramIdentity?.telegram_photo_url || null;
+
+  console.log("[Timer] 📌 State values:", {
+    telegramId,
+    telegramUsername,
+    telegramPhotoUrl,
+    hasIdentity: !!telegramIdentity
+  });
 
   const telegramDisplayName =
     [
@@ -406,7 +430,11 @@ export default function TimerPage() {
       .join(" ") ||
     (telegramUsername ? `@${telegramUsername}` : "Telegram User");
 
-  const [remaining, setRemaining] = useState(null);
+  const [remaining, setRemaining] = useState(() => {
+    console.log("[Timer] 📌 Initializing remaining state");
+    return null;
+  });
+  
   const [cooldownSeconds, setCooldownSeconds] = useState(60 * 60);
   const [totalRewards, setTotalRewards] = useState("0");
   const [referralBonus, setReferralBonus] = useState("0");
@@ -428,10 +456,11 @@ export default function TimerPage() {
   
   // ✅ ref برای شمارش تعداد دفعات اجرا
   const loadAttemptsRef = useRef(0);
-  const MAX_LOAD_ATTEMPTS = 3; // حداکثر 3 بار تلاش
+  const MAX_LOAD_ATTEMPTS = 3;
 
   // توقف تایمر
   const stopTimerRef = useRef(() => {
+    console.log("[Timer] ⏹️ Stopping timer");
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
@@ -440,11 +469,22 @@ export default function TimerPage() {
 
   // شروع تایمر
   const startTimerRef = useRef(() => {
-    if (intervalRef.current) return;
+    if (intervalRef.current) {
+      console.log("[Timer] ⏳ Timer already running");
+      return;
+    }
+    console.log("[Timer] ▶️ Starting timer");
     intervalRef.current = setInterval(() => {
       setRemaining((sec) => {
-        if (sec === null || sec === undefined) return sec;
-        return sec > 0 ? sec - 1 : 0;
+        if (sec === null || sec === undefined) {
+          console.log("[Timer] ⏳ Timer: sec is null, returning");
+          return sec;
+        }
+        const newSec = sec > 0 ? sec - 1 : 0;
+        if (newSec !== sec) {
+          console.log(`[Timer] ⏱️ Timer tick: ${sec} -> ${newSec}`);
+        }
+        return newSec;
       });
     }, 1000);
   });
@@ -453,18 +493,30 @@ export default function TimerPage() {
   // 🔍 پردازش پارامترهای URL (رفرال)
   // =========================================================
   const processReferralParam = useCallback(() => {
+    console.log("[Timer] 🔍 processReferralParam() called");
+    
     try {
       const urlParams = new URLSearchParams(window.location.search);
-      const startParam = urlParams.get('startapp');
+      console.log("[Timer] 📋 All URL params:", Object.fromEntries(urlParams.entries()));
       
-      if (!startParam) return null;
+      const startParam = urlParams.get('startapp');
+      console.log("[Timer] 📋 startapp param:", startParam);
+      
+      if (!startParam) {
+        console.log("[Timer] ℹ️ No startapp param found");
+        return null;
+      }
       
       const match = startParam.match(/ref_([a-zA-Z0-9]+)/);
+      console.log("[Timer] 📋 Match result:", match);
+      
       if (match && match[1]) {
         const referralCode = match[1];
         console.log("[Timer] ✅ Referral code detected:", referralCode);
         
         const usedReferral = localStorage.getItem(USED_REFERRAL_KEY);
+        console.log("[Timer] 💾 Used referral in localStorage:", usedReferral);
+        
         if (usedReferral === referralCode) {
           console.log("[Timer] ⏳ Referral code already used, skipping");
           return null;
@@ -472,19 +524,22 @@ export default function TimerPage() {
         
         localStorage.setItem('referral_code', referralCode);
         localStorage.setItem('pending_referral', referralCode);
+        console.log("[Timer] 💾 Saved referral to localStorage");
         
         return referralCode;
       }
     } catch (error) {
-      console.error("[Timer] Error processing referral param:", error);
+      console.error("[Timer] ❌ Error processing referral param:", error);
     }
     return null;
   }, []);
 
   // =========================================================
-  // 📡 بارگذاری داده‌های کاربر - با محدودیت تعداد اجرا
+  // 📡 بارگذاری داده‌های کاربر - با لاگ‌های کامل
   // =========================================================
   const loadUserData = useCallback(async (telegramId, referralCode = null) => {
+    console.log("[Timer] 📡 loadUserData() called with:", { telegramId, referralCode });
+    
     // ✅ بررسی تعداد دفعات اجرا
     loadAttemptsRef.current += 1;
     console.log(`[Timer] 🔄 Load attempt ${loadAttemptsRef.current} of ${MAX_LOAD_ATTEMPTS}`);
@@ -514,16 +569,20 @@ export default function TimerPage() {
 
     // ✅ علامت‌گذاری بلافاصله
     loadStartedRef.current = true;
+    console.log("[Timer] ✅ loadStartedRef set to true");
 
     console.log("[Timer] 📡 Loading user data for telegram_id:", telegramId);
     
     // گرفتن آخرین مقادیر از state
     const currentUsername = telegramUsername;
     const currentPhotoUrl = telegramPhotoUrl;
+    console.log("[Timer] 📡 Current user data:", { currentUsername, currentPhotoUrl });
     
     let finalReferralCode = referralCode;
     if (finalReferralCode) {
       const usedReferral = localStorage.getItem(USED_REFERRAL_KEY);
+      console.log("[Timer] 💾 Used referral in localStorage:", usedReferral);
+      
       if (usedReferral === finalReferralCode) {
         console.log("[Timer] ⏳ Referral already used, skipping");
         finalReferralCode = null;
@@ -538,6 +597,8 @@ export default function TimerPage() {
       if (finalReferralCode) {
         statusUrl += `&inviter_code=${encodeURIComponent(finalReferralCode)}`;
       }
+      
+      console.log("[Timer] 🌐 Request URL:", statusUrl);
 
       const headers = {
         'X-Telegram-Id': String(telegramId),
@@ -551,17 +612,31 @@ export default function TimerPage() {
       if (currentPhotoUrl) {
         headers['X-Telegram-Photo-Url'] = currentPhotoUrl;
       }
+      
+      console.log("[Timer] 📋 Request headers:", headers);
 
+      console.log("[Timer] ⏳ Sending request to server...");
       const statusResponse = await axios.get(statusUrl, { headers });
-      console.log("[Timer] ✅ Reward status response:", statusResponse.data);
+      console.log("[Timer] ✅ Reward status response received, status:", statusResponse.status);
+      console.log("[Timer] 📦 Response data:", statusResponse.data);
 
       const data = statusResponse.data;
       
       if (data && data.status !== "error") {
+        console.log("[Timer] ✅ Valid response data");
+        
         if (finalReferralCode && data.referral_applied) {
           localStorage.setItem(USED_REFERRAL_KEY, finalReferralCode);
           console.log("[Timer] ✅ Referral marked as used:", finalReferralCode);
         }
+        
+        console.log("[Timer] 📊 Setting state:", {
+          total_rewards: data.total_rewards,
+          referral_bonus: data.referral_bonus,
+          rewards_count: data.rewards_count,
+          seconds_remaining: data.seconds_remaining,
+          cooldown_seconds: data.cooldown_seconds
+        });
         
         setTotalRewards(data.total_rewards ?? "0");
         setReferralBonus(data.referral_bonus ?? "0");
@@ -571,10 +646,14 @@ export default function TimerPage() {
         setCooldownSeconds(serverCooldown);
         
         const secondsRemaining = data.seconds_remaining ?? 0;
+        console.log(`[Timer] ⏱️ Setting remaining to ${secondsRemaining}`);
         setRemaining(secondsRemaining);
         
         if (secondsRemaining > 0) {
+          console.log("[Timer] ▶️ Starting timer because remaining > 0");
           startTimerRef.current();
+        } else {
+          console.log("[Timer] ⏹️ Remaining is 0, timer not started");
         }
         
         setEplWallet({
@@ -587,18 +666,21 @@ export default function TimerPage() {
         
         if (data.referral_code) {
           localStorage.setItem(OWN_REFERRAL_CODE_KEY, data.referral_code);
+          console.log("[Timer] 💾 Saved own referral code:", data.referral_code);
         }
         
         if (finalReferralCode) {
           localStorage.removeItem('pending_referral');
           localStorage.removeItem('referral_code');
+          console.log("[Timer] 🗑️ Removed pending referral from localStorage");
         }
         
         // ✅ علامت‌گذاری بارگذاری موفق
         loadedRef.current = true;
-        console.log("[Timer] ✅ Data loaded successfully");
+        console.log("[Timer] ✅ Data loaded successfully, loadedRef set to true");
         setMessage("");
       } else {
+        console.log("[Timer] ⚠️ Response status is error:", data);
         setMessage("ℹ️ No data available");
       }
 
@@ -607,9 +689,10 @@ export default function TimerPage() {
       
       // ریست علامت شروع برای تلاش مجدد
       loadStartedRef.current = false;
+      console.log("[Timer] 🔄 loadStartedRef reset to false");
       
       if (error?.response?.status === 404) {
-        console.log("[Timer] ℹ️ New user, starting fresh");
+        console.log("[Timer] ℹ️ New user, starting fresh (404)");
         setRemaining(0);
         setMessage("Welcome! Start mining to earn rewards.");
         loadedRef.current = true;
@@ -622,16 +705,20 @@ export default function TimerPage() {
                            error.message || 
                            "Could not connect to server";
       
+      console.log("[Timer] ❌ Error message:", errorMessage);
       setMessage(`❌ ${errorMessage}`);
       
       // اگر تعداد تلاش‌ها کمتر از حد مجاز است، برای تلاش مجدد برنامه‌ریزی کن
       if (loadAttemptsRef.current < MAX_LOAD_ATTEMPTS) {
-        console.log(`[Timer] 🔄 Scheduling retry ${loadAttemptsRef.current + 1}...`);
+        const delay = 2000 * loadAttemptsRef.current;
+        console.log(`[Timer] 🔄 Scheduling retry ${loadAttemptsRef.current + 1} in ${delay}ms...`);
         setTimeout(() => {
+          console.log(`[Timer] 🔄 Executing retry ${loadAttemptsRef.current + 1}`);
           loadStartedRef.current = false;
           loadUserData(telegramId, referralCode);
-        }, 2000 * loadAttemptsRef.current); // افزایش زمان انتظار با هر تلاش
+        }, delay);
       } else {
+        console.log("[Timer] ⛔ Max attempts reached, marking as loaded");
         // حتی در صورت خطا، علامت‌گذاری می‌کنیم
         loadedRef.current = true;
       }
@@ -639,9 +726,12 @@ export default function TimerPage() {
   }, [telegramUsername, telegramPhotoUrl]);
 
   // =========================================================
-  // ✅ TELEGRAM BOOTSTRAP & INITIAL LOAD - با لوپ محدود
+  // ✅ TELEGRAM BOOTSTRAP & INITIAL LOAD - با لاگ‌های کامل
   // =========================================================
   useEffect(() => {
+    console.log("[Timer] 🚀 useEffect (bootstrap) running");
+    console.log("[Timer] 📌 initializedRef.current:", initializedRef.current);
+    
     // ✅ جلوگیری با استفاده از ref
     if (initializedRef.current) {
       console.log("[Timer] ⏳ Already initialized, skipping");
@@ -649,52 +739,82 @@ export default function TimerPage() {
     }
     
     initializedRef.current = true;
+    console.log("[Timer] ✅ initializedRef set to true");
 
     console.log("[Timer] 🚀 Initializing...");
 
     try {
       const tg = window.Telegram?.WebApp;
-      tg?.ready?.();
-      tg?.expand?.();
+      console.log("[Timer] 📱 Telegram.WebApp exists:", !!tg);
+      
+      if (tg) {
+        tg?.ready?.();
+        tg?.expand?.();
+        console.log("[Timer] 📱 Telegram WebApp ready and expanded");
+      }
     } catch (error) {
-      console.log("[Timer] Telegram WebApp init error:", error);
+      console.log("[Timer] ❌ Telegram WebApp init error:", error);
     }
 
     // خواندن هویت تلگرام
+    console.log("[Timer] 🔍 Reading Telegram identity...");
     const identity = readTelegramIdentity();
+    console.log("[Timer] 📌 Identity result:", identity);
+    
     if (identity) {
       setTelegramIdentity(identity);
+      console.log("[Timer] ✅ Telegram identity set in state");
     }
 
     // پردازش رفرال
+    console.log("[Timer] 🔍 Processing referral param...");
     const referralCode = processReferralParam();
+    console.log("[Timer] 📌 Referral code result:", referralCode);
     
     // بارگذاری داده‌ها - با لوپ محدود
     if (identity?.telegram_id) {
+      console.log(`[Timer] ✅ Telegram ID found: ${identity.telegram_id}, loading data...`);
+      
       // ✅ استفاده از setTimeout برای اطمینان از اینکه effect کامل شده
       const timerId = setTimeout(() => {
+        console.log("[Timer] ⏰ setTimeout firing, calling loadUserData");
         loadUserData(identity.telegram_id, referralCode);
       }, 50);
       
-      return () => clearTimeout(timerId);
+      return () => {
+        console.log("[Timer] 🧹 Cleaning up setTimeout");
+        clearTimeout(timerId);
+      };
     } else {
-      console.log("[Timer] ⚠️ No Telegram identity, retrying...");
+      console.log("[Timer] ⚠️ No Telegram identity, will retry...");
+      
       const timeoutId = setTimeout(() => {
+        console.log("[Timer] ⏰ Retry timeout firing");
         const retryIdentity = readTelegramIdentity();
+        console.log("[Timer] 📌 Retry identity result:", retryIdentity);
+        
         if (retryIdentity?.telegram_id) {
+          console.log(`[Timer] ✅ Retry successful: ${retryIdentity.telegram_id}`);
           setTelegramIdentity(retryIdentity);
+          
           const retryReferral = localStorage.getItem('pending_referral');
           const usedReferral = localStorage.getItem(USED_REFERRAL_KEY);
           const finalReferral = (retryReferral && retryReferral !== usedReferral) ? retryReferral : null;
+          console.log("[Timer] 📌 Final referral for retry:", finalReferral);
+          
           loadUserData(retryIdentity.telegram_id, finalReferral);
         } else {
+          console.log("[Timer] ❌ Retry failed, no identity found");
           setMessage("⚠️ Please open this app from Telegram.");
           // علامت‌گذاری برای جلوگیری از تلاش مجدد
           loadedRef.current = true;
         }
       }, 500);
       
-      return () => clearTimeout(timeoutId);
+      return () => {
+        console.log("[Timer] 🧹 Cleaning up retry timeout");
+        clearTimeout(timeoutId);
+      };
     }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -717,22 +837,32 @@ export default function TimerPage() {
   // CLAIM REWARD
   // =========================================================
   const claimReward = async () => {
+    console.log("[Timer] 🎯 claimReward() called");
+    console.log("[Timer] 📌 Current telegramId:", telegramId);
+    console.log("[Timer] 📌 Current remaining:", remaining);
+    
     if (!telegramId) {
+      console.log("[Timer] ❌ No telegram_id, cannot claim");
       setMessage("⚠️ Telegram identity not available.");
       return;
     }
 
     const canClaim = remaining === 0 || remaining === null;
+    console.log("[Timer] 📌 Can claim?", canClaim, "remaining:", remaining);
+    
     if (!canClaim) {
+      console.log("[Timer] ⚠️ Cannot claim, timer not finished");
       setMessage("⚠️ Please wait for the timer to finish.");
       return;
     }
 
     const url = `${API}/tick/`;
-    console.log("[Timer] claimReward =>", url, "telegram_id=", telegramId);
+    console.log("[Timer] 🌐 Claim URL:", url);
+    console.log("[Timer] 📋 telegram_id:", telegramId);
 
     try {
       setMessage("⏳ Claiming reward...");
+      console.log("[Timer] ⏳ Setting message to 'Claiming reward...'");
       
       const headers = {
         'X-Telegram-Id': String(telegramId),
@@ -746,19 +876,26 @@ export default function TimerPage() {
       if (telegramPhotoUrl) {
         headers['X-Telegram-Photo-Url'] = telegramPhotoUrl;
       }
+      
+      console.log("[Timer] 📋 Request headers:", headers);
 
-      const res = await axios.post(url, {
+      const payload = {
         telegram_id: telegramId,
         telegram_username: telegramUsername,
         telegram_photo_url: telegramPhotoUrl,
-      }, { headers });
+      };
+      console.log("[Timer] 📦 Request payload:", payload);
 
-      console.log("[Timer] tick HTTP:", res.status);
-      console.log("[Timer] tick data:", res.data);
+      console.log("[Timer] ⏳ Sending POST request...");
+      const res = await axios.post(url, payload, { headers });
+
+      console.log("[Timer] ✅ Response received, status:", res.status);
+      console.log("[Timer] 📦 Response data:", res.data);
 
       const data = res.data;
 
       if (data?.status === "rewarded") {
+        console.log("[Timer] 🎉 Reward claimed successfully!");
         setTotalRewards(data.total_rewards ?? "0");
         setReferralBonus(data.referral_points ?? data.referral_bonus ?? referralBonus);
         setRewardCount(data.rewards_count ?? 0);
@@ -767,16 +904,19 @@ export default function TimerPage() {
         // ریست refها برای بارگذاری مجدد
         loadedRef.current = false;
         loadStartedRef.current = false;
-        loadAttemptsRef.current = 0; // ریست شمارنده
+        loadAttemptsRef.current = 0;
         window[LOAD_FLAG] = false;
         
+        console.log("[Timer] 🔄 Resetting refs and reloading in 1s...");
         setTimeout(() => {
+          console.log("[Timer] 🔄 Reloading page");
           window.location.reload();
         }, 1000);
         return;
       }
 
       if (data?.status === "too_early") {
+        console.log("[Timer] ⏳ Too early, setting cooldown");
         const serverCooldown = data.cooldown_seconds ?? 60 * 60;
         const sec = Math.min(data.seconds_remaining || 0, serverCooldown);
         setCooldownSeconds(serverCooldown);
@@ -786,9 +926,15 @@ export default function TimerPage() {
         return;
       }
 
+      console.log("[Timer] ⚠️ Unknown response status:", data?.status);
       setMessage("⚠️ " + (data?.message || data?.error || "Could not claim."));
     } catch (error) {
-      console.error("[Timer] claimReward ERROR:", error);
+      console.error("[Timer] ❌ claimReward ERROR:", error);
+      console.error("[Timer] ❌ Error details:", {
+        message: error.message,
+        response: error?.response?.data,
+        status: error?.response?.status
+      });
       setMessage(`❌ ${error?.response?.data?.error || error?.response?.data?.message || "Error claiming reward."}`);
     }
   };
@@ -804,6 +950,15 @@ export default function TimerPage() {
   const bottomSandHeight = 90 * elapsedRatio;
   const progress = Math.round(elapsedRatio * 100);
 
+  console.log("[Timer] 📊 Progress calculations:", {
+    remaining,
+    canClaim,
+    rewardCycleSeconds,
+    remainingRatio,
+    elapsedRatio,
+    progress
+  });
+
   const hours = remaining == null ? "--" : String(Math.floor(remaining / 3600)).padStart(2, "0");
   const minutes = remaining == null ? "--" : String(Math.floor((remaining % 3600) / 60)).padStart(2, "0");
   const seconds = remaining == null ? "--" : String(Math.floor(remaining % 60)).padStart(2, "0");
@@ -812,19 +967,29 @@ export default function TimerPage() {
   // REFERRAL INVITE
   // =========================================================
   const getOwnReferralCode = async () => {
+    console.log("[Timer] 🔍 getOwnReferralCode() called");
+    
     try {
       const walletCode = String(eplWallet?.referral_code || "").trim();
+      console.log("[Timer] 📌 Wallet referral code:", walletCode);
+      
       if (walletCode) {
         localStorage.setItem(OWN_REFERRAL_CODE_KEY, walletCode);
+        console.log("[Timer] ✅ Using wallet referral code");
         return walletCode;
       }
 
       const cachedCode = String(localStorage.getItem(OWN_REFERRAL_CODE_KEY) || "").trim();
+      console.log("[Timer] 📌 Cached referral code:", cachedCode);
+      
       if (cachedCode) {
+        console.log("[Timer] ✅ Using cached referral code");
         return cachedCode;
       }
 
       const identity = readTelegramIdentity();
+      console.log("[Timer] 📌 Identity for referral:", identity);
+      
       if (!identity) {
         throw new Error("Telegram identity is not available.");
       }
@@ -837,44 +1002,68 @@ export default function TimerPage() {
       if (identity.telegram_username) {
         headers['X-Telegram-Username'] = identity.telegram_username;
       }
+      
+      console.log("[Timer] 📋 Headers for referral_count:", headers);
 
+      console.log("[Timer] ⏳ Calling referral_count API...");
       const response = await axios.get(`${API}/referral_count/`, { headers });
+      console.log("[Timer] ✅ referral_count response:", response.data);
 
       const code = String(response?.data?.referral_code || "").trim();
+      console.log("[Timer] 📌 Referral code from API:", code);
+      
       if (!code) {
         throw new Error("Referral code was not returned by the server.");
       }
 
       localStorage.setItem(OWN_REFERRAL_CODE_KEY, code);
+      console.log("[Timer] ✅ Saved referral code to localStorage");
       return code;
     } catch (error) {
-      console.error("[Timer] Error getting referral code:", error);
+      console.error("[Timer] ❌ Error getting referral code:", error);
       throw error;
     }
   };
 
   const shareReferralOnTelegram = async () => {
-    if (inviteLoading) return;
+    console.log("[Timer] 📤 shareReferralOnTelegram() called");
+    
+    if (inviteLoading) {
+      console.log("[Timer] ⏳ Invite already loading, skipping");
+      return;
+    }
+    
     setInviteLoading(true);
     setInviteMessage("");
 
     try {
+      console.log("[Timer] 🔍 Getting referral code...");
       const code = await getOwnReferralCode();
+      console.log("[Timer] 📌 Referral code:", code);
+      
       const referralLink = `https://t.me/${BOT_USERNAME}/app?startapp=ref_${encodeURIComponent(code)}`;
+      console.log("[Timer] 🔗 Referral link:", referralLink);
+      
       const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent("Join AI POLIFY with my referral link")}`;
+      console.log("[Timer] 🔗 Share URL:", shareUrl);
 
       const tg = window.Telegram?.WebApp;
+      console.log("[Timer] 📱 Telegram.WebApp exists:", !!tg);
+      
       if (typeof tg?.openTelegramLink === "function") {
+        console.log("[Timer] 📤 Opening link via Telegram WebApp");
         tg.openTelegramLink(shareUrl);
       } else {
+        console.log("[Timer] 🌐 Opening link in new tab (no Telegram WebApp)");
         window.open(shareUrl, "_blank", "noopener,noreferrer");
       }
       setInviteMessage("Referral link opened in Telegram.");
     } catch (error) {
-      console.error("[Timer] Invite referral error:", error);
+      console.error("[Timer] ❌ Invite referral error:", error);
       setInviteMessage(error?.response?.data?.error || error?.response?.data?.detail || error?.message || "Could not open the referral link.");
     } finally {
       setInviteLoading(false);
+      console.log("[Timer] 🔄 inviteLoading set to false");
     }
   };
 
@@ -885,6 +1074,13 @@ export default function TimerPage() {
   const eplHourlyBalance = Number(eplWallet?.hourly_reward_balance ?? totalRewards ?? 0);
   const eplHourlyClaims = Number(eplWallet?.hourly_claims ?? rewardCount ?? 0);
   const eplBalance = Number(eplWallet?.epl_balance ?? eplHourlyBalance + eplReferralBalance);
+
+  console.log("[Timer] 📊 EPL calculations:", {
+    eplReferralBalance,
+    eplHourlyBalance,
+    eplHourlyClaims,
+    eplBalance
+  });
 
   // =========================================================
   // UI
