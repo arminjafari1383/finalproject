@@ -1,6 +1,7 @@
 import React, {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -20,14 +21,20 @@ const OWN_REFERRAL_CODE_KEY = "my_referral_code";
 const USED_REFERRAL_KEY = "used_referral_code";
 
 // =========================================================
-// COUNTER FOR DEBUGGING
+// TELEGRAM HELPERS - با استفاده از useMemo
 // =========================================================
-let renderCounter = 0;
 
-/* =========================================================
-   TELEGRAM IDENTITY
-========================================================= */
+// ✅ تابع کمکی برای دریافت Telegram WebApp - فقط یک بار
+function getTelegramWebApp() {
+  try {
+    if (typeof window === "undefined") return null;
+    return window.Telegram?.WebApp || null;
+  } catch {
+    return null;
+  }
+}
 
+// ✅ تابع کمکی برای خواندن هویت - فقط یک بار
 function readTelegramIdentity() {
   try {
     const tgUser =
@@ -82,35 +89,317 @@ function readTelegramIdentity() {
 }
 
 /* =========================================================
-   HOURGLASS COMPONENT (خلاصه شده برای اختصار)
+   HOURGLASS COMPONENT
 ========================================================= */
-function CountdownHourglass({ remaining, topSandHeight, bottomSandHeight }) {
-  // ... (کد ساعت شنی مانند قبل)
+
+function CountdownHourglass({
+  remaining,
+  topSandHeight,
+  bottomSandHeight,
+}) {
+  const topFill = Math.max(
+    0,
+    Math.min(77, topSandHeight * 0.84)
+  );
+
+  const bottomFill = Math.max(
+    0,
+    Math.min(77, bottomSandHeight * 0.84)
+  );
+
+  const topY = 132 - topFill;
+
+  const bottomBase = 236;
+
+  const bottomPeak =
+    bottomFill <= 1
+      ? bottomBase
+      : Math.max(
+          169,
+          bottomBase - bottomFill
+        );
+
+  const bottomHalfWidth =
+    13 + (bottomFill / 77) * 43;
+
+  const bottomLeft =
+    120 - bottomHalfWidth;
+
+  const bottomRight =
+    120 + bottomHalfWidth;
+
   return (
-    <svg viewBox="0 0 240 285" xmlns="http://www.w3.org/2000/svg">
-      {/* ... */}
+    <svg
+      viewBox="0 0 240 285"
+      xmlns="http://www.w3.org/2000/svg"
+      className={`countdown-hourglass ${
+        remaining > 0
+          ? "hourglass-running"
+          : "hourglass-ready"
+      }`}
+      role="img"
+      aria-label="EPL hourly reward countdown"
+    >
+      <style>
+        {`
+          .hg-glass-main {
+            fill: rgba(0, 73, 120, 0.035);
+            stroke: url(#hgGlassEdge);
+            stroke-width: 3;
+          }
+          .hg-glass-inside {
+            fill: none;
+            stroke: rgba(114, 221, 255, 0.28);
+            stroke-width: 1.2;
+          }
+          .hg-glass-highlight {
+            fill: none;
+            stroke: rgba(230, 252, 255, 0.92);
+            stroke-width: 2;
+            stroke-linecap: round;
+          }
+          .hg-top-cap,
+          .hg-bottom-cap {
+            filter: url(#hgBlueGlow);
+          }
+          .hg-stream {
+            animation: hgStreamPulse .16s linear infinite alternate;
+          }
+          .hg-stream-glow {
+            animation: hgStreamPulse .16s linear infinite alternate;
+          }
+          @keyframes hgStreamPulse {
+            from { opacity: .67; }
+            to { opacity: 1; }
+          }
+          .hg-particle {
+            fill: #ffe979;
+            filter: url(#hgGoldGlow);
+            animation: hgParticleFall 1.25s linear infinite;
+          }
+          .hg-p1 { animation-delay: 0s; }
+          .hg-p2 { animation-delay: -.18s; }
+          .hg-p3 { animation-delay: -.34s; }
+          .hg-p4 { animation-delay: -.52s; }
+          .hg-p5 { animation-delay: -.72s; }
+          .hg-p6 { animation-delay: -.95s; }
+          @keyframes hgParticleFall {
+            0% { transform: translateY(-12px); opacity: 0; }
+            15% { opacity: 1; }
+            80% { opacity: .8; }
+            100% { transform: translateY(63px); opacity: 0; }
+          }
+          .hg-top-grain {
+            fill: #fff1a0;
+            animation: hgTopGrainFloat 1.8s ease-in-out infinite alternate;
+          }
+          .hg-top-grain:nth-child(2) { animation-delay: -.3s; }
+          .hg-top-grain:nth-child(3) { animation-delay: -.6s; }
+          .hg-top-grain:nth-child(4) { animation-delay: -.9s; }
+          .hg-top-grain:nth-child(5) { animation-delay: -1.2s; }
+          @keyframes hgTopGrainFloat {
+            from { opacity: .35; transform: translateY(1px); }
+            to { opacity: 1; transform: translateY(-2px); }
+          }
+          .hg-base-glow {
+            transform-origin: center;
+            animation: hgBaseGlow 2s ease-in-out infinite alternate;
+          }
+          @keyframes hgBaseGlow {
+            from { opacity: .28; transform: scaleX(.87); }
+            to { opacity: .66; transform: scaleX(1.05); }
+          }
+          .hg-shine {
+            animation: hgGlassShine 2.4s ease-in-out infinite alternate;
+          }
+          @keyframes hgGlassShine {
+            from { opacity: .3; }
+            to { opacity: .9; }
+          }
+        `}
+      </style>
+
+      <defs>
+        <linearGradient id="hgMetal" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#001a69" />
+          <stop offset="13%" stopColor="#005bca" />
+          <stop offset="27%" stopColor="#19d8ff" />
+          <stop offset="43%" stopColor="#077cff" />
+          <stop offset="63%" stopColor="#00369e" />
+          <stop offset="80%" stopColor="#10c9ff" />
+          <stop offset="100%" stopColor="#001354" />
+        </linearGradient>
+        <linearGradient id="hgGlassEdge" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#0058bc" />
+          <stop offset="15%" stopColor="#dffcff" />
+          <stop offset="31%" stopColor="#1adaff" />
+          <stop offset="55%" stopColor="#007de7" />
+          <stop offset="76%" stopColor="#44dfff" />
+          <stop offset="86%" stopColor="#e8fdff" />
+          <stop offset="100%" stopColor="#0063c7" />
+        </linearGradient>
+        <linearGradient id="hgSand" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#fff9ba" />
+          <stop offset="18%" stopColor="#ffe96e" />
+          <stop offset="43%" stopColor="#ffc72f" />
+          <stop offset="68%" stopColor="#f5a008" />
+          <stop offset="100%" stopColor="#b85900" />
+        </linearGradient>
+        <radialGradient id="hgGoldCenter">
+          <stop offset="0%" stopColor="#fff6b8" stopOpacity=".95" />
+          <stop offset="35%" stopColor="#ffca31" stopOpacity=".55" />
+          <stop offset="100%" stopColor="#ff8a00" stopOpacity="0" />
+        </radialGradient>
+        <filter id="hgBlueGlow" x="-100%" y="-100%" width="300%" height="300%">
+          <feGaussianBlur stdDeviation="4" result="blueBlur" />
+          <feMerge>
+            <feMergeNode in="blueBlur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+        <filter id="hgStrongBlueGlow" x="-150%" y="-150%" width="400%" height="400%">
+          <feGaussianBlur stdDeviation="10" />
+        </filter>
+        <filter id="hgGoldGlow" x="-100%" y="-100%" width="300%" height="300%">
+          <feGaussianBlur stdDeviation="2.3" result="goldBlur" />
+          <feMerge>
+            <feMergeNode in="goldBlur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+        <clipPath id="hgTopChamber">
+          <path d="M63 47 C64 87 77 108 103 129 C111 136 116 143 120 149 C124 143 129 136 137 129 C163 108 176 87 177 47 Z" />
+        </clipPath>
+        <clipPath id="hgBottomChamber">
+          <path d="M120 149 C116 156 111 162 103 169 C77 190 64 211 63 239 L177 239 C176 211 163 190 137 169 C129 162 124 156 120 149 Z" />
+        </clipPath>
+      </defs>
+
+      <ellipse
+        className="hg-base-glow"
+        cx="120"
+        cy="258"
+        rx="58"
+        ry="9"
+        fill="#008cff"
+        opacity=".45"
+        filter="url(#hgStrongBlueGlow)"
+      />
+
+      <path d="M63 47 C64 87 77 108 103 129 C111 136 116 143 120 149 C124 143 129 136 137 129 C163 108 176 87 177 47 Z" fill="#003865" opacity=".12" />
+      <path d="M120 149 C116 156 111 162 103 169 C77 190 64 211 63 239 L177 239 C176 211 163 190 137 169 C129 162 124 156 120 149 Z" fill="#003865" opacity=".12" />
+
+      <g clipPath="url(#hgTopChamber)">
+        {topFill > 0 && (
+          <>
+            <rect x="57" y={topY} width="126" height={topFill + 5} fill="url(#hgSand)" filter="url(#hgGoldGlow)" />
+            <ellipse cx="120" cy={topY} rx="50" ry="6" fill="#ffe970" opacity=".92" />
+            <ellipse cx="105" cy={topY - 1} rx="28" ry="2" fill="#fff9b8" opacity=".45" />
+          </>
+        )}
+        {remaining > 0 && topFill > 15 && (
+          <g>
+            <circle className="hg-top-grain" cx="91" cy="91" r=".85" />
+            <circle className="hg-top-grain" cx="104" cy="102" r=".7" />
+            <circle className="hg-top-grain" cx="116" cy="94" r=".9" />
+            <circle className="hg-top-grain" cx="132" cy="102" r=".7" />
+            <circle className="hg-top-grain" cx="145" cy="92" r=".8" />
+          </g>
+        )}
+      </g>
+
+      <g clipPath="url(#hgBottomChamber)">
+        {bottomFill > 1 && (
+          <>
+            <ellipse cx="120" cy="228" rx="52" ry="27" fill="url(#hgGoldCenter)" opacity=".25" />
+            <path
+              d={`
+                M ${bottomLeft} ${bottomBase}
+                Q 83 ${bottomPeak + 12} 120 ${bottomPeak}
+                Q 157 ${bottomPeak + 12} ${bottomRight} ${bottomBase}
+                Z
+              `}
+              fill="url(#hgSand)"
+              filter="url(#hgGoldGlow)"
+            />
+            <ellipse cx="120" cy={bottomBase} rx={bottomHalfWidth} ry="4" fill="#e58900" opacity=".55" />
+          </>
+        )}
+      </g>
+
+      {remaining > 0 && (
+        <circle cx="120" cy="151" r="24" fill="url(#hgGoldCenter)" opacity=".23" />
+      )}
+
+      {remaining > 0 && topFill > 1 && (
+        <>
+          <line
+            className="hg-stream-glow"
+            x1="120"
+            y1="146"
+            x2="120"
+            y2={Math.max(205, bottomPeak)}
+            stroke="#ffa600"
+            strokeWidth="5"
+            strokeLinecap="round"
+            opacity=".28"
+            filter="url(#hgGoldGlow)"
+          />
+          <line
+            className="hg-stream"
+            x1="120"
+            y1="146"
+            x2="120"
+            y2={Math.max(205, bottomPeak)}
+            stroke="#ffe470"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+          />
+          <g>
+            <circle className="hg-particle hg-p1" cx="117" cy="151" r=".8" />
+            <circle className="hg-particle hg-p2" cx="123" cy="153" r=".65" />
+            <circle className="hg-particle hg-p3" cx="119" cy="158" r=".75" />
+            <circle className="hg-particle hg-p4" cx="122" cy="162" r=".9" />
+            <circle className="hg-particle hg-p5" cx="116" cy="166" r=".6" />
+            <circle className="hg-particle hg-p6" cx="124" cy="171" r=".7" />
+          </g>
+        </>
+      )}
+
+      <path className="hg-glass-main" d="M63 47 C64 87 77 108 103 129 C111 136 116 143 120 149 C124 143 129 136 137 129 C163 108 176 87 177 47" />
+      <path className="hg-glass-main" d="M120 149 C116 156 111 162 103 169 C77 190 64 211 63 239 M120 149 C124 156 129 162 137 169 C163 190 176 211 177 239" />
+
+      <path className="hg-glass-inside" d="M70 54 C70 86 82 105 107 126" />
+      <path className="hg-glass-inside" d="M170 54 C170 86 158 105 133 126" />
+      <path className="hg-glass-inside" d="M70 232 C71 208 83 190 107 171" />
+      <path className="hg-glass-inside" d="M170 232 C169 208 157 190 133 171" />
+
+      <path className="hg-glass-highlight hg-shine" d="M72 59 C72 84 78 99 93 115" />
+      <path className="hg-glass-highlight hg-shine" d="M72 228 C72 208 79 194 94 181" />
+
+      <g className="hg-top-cap">
+        <ellipse cx="120" cy="41" rx="60" ry="7.5" fill="#001c6d" />
+        <rect x="59" y="34" width="122" height="15" rx="6" fill="url(#hgMetal)" stroke="#17cfff" strokeWidth="1.5" />
+        <path d="M66 38 Q120 32 174 38" fill="none" stroke="#73e9ff" strokeWidth="1.2" opacity=".82" />
+      </g>
+
+      <g className="hg-bottom-cap">
+        <rect x="59" y="235" width="122" height="15" rx="6" fill="url(#hgMetal)" stroke="#17cfff" strokeWidth="1.5" />
+        <path d="M66 240 Q120 245 174 240" fill="none" stroke="#74eaff" strokeWidth="1.1" opacity=".7" />
+        <ellipse cx="120" cy="250" rx="62" ry="8" fill="#002381" stroke="#099cff" strokeWidth="1.4" />
+        <ellipse cx="120" cy="248" rx="54" ry="4.5" fill="#0788ff" opacity=".45" />
+      </g>
     </svg>
   );
 }
 
 /* =========================================================
-   TIMER PAGE - نسخه نهایی بدون حلقه بی‌نهایت
+   TIMER PAGE - نسخه نهایی با رفع حلقه بی‌نهایت
 ========================================================= */
 
 export default function TimerPage() {
   // =========================================================
-  // COUNTER
-  // =========================================================
-  renderCounter += 1;
-  const renderId = renderCounter;
-  
-  // فقط در 10 رندر اول لاگ بزن
-  if (renderId <= 10) {
-    console.log(`🔄 [RENDER #${renderId}] TimerPage rendering`);
-  }
-
-  // =========================================================
-  // STATE - با مقداردهی اولیه
+  // STATE
   // =========================================================
   const [telegramIdentity, setTelegramIdentity] = useState(null);
   const [remaining, setRemaining] = useState(null);
@@ -126,18 +415,19 @@ export default function TimerPage() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   // =========================================================
-  // REFs - برای کنترل اجرا
+  // REFs
   // =========================================================
   const intervalRef = useRef(null);
   const menuRef = useRef(null);
   
-  // ✅ REFهای قوی برای جلوگیری از حلقه
+  // ✅ REFهای کنترل اجرا
   const initializedRef = useRef(false);
   const dataLoadedRef = useRef(false);
   const isLoadingRef = useRef(false);
-  
-  // ✅ REF برای ذخیره مقدار remaining (برای تایمر)
   const remainingRef = useRef(null);
+  
+  // ✅ REF برای Telegram WebApp - فقط یک بار
+  const telegramRef = useRef(null);
 
   // =========================================================
   // CONSTANTS
@@ -156,10 +446,9 @@ export default function TimerPage() {
     (telegramUsername ? `@${telegramUsername}` : "Telegram User");
 
   // =========================================================
-  // ✅ TIMER FUNCTIONS - با useRef برای جلوگیری از بازسازی
+  // ✅ TIMER FUNCTIONS - با useRef ثابت
   // =========================================================
   
-  // تابع استاپ تایمر - با useRef ثابت
   const stopTimerRef = useRef(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
@@ -167,10 +456,9 @@ export default function TimerPage() {
     }
   });
 
-  // تابع استارت تایمر - با useRef ثابت
   const startTimerRef = useRef(() => {
     if (intervalRef.current) {
-      return; // تایمر در حال اجراست
+      return;
     }
     
     intervalRef.current = setInterval(() => {
@@ -186,20 +474,19 @@ export default function TimerPage() {
   });
 
   // =========================================================
-  // ✅ EFFECT برای مدیریت تایمر - فقط یک بار
+  // ✅ EFFECT برای مدیریت تایمر
   // =========================================================
   useEffect(() => {
-    // تابع پاک‌سازی
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
     };
-  }, []); // ✅ وابستگی خالی - فقط یک بار اجرا می‌شود
+  }, []);
 
   // =========================================================
-  // ✅ EFFECT برای شروع تایمر وقتی remaining تغییر می‌کند
+  // ✅ EFFECT برای شروع تایمر
   // =========================================================
   useEffect(() => {
     if (remaining !== null && remaining > 0) {
@@ -207,10 +494,10 @@ export default function TimerPage() {
     } else if (remaining === 0) {
       stopTimerRef.current();
     }
-  }, [remaining]); // ✅ فقط به remaining وابسته است
+  }, [remaining]);
 
   // =========================================================
-  // 🔍 پردازش پارامترهای URL (رفرال)
+  // 🔍 پردازش پارامترهای URL
   // =========================================================
   const processReferralParam = useCallback(() => {
     try {
@@ -239,24 +526,14 @@ export default function TimerPage() {
   }, []);
 
   // =========================================================
-  // 📡 بارگذاری داده‌های کاربر - با کنترل اجرا
+  // 📡 بارگذاری داده‌ها
   // =========================================================
   const loadUserData = useCallback(async (telegramId, referralCode = null) => {
     // ✅ جلوگیری از اجرای همزمان
-    if (isLoadingRef.current) {
-      return;
-    }
-    
-    // ✅ جلوگیری از بارگذاری مجدد
-    if (dataLoadedRef.current) {
+    if (isLoadingRef.current || dataLoadedRef.current || !telegramId) {
       return;
     }
 
-    if (!telegramId) {
-      return;
-    }
-
-    // ✅ علامت‌گذاری شروع بارگذاری
     isLoadingRef.current = true;
 
     try {
@@ -315,7 +592,6 @@ export default function TimerPage() {
           localStorage.removeItem('referral_code');
         }
         
-        // ✅ علامت‌گذاری بارگذاری موفق
         dataLoadedRef.current = true;
         setMessage("");
       } else {
@@ -339,19 +615,14 @@ export default function TimerPage() {
                            "Could not connect to server";
       
       setMessage(`❌ ${errorMessage}`);
-      
-      // در صورت خطا، اجازه تلاش مجدد بدهیم
       isLoadingRef.current = false;
     } finally {
-      // اگر موفق بود، isLoading رو false کن
-      if (dataLoadedRef.current) {
-        isLoadingRef.current = false;
-      }
+      isLoadingRef.current = false;
     }
   }, [telegramUsername, telegramPhotoUrl]);
 
   // =========================================================
-  // ✅ TELEGRAM BOOTSTRAP & INITIAL LOAD - فقط یک بار
+  // ✅ TELEGRAM BOOTSTRAP - فقط یک بار
   // =========================================================
   useEffect(() => {
     // ✅ جلوگیری از اجرای مجدد
@@ -361,12 +632,18 @@ export default function TimerPage() {
     
     initializedRef.current = true;
 
-    try {
-      const tg = window.Telegram?.WebApp;
-      tg?.ready?.();
-      tg?.expand?.();
-    } catch (error) {
-      // ignore
+    // ✅ ذخیره Telegram WebApp در ref
+    telegramRef.current = getTelegramWebApp();
+    const tg = telegramRef.current;
+
+    // ✅ فقط یک بار ready و expand رو صدا بزن
+    if (tg) {
+      try {
+        tg.ready?.();
+        tg.expand?.();
+      } catch (error) {
+        // ignore
+      }
     }
 
     // خواندن هویت تلگرام
@@ -381,14 +658,13 @@ export default function TimerPage() {
     
     // بارگذاری داده‌ها
     if (identity?.telegram_id) {
-      // استفاده از setTimeout برای اطمینان از اینکه effect کامل شده
       const timerId = setTimeout(() => {
         loadUserData(identity.telegram_id, referralCode);
-      }, 50);
+      }, 100);
       
       return () => clearTimeout(timerId);
     } else {
-      // تلاش مجدد بعد از 500ms
+      // تلاش مجدد
       const timeoutId = setTimeout(() => {
         const retryIdentity = readTelegramIdentity();
         
@@ -410,7 +686,7 @@ export default function TimerPage() {
     }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // ✅ وابستگی خالی - فقط یک بار اجرا می‌شود
+  }, []); // ✅ وابستگی خالی - فقط یک بار
 
   // =========================================================
   // MENU
@@ -473,7 +749,6 @@ export default function TimerPage() {
         setRewardCount(data.rewards_count ?? 0);
         setMessage(`🎉 ${data.message || "Reward claimed!"}`);
 
-        // ریست و ریلود
         dataLoadedRef.current = false;
         isLoadingRef.current = false;
         
@@ -570,7 +845,7 @@ export default function TimerPage() {
       const referralLink = `https://t.me/${BOT_USERNAME}/app?startapp=ref_${encodeURIComponent(code)}`;
       const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent("Join AI POLIFY with my referral link")}`;
 
-      const tg = window.Telegram?.WebApp;
+      const tg = telegramRef.current || getTelegramWebApp();
       if (typeof tg?.openTelegramLink === "function") {
         tg.openTelegramLink(shareUrl);
       } else {
@@ -594,29 +869,10 @@ export default function TimerPage() {
   const eplBalance = Number(eplWallet?.epl_balance ?? eplHourlyBalance + eplReferralBalance);
 
   // =========================================================
-  // UI - بدون تغییر
+  // UI
   // =========================================================
   return (
     <div className="boost-page">
-      {/* نمایش شمارنده رندر برای دیباگ - فقط در حالت دیباگ */}
-      {process.env.NODE_ENV === 'development' && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          right: 0,
-          background: renderCounter > 10 ? 'rgba(255,0,0,0.8)' : 'rgba(0,0,0,0.7)',
-          color: 'white',
-          padding: '4px 10px',
-          fontSize: '12px',
-          zIndex: 9999,
-          borderRadius: '0 0 0 8px',
-          fontFamily: 'monospace'
-        }}>
-          Renders: {renderCounter}
-          {renderCounter > 10 && ' 🔴'}
-        </div>
-      )}
-
       <main className="mining-shell">
         <header className="topbar">
           <div className="hamburger-menu" ref={menuRef}>
