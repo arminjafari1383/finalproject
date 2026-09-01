@@ -13,9 +13,9 @@ import "./Referrals.css";
 import {
   captureInviterCode,
   getInviterCode,
-  setInviterCode,  // ← تغییر نام از saveInviterCode به setInviterCode
-  clearInviterCode, // ← اضافه کردن برای پاک کردن کد
-  generateReferralLink, // ← اضافه کردن برای ساخت لینک
+  setInviterCode,
+  clearInviterCode,
+  generateReferralLink,
 } from "../utils/referral";
 
 // ======================================================
@@ -24,6 +24,7 @@ import {
 
 const USER_DATA_KEY = "my_app_user_data";
 const INVITER_CODE_KEY = "inviter_code";
+const BOT_USERNAME = "Aipolynetbot"; // نام کاربری بات تلگرام
 
 // ======================================================
 // STORAGE
@@ -131,6 +132,35 @@ function getInviterCodeLocal() {
 }
 
 // ======================================================
+// TELEGRAM HELPERS
+// ======================================================
+
+function getTelegramWebApp() {
+  try {
+    if (typeof window === "undefined") return null;
+    return window.Telegram?.WebApp || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * باز کردن لینک در تلگرام
+ */
+function openTelegramLink(url) {
+  const tg = getTelegramWebApp();
+  if (tg && typeof tg.openTelegramLink === "function") {
+    try {
+      tg.openTelegramLink(url);
+      return true;
+    } catch {
+      // fallback
+    }
+  }
+  return false;
+}
+
+// ======================================================
 // AVATAR
 // ======================================================
 
@@ -182,6 +212,7 @@ export default function Referrals() {
   const [referralReady, setReferralReady] = useState(false);
   const [manualInviterCode, setManualInviterCode] = useState("");
   const [showManualInput, setShowManualInput] = useState(false);
+  const [isTelegramWebApp, setIsTelegramWebApp] = useState(false);
 
   const registerKeyRef = useRef(null);
   const [debugLogs, setDebugLogs] = useState([]);
@@ -206,6 +237,13 @@ export default function Referrals() {
 
     async function initialize() {
       addLog("INIT START");
+
+      // بررسی محیط تلگرام
+      const tg = getTelegramWebApp();
+      if (tg) {
+        setIsTelegramWebApp(true);
+        addLog("TELEGRAM WEBAPP DETECTED");
+      }
 
       // دریافت Telegram ID از localStorage (اگر موجود باشد)
       const saved = loadUserData() || {};
@@ -510,10 +548,21 @@ export default function Referrals() {
   ]);
 
   // ====================================================
-  // REFERRAL LINK
+  // REFERRAL LINK (Telegram Bot)
   // ====================================================
 
+  /**
+   * ساخت لینک رفرال برای بات تلگرام
+   * فرمت: https://t.me/BOT_USERNAME/app?startapp=ref_CODE
+   */
   const referralLink = myCode
+    ? `https://t.me/${BOT_USERNAME}/app?startapp=ref_${encodeURIComponent(myCode)}`
+    : "";
+
+  /**
+   * لینک جایگزین برای وب (بدون تلگرام)
+   */
+  const webReferralLink = myCode
     ? `${window.location.origin}?ref=${encodeURIComponent(myCode)}`
     : "";
 
@@ -523,7 +572,14 @@ export default function Referrals() {
 
   function openReferralLink() {
     if (!referralLink) return;
-    window.open(referralLink, "_blank", "noopener,noreferrer");
+
+    // تلاش برای باز کردن در تلگرام
+    const opened = openTelegramLink(referralLink);
+
+    // اگر در تلگرام باز نشد، از لینک وب استفاده کن
+    if (!opened) {
+      window.open(webReferralLink, "_blank", "noopener,noreferrer");
+    }
   }
 
   // ====================================================
@@ -535,25 +591,41 @@ export default function Referrals() {
 
     const message =
       `🎯 Join me on AI PolyNet!\n\n` +
-      `🚀 Use my referral link:\n\n` +
+      `🚀 Open the Mini App using my referral link:\n\n` +
       `${referralLink}\n\n` +
       `💎 Don't miss out on the rewards!`;
 
+    // اگر در تلگرام هستیم
+    const tg = getTelegramWebApp();
+    if (tg && typeof tg.openTelegramLink === "function") {
+      const shareUrl =
+        `https://t.me/share/url` +
+        `?url=${encodeURIComponent(referralLink)}` +
+        `&text=${encodeURIComponent(message)}`;
+      try {
+        tg.openTelegramLink(shareUrl);
+        return;
+      } catch {
+        // fallback
+      }
+    }
+
+    // استفاده از Web Share API
     if (navigator.share) {
       navigator.share({
         title: 'AI PolyNet Referral',
         text: message,
         url: referralLink,
       }).catch(() => {});
-    } else {
-      // Fallback: copy to clipboard
-      navigator.clipboard.writeText(message).then(() => {
-        alert("✅ Referral link copied to clipboard!");
-      }).catch(() => {
-        // اگر کپی نشد، لینک را باز کن
-        window.open(referralLink, "_blank");
-      });
+      return;
     }
+
+    // Fallback: کپی در کلیپ‌بورد
+    navigator.clipboard.writeText(message).then(() => {
+      alert("✅ Referral link copied to clipboard!");
+    }).catch(() => {
+      window.open(referralLink, "_blank");
+    });
   }
 
   // ====================================================
@@ -562,14 +634,18 @@ export default function Referrals() {
 
   async function copyReferralLink() {
     if (!referralLink) return;
+
+    // ترجیحاً لینک تلگرام را کپی کن
+    const linkToCopy = isTelegramWebApp ? referralLink : webReferralLink;
+
     try {
-      await navigator.clipboard.writeText(referralLink);
+      await navigator.clipboard.writeText(linkToCopy);
       alert("✅ Referral link copied!");
     } catch (err) {
       console.error("Copy failed:", err);
       // Fallback
       const textarea = document.createElement('textarea');
-      textarea.value = referralLink;
+      textarea.value = linkToCopy;
       document.body.appendChild(textarea);
       textarea.select();
       document.execCommand('copy');
@@ -593,7 +669,7 @@ export default function Referrals() {
     setInviterCodeState(code);
     setShowManualInput(false);
     setError("");
-    registerKeyRef.current = null; // Force re-register
+    registerKeyRef.current = null;
 
     // Refresh the page to apply the new code
     window.location.reload();
@@ -612,7 +688,6 @@ export default function Referrals() {
 
   function setInviterCodeState(code) {
     setInviterCode(code);
-    // همچنین در localStorage ذخیره کن
     if (code) {
       setLocalInviterCode(code);
     }
@@ -823,17 +898,23 @@ export default function Referrals() {
       {myCode ? (
         <>
           <div className="referral-link-section">
-            <p className="referral-link-label">🔗 Your Referral Link</p>
+            <p className="referral-link-label">
+              {isTelegramWebApp ? "🔗 Telegram Mini App Invite Link" : "🔗 Your Referral Link"}
+            </p>
 
             <div className="link-actions">
-              <input value={referralLink} readOnly className="link-input" />
+              <input 
+                value={isTelegramWebApp ? referralLink : webReferralLink} 
+                readOnly 
+                className="link-input" 
+              />
 
               <button onClick={copyReferralLink} disabled={!referralLink} className="btn-copy">
                 📋 Copy
               </button>
 
               <button onClick={shareReferral} disabled={!referralLink} className="btn-share-telegram">
-                📤 Share
+                📤 Share on Telegram
               </button>
             </div>
 
