@@ -13,6 +13,9 @@ import "./Referrals.css";
 import {
   captureInviterCode,
   getInviterCode,
+  setInviterCode,  // ← تغییر نام از saveInviterCode به setInviterCode
+  clearInviterCode, // ← اضافه کردن برای پاک کردن کد
+  generateReferralLink, // ← اضافه کردن برای ساخت لینک
 } from "../utils/referral";
 
 // ======================================================
@@ -20,9 +23,7 @@ import {
 // ======================================================
 
 const USER_DATA_KEY = "my_app_user_data";
-
-
-const BOT_USERNAME = "Aipolynetbot";
+const INVITER_CODE_KEY = "inviter_code";
 
 // ======================================================
 // STORAGE
@@ -52,59 +53,81 @@ function saveUserData(data) {
 }
 
 // ======================================================
-// TELEGRAM
+// LOCAL REFERRAL HELPERS
 // ======================================================
 
-function getTelegramWebApp() {
-  if (typeof window === "undefined") return null;
-  return window.Telegram?.WebApp || null;
-}
-
-function getStartAppReferralCode() {
+/**
+ * دریافت کد ارجاع از localStorage
+ */
+function getLocalInviterCode() {
   try {
-    const tg = window.Telegram?.WebApp;
-
-    const startParam = tg?.initDataUnsafe?.start_param;
-
-    if (startParam) {
-      return String(startParam).startsWith("ref_")
-        ? String(startParam).substring(4)
-        : String(startParam);
-    }
-
-    const params = new URLSearchParams(window.location.search);
-    const urlParam = params.get("startapp") || params.get("start_param");
-
-    if (urlParam) {
-      return String(urlParam).startsWith("ref_")
-        ? String(urlParam).substring(4)
-        : String(urlParam);
-    }
-
-    return localStorage.getItem("inviter_code") || null;
-  } catch (error) {
-    console.error("startapp parse error", error);
+    return localStorage.getItem(INVITER_CODE_KEY) || null;
+  } catch {
     return null;
   }
 }
 
-// ======================================================
-// TELEGRAM USER
-// ======================================================
+/**
+ * ذخیره کد ارجاع در localStorage
+ */
+function setLocalInviterCode(code) {
+  try {
+    if (code) {
+      localStorage.setItem(INVITER_CODE_KEY, code);
+    } else {
+      localStorage.removeItem(INVITER_CODE_KEY);
+    }
+  } catch (error) {
+    console.error("❌ Failed to save inviter code:", error);
+  }
+}
 
-function getTelegramUser(tg) {
-  if (!tg) return null;
-  const user = tg?.initDataUnsafe?.user;
-  if (!user?.id) return null;
-  return {
-    id: Number(user.id),
-    username: user.username || null,
-    photoUrl: user.photo_url || null,
-    firstName: user.first_name || null,
-    lastName: user.last_name || null,
-    language: user.language_code || null,
-    isPremium: Boolean(user.is_premium),
-  };
+/**
+ * خواندن کد ارجاع از URL (پارامتر ref)
+ */
+function getReferralCodeFromURL() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get("ref") || params.get("referral_code");
+    if (ref) {
+      return String(ref).trim() || null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * تابع اصلی برای دریافت کد ارجاع
+ * اولویت: URL > localStorage > دستی
+ */
+function getInviterCodeLocal() {
+  // 1. چک کردن URL
+  const urlCode = getReferralCodeFromURL();
+  if (urlCode) {
+    setLocalInviterCode(urlCode);
+    return urlCode;
+  }
+
+  // 2. چک کردن localStorage
+  const storedCode = getLocalInviterCode();
+  if (storedCode) {
+    return storedCode;
+  }
+
+  // 3. چک کردن از طریق captureInviterCode (اگر از قبل وجود داشته باشد)
+  try {
+    const captured = captureInviterCode();
+    if (captured) {
+      setLocalInviterCode(captured);
+      return captured;
+    }
+  } catch {
+    // ignore
+  }
+
+  return null;
 }
 
 // ======================================================
@@ -155,92 +178,60 @@ export default function Referrals() {
   const [telegramId, setTelegramId] = useState(null);
   const [telegramUsername, setTelegramUsername] = useState(null);
   const [telegramPhotoUrl, setTelegramPhotoUrl] = useState(null);
-  const [isTelegramWebApp, setIsTelegramWebApp] = useState(false);
   const [inviterCode, setInviterCode] = useState(null);
   const [referralReady, setReferralReady] = useState(false);
+  const [manualInviterCode, setManualInviterCode] = useState("");
+  const [showManualInput, setShowManualInput] = useState(false);
 
   const registerKeyRef = useRef(null);
-const [debugLogs, setDebugLogs] = useState([]);
+  const [debugLogs, setDebugLogs] = useState([]);
 
-function addLog(message, data = null) {
-  const item = {
-    time: new Date().toLocaleTimeString(),
-    message,
-    data,
-  };
+  function addLog(message, data = null) {
+    const item = {
+      time: new Date().toLocaleTimeString(),
+      message,
+      data,
+    };
 
-  setDebugLogs((prev) => [...prev.slice(-40), item]);
-  console.log("[REFERRAL DEBUG]", item);
-}
-
+    setDebugLogs((prev) => [...prev.slice(-40), item]);
+    console.log("[REFERRAL DEBUG]", item);
+  }
 
   // ====================================================
-  // TELEGRAM INITIALIZATION
+  // INITIALIZATION
   // ====================================================
 
   useEffect(() => {
     let cancelled = false;
 
-    async function initializeTelegram() {
+    async function initialize() {
       addLog("INIT START");
-      let tg = getTelegramWebApp();
 
-      // Telegram WebApp can become available a little after first render.
-      if (!tg) {
-        for (let i = 0; i < 40; i++) {
-          await new Promise((resolve) => setTimeout(resolve, 50));
-          tg = getTelegramWebApp();
-          if (tg) break;
-        }
-      }
-
-      if (cancelled) return;
+      // دریافت Telegram ID از localStorage (اگر موجود باشد)
+      const saved = loadUserData() || {};
+      const storedId = Number(
+        saved.telegramId ||
+        localStorage.getItem("telegram_id") ||
+        0
+      );
 
       let resolvedTelegramId = null;
       let resolvedUsername = null;
       let resolvedPhotoUrl = null;
-      let resolvedIsTelegram = false;
 
-      if (tg) {
-        try {
-          tg.ready();
-          if (typeof tg.expand === "function") {
-            tg.expand();
-          }
-        } catch (err) {
-          console.warn("Telegram ready error:", err);
-        }
-
-        const telegramUser = getTelegramUser(tg);
-        addLog("TELEGRAM USER", telegramUser);
-
-        if (telegramUser?.id) {
-          resolvedTelegramId = Number(telegramUser.id);
-          resolvedUsername = telegramUser.username || null;
-          resolvedPhotoUrl = telegramUser.photoUrl || null;
-          resolvedIsTelegram = true;
-        }
-      }
-
-      // If Telegram object is temporarily unavailable after navigation/reload,
-      // keep using the Telegram identity already captured for this Mini App user.
-      if (!resolvedTelegramId) {
-        const saved = loadUserData() || {};
-
-        const storedId = Number(
-          saved.telegramId ||
-          localStorage.getItem("telegram_id") ||
-          0
-        );
-
-        if (Number.isInteger(storedId) && storedId > 0) {
-          resolvedTelegramId = storedId;
-          resolvedUsername =
-            saved.telegramUsername ||
-            localStorage.getItem("telegram_username") ||
-            null;
-          resolvedPhotoUrl = saved.telegramPhotoUrl || null;
-          resolvedIsTelegram = Boolean(saved.isTelegram);
+      // اگر Telegram ID در localStorage وجود دارد، از آن استفاده کن
+      if (Number.isInteger(storedId) && storedId > 0) {
+        resolvedTelegramId = storedId;
+        resolvedUsername = saved.telegramUsername || null;
+        resolvedPhotoUrl = saved.telegramPhotoUrl || null;
+        addLog("LOADED FROM STORAGE", { resolvedTelegramId });
+      } else {
+        // اگر کاربر قبلاً لاگین کرده، از user data استفاده کن
+        const storedUser = loadUserData();
+        if (storedUser?.telegramId) {
+          resolvedTelegramId = Number(storedUser.telegramId);
+          resolvedUsername = storedUser.telegramUsername || null;
+          resolvedPhotoUrl = storedUser.telegramPhotoUrl || null;
         }
       }
 
@@ -249,59 +240,34 @@ function addLog(message, data = null) {
       setTelegramId(resolvedTelegramId);
       setTelegramUsername(resolvedUsername);
       setTelegramPhotoUrl(resolvedPhotoUrl);
-      setIsTelegramWebApp(resolvedIsTelegram);
 
-      if (resolvedTelegramId) {
-        saveUserData({
-          telegramId: resolvedTelegramId,
-          telegramUsername: resolvedUsername,
-          telegramPhotoUrl: resolvedPhotoUrl,
-          isTelegram: resolvedIsTelegram,
-        });
+      // دریافت کد ارجاع از URL یا localStorage
+      let code = getInviterCodeLocal();
+      addLog("GET INVITER CODE", code);
 
-        localStorage.setItem(
-          "telegram_id",
-          String(resolvedTelegramId)
-        );
-
-        localStorage.setItem(
-          "telegram_username",
-          resolvedUsername || ""
-        );
-      }
-
-      let code = getStartAppReferralCode();
-      addLog("START REFERRAL CODE", code);
-
+      // اگر کد در localStorage نبود، از URL بگیر
       if (!code) {
-        try {
-          code = captureInviterCode() || null;
-        } catch (captureError) {
-          console.warn("Referral capture error:", captureError);
-        }
-      }
-
-      if (!code) {
-        try {
-          code = getInviterCode() || null;
-        } catch (storedError) {
-          console.warn("Stored referral read error:", storedError);
+        const urlCode = getReferralCodeFromURL();
+        if (urlCode) {
+          code = urlCode;
+          setLocalInviterCode(code);
+          addLog("CODE FROM URL", code);
         }
       }
 
       if (code) {
-        localStorage.setItem("inviter_code", code);
+        setLocalInviterCode(code);
       }
 
-      setInviterCode(code);
+      setInviterCodeState(code);
       addLog("READY", {
         telegramId: resolvedTelegramId,
-        inviterCode: code
+        inviterCode: code,
       });
       setReferralReady(true);
     }
 
-    initializeTelegram();
+    initialize();
 
     return () => {
       cancelled = true;
@@ -309,7 +275,7 @@ function addLog(message, data = null) {
   }, []);
 
   // ====================================================
-  // REGISTER / LOAD TELEGRAM USER
+  // REGISTER / LOAD USER
   // ====================================================
 
   useEffect(() => {
@@ -319,8 +285,9 @@ function addLog(message, data = null) {
       addLog("REGISTER START", {
         referralReady,
         telegramId,
-        inviterCode
+        inviterCode,
       });
+
       if (!referralReady) {
         return;
       }
@@ -331,19 +298,16 @@ function addLog(message, data = null) {
         setMyCode(null);
         setRefCount(null);
         setError(
-          "Telegram ID not found. Please open this Mini App from Telegram."
+          "Telegram ID not found. Please login first."
         );
         return;
       }
 
-      let finalInviterCode = inviterCode || null;
+      let finalInviterCode = inviterCode || getLocalInviterCode();
 
-      if (!finalInviterCode) {
-        try {
-          finalInviterCode = getInviterCode() || null;
-        } catch {
-          // ignore
-        }
+      // اگر کد وجود نداشت، اجازه ورود دستی بدهیم
+      if (!finalInviterCode && showManualInput && manualInviterCode) {
+        finalInviterCode = manualInviterCode;
       }
 
       const currentRegisterKey = [
@@ -374,8 +338,6 @@ function addLog(message, data = null) {
         setLoading(true);
         setError("");
 
-        // This endpoint now creates/resolves the account by Telegram ID.
-        // No TON wallet connection is required.
         addLog("CALL COUNT API", params);
 
         const response = await api.get("/referrals/count/", {
@@ -395,6 +357,11 @@ function addLog(message, data = null) {
 
         setMyCode(returnedCode);
 
+        // اگر کد ارجاع با موفقیت ثبت شد، آن را از localStorage پاک کن (یک بار مصرف)
+        if (returnedCode && finalInviterCode) {
+          setLocalInviterCode(null);
+        }
+
         if (response.data?.telegram_id) {
           saveUserData({
             telegramId: Number(response.data.telegram_id),
@@ -413,14 +380,22 @@ function addLog(message, data = null) {
         if (cancelled) return;
 
         addLog("COUNT ERROR", err?.response?.data || err.message);
-        console.error("❌ TELEGRAM REFERRAL LOAD ERROR:", err);
+        console.error("❌ REFERRAL LOAD ERROR:", err);
 
-        setError(
-          err?.response?.data?.error ||
+        // اگر خطا مربوط به کد ارجاع نامعتبر بود، اجازه ورود مجدد بدهیم
+        if (err?.response?.status === 404 || err?.response?.status === 400) {
+          setError(
+            "Invalid referral code. Please check and try again."
+          );
+          setShowManualInput(true);
+        } else {
+          setError(
+            err?.response?.data?.error ||
             err?.response?.data?.detail ||
             err?.message ||
-            "Failed to load Telegram referral account."
-        );
+            "Failed to load referral account."
+          );
+        }
 
         registerKeyRef.current = null;
       } finally {
@@ -441,10 +416,12 @@ function addLog(message, data = null) {
     telegramId,
     telegramUsername,
     telegramPhotoUrl,
+    manualInviterCode,
+    showManualInput,
   ]);
 
   // ====================================================
-  // LEVELS — TELEGRAM ID
+  // LEVELS
   // ====================================================
 
   useEffect(() => {
@@ -488,13 +465,13 @@ function addLog(message, data = null) {
           setMyCode(data.referral_code);
         }
       } catch (err) {
-        console.error("❌ Telegram referral levels error:", err);
+        console.error("❌ Referral levels error:", err);
 
         if (!cancelled) {
           setError(
             err?.response?.data?.error ||
-              err?.response?.data?.detail ||
-              "Failed to load referral levels."
+            err?.response?.data?.detail ||
+            "Failed to load referral levels."
           );
         }
       } finally {
@@ -503,8 +480,6 @@ function addLog(message, data = null) {
     }
 
     fetchLevels();
-
-    const intervalId = null;
 
     const refreshOnFocus = () => fetchLevels();
 
@@ -519,11 +494,6 @@ function addLog(message, data = null) {
 
     return () => {
       cancelled = true;
-      if (intervalId) {
-        if (intervalId) {
-        window.clearInterval(intervalId);
-      }
-      }
       window.removeEventListener("focus", refreshOnFocus);
       document.removeEventListener(
         "visibilitychange",
@@ -544,7 +514,7 @@ function addLog(message, data = null) {
   // ====================================================
 
   const referralLink = myCode
-    ? `https://t.me/${BOT_USERNAME}/app?startapp=ref_${encodeURIComponent(myCode)}`
+    ? `${window.location.origin}?ref=${encodeURIComponent(myCode)}`
     : "";
 
   // ====================================================
@@ -553,42 +523,36 @@ function addLog(message, data = null) {
 
   function openReferralLink() {
     if (!referralLink) return;
-    const tg = getTelegramWebApp();
-    if (tg && typeof tg.openTelegramLink === "function") {
-      tg.openTelegramLink(referralLink);
-    } else {
-      window.open(referralLink, "_blank", "noopener,noreferrer");
-    }
+    window.open(referralLink, "_blank", "noopener,noreferrer");
   }
 
   // ====================================================
   // SHARE
   // ====================================================
 
-  function shareOnTelegram() {
+  function shareReferral() {
     if (!referralLink) return;
 
     const message =
       `🎯 Join me on AI PolyNet!\n\n` +
-      `🚀 Open the Mini App using my referral link:\n\n` +
+      `🚀 Use my referral link:\n\n` +
       `${referralLink}\n\n` +
       `💎 Don't miss out on the rewards!`;
 
-    const shareUrl =
-      `https://t.me/share/url` +
-      `?url=${encodeURIComponent(referralLink)}` +
-      `&text=${encodeURIComponent(message)}`;
-
-    const tg = getTelegramWebApp();
-
-    if (tg && typeof tg.openTelegramLink === "function") {
-      try {
-        tg.openTelegramLink(shareUrl);
-      } catch {
-        window.open(shareUrl, "_blank", "noopener,noreferrer");
-      }
+    if (navigator.share) {
+      navigator.share({
+        title: 'AI PolyNet Referral',
+        text: message,
+        url: referralLink,
+      }).catch(() => {});
     } else {
-      window.open(shareUrl, "_blank", "noopener,noreferrer");
+      // Fallback: copy to clipboard
+      navigator.clipboard.writeText(message).then(() => {
+        alert("✅ Referral link copied to clipboard!");
+      }).catch(() => {
+        // اگر کپی نشد، لینک را باز کن
+        window.open(referralLink, "_blank");
+      });
     }
   }
 
@@ -603,6 +567,54 @@ function addLog(message, data = null) {
       alert("✅ Referral link copied!");
     } catch (err) {
       console.error("Copy failed:", err);
+      // Fallback
+      const textarea = document.createElement('textarea');
+      textarea.value = referralLink;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      alert("✅ Referral link copied!");
+    }
+  }
+
+  // ====================================================
+  // HANDLE MANUAL INVITER CODE
+  // ====================================================
+
+  function handleApplyInviterCode() {
+    if (!manualInviterCode.trim()) {
+      setError("Please enter a referral code.");
+      return;
+    }
+
+    const code = manualInviterCode.trim();
+    setLocalInviterCode(code);
+    setInviterCodeState(code);
+    setShowManualInput(false);
+    setError("");
+    registerKeyRef.current = null; // Force re-register
+
+    // Refresh the page to apply the new code
+    window.location.reload();
+  }
+
+  function handleSkipInviterCode() {
+    setShowManualInput(false);
+    setInviterCodeState(null);
+    setError("");
+    registerKeyRef.current = null;
+  }
+
+  // ====================================================
+  // SET INVITER CODE STATE
+  // ====================================================
+
+  function setInviterCodeState(code) {
+    setInviterCode(code);
+    // همچنین در localStorage ذخیره کن
+    if (code) {
+      setLocalInviterCode(code);
     }
   }
 
@@ -767,7 +779,7 @@ function addLog(message, data = null) {
   if (referralReady && !telegramId) {
     return (
       <div className="wallet-required">
-        📱 Telegram ID not found. Please open this Mini App from Telegram.
+        📱 Telegram ID not found. Please login first.
       </div>
     );
   }
@@ -784,12 +796,34 @@ function addLog(message, data = null) {
 
       {error && <div className="error-message">❌ {error}</div>}
 
-      {!referralReady && <div className="loading-spinner">📱 Preparing Telegram...</div>}
+      {!referralReady && <div className="loading-spinner">📱 Preparing...</div>}
+
+      {/* Manual inviter code input */}
+      {showManualInput && (
+        <div className="manual-inviter-section">
+          <p>Please enter your referral code:</p>
+          <div className="manual-input-row">
+            <input
+              type="text"
+              value={manualInviterCode}
+              onChange={(e) => setManualInviterCode(e.target.value)}
+              placeholder="Enter referral code..."
+              className="manual-input"
+            />
+            <button onClick={handleApplyInviterCode} className="btn-apply">
+              Apply
+            </button>
+            <button onClick={handleSkipInviterCode} className="btn-skip">
+              Skip
+            </button>
+          </div>
+        </div>
+      )}
 
       {myCode ? (
         <>
           <div className="referral-link-section">
-            <p className="referral-link-label">🔗 Telegram Mini App Invite Link</p>
+            <p className="referral-link-label">🔗 Your Referral Link</p>
 
             <div className="link-actions">
               <input value={referralLink} readOnly className="link-input" />
@@ -798,8 +832,8 @@ function addLog(message, data = null) {
                 📋 Copy
               </button>
 
-              <button onClick={shareOnTelegram} disabled={!referralLink} className="btn-share-telegram">
-                📤 Share on Telegram
+              <button onClick={shareReferral} disabled={!referralLink} className="btn-share-telegram">
+                📤 Share
               </button>
             </div>
 
@@ -836,6 +870,26 @@ function addLog(message, data = null) {
         </>
       ) : (
         <div className="loading-spinner">Loading referral data...</div>
+      )}
+
+      {/* Debug logs */}
+      {debugLogs.length > 0 && (
+        <div className="debug-logs">
+          <details>
+            <summary>🔍 Debug Logs ({debugLogs.length})</summary>
+            <div className="logs-container">
+              {debugLogs.map((log, i) => (
+                <div key={i} className="log-item">
+                  <span className="log-time">{log.time}</span>
+                  <span className="log-message">{log.message}</span>
+                  {log.data && (
+                    <pre className="log-data">{JSON.stringify(log.data, null, 2)}</pre>
+                  )}
+                </div>
+              ))}
+            </div>
+          </details>
+        </div>
       )}
     </div>
   );

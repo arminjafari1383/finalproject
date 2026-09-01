@@ -1,46 +1,47 @@
 import axios from "axios";
 
-// ساخت نمونه axios با تنظیمات پیش‌فرض
+// ساخت نمونه axios
 export const api = axios.create({
-  // ✅ حتماً آدرس را با /api/ تمام کنید (همان کاری که کردید، درست است)
   baseURL: "https://aipolynet.com/api/",
-  
-  // ✅ تایم‌اوت ۳۰ ثانیه (برای شبکه‌های کند موبایل)
   timeout: 30000,
-  
-  // ✅ برای ارسال کوکی‌ها و احراز هویت بین دامنه‌ها (مهم برای موبایل)
-  withCredentials: true,
 });
 
 // ============================================================
-// ✅ میان‌افزار (Interceptor) برای تلاش مجدد در صورت خطای شبکه
-// این بخش باعث می‌شود اگر اینترنت قطع شد، خودکار ۳ بار دوباره تلاش کند
+// Retry interceptor برای خطاهای شبکه
 // ============================================================
+
 api.interceptors.response.use(
-  (response) => response, // اگر موفق بود، همان را برگردان
+  (response) => response,
+
   async (error) => {
     const { config, message, code } = error;
 
-    // اگر خطای قطعی اینترنت یا Network Error بود
-    if (message === "Network Error" || code === "ERR_NETWORK") {
-      // تعداد تلاش‌های قبلی را بشمار
+    // اگر درخواست اصلاً ارسال نشده یا خطای شبکه بود
+    if (
+      config &&
+      (message === "Network Error" ||
+        code === "ERR_NETWORK" ||
+        code === "ECONNABORTED")
+    ) {
       config.retryCount = config.retryCount || 0;
 
-      // اگر کمتر از ۳ بار تلاش کرده‌ایم
       if (config.retryCount < 3) {
         config.retryCount += 1;
-        console.log(`🔄 تلاش مجدد... (${config.retryCount}/3)`);
 
-        // ۱.۵ ثانیه صبر کن تا اینترنت وصل شود، سپس دوباره درخواست بفرست
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-        return api(config); // درخواست را دوباره بفرست
+        console.log(
+          `🔄 تلاش مجدد... (${config.retryCount}/3)`
+        );
+
+        await new Promise((resolve) =>
+          setTimeout(resolve, 1500)
+        );
+
+        return api(config);
       }
     }
 
-    // اگر بعد از ۳ بار تلاش هم شکست خورد، خطا را به فرانت‌اند بفرست
     return Promise.reject(error);
   }
 );
 
-// ✅ این خط کامل است و کاراکتر اضافی ندارد
 export default api;

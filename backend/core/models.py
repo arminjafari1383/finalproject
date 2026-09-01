@@ -98,7 +98,7 @@ class Wallet(models.Model):
     )
 
 
-    # سود بالاسری USDT
+    # # سود بالاسری USDT
     usdt_referral_profit = models.DecimalField(
         max_digits=24,
         decimal_places=8,

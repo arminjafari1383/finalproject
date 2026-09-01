@@ -81,6 +81,7 @@ REST_FRAMEWORK = {
 }
 CSRF_TRUSTED_ORIGINS = [
     "https://aipolynet.com/",
+    # "http://localhost:5173",
 ]
 
 CORS_ALLOW_ALL_ORIGINS = True
